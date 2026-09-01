@@ -1,0 +1,666 @@
+---
+title: "MM GFW VP & AFE Data Pull"
+author: "Malachy McCaffrey"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Objective
+
+Filter gridded vessel presence and apparent fishing effort data from 4Wings API for Orsted projects AOI between 2016 - 2026 then filter for only fishing vessels. Manipulate data into usable format, plot, and export as .csv
+
+## Libraries
+
+```{r}
+library(gfwr)
+library(tidyverse)
+library(sf)
+library(lubridate)
+```
+
+## Define key, date ranges, and spatial extent for data querying
+
+```{r}
+
+key <- Sys.getenv("GFW_TOKEN")
+
+# API queries can only process one year of data at a time
+# if request still times, out, split into smaller requests and bind results in R
+# yyy-mm-dd format
+
+start_15 <- '2015-01-01'
+end_15 <- '2016-01-01'
+
+start_16 <- '2016-01-01'
+end_16 <- '2017-01-01'
+
+start_17 <- '2017-01-01' # will be included
+end_17 <- '2018-01-01' # will be excluded. search will be up to 2017-12-31
+
+start_18 <- '2018-01-01'
+end_18 <- '2019-01-01'
+
+start_19 <- '2019-01-01'
+end_19 <- '2020-01-01'
+
+start_20 <- '2020-01-01'
+end_20 <- '2021-01-01'
+
+start_21 <- '2021-01-01'
+end_21 <- '2022-01-01'
+
+start_22 <- '2022-01-01'
+end_22 <- '2023-01-01'
+
+start_23 <- '2023-01-01'
+end_23 <- '2024-01-01'
+
+start_24 <- '2024-01-01'
+end_24 <- '2025-01-01'
+
+start_25 <- '2025-01-01'
+end_25 <- '2026-01-01'
+
+start_26 <- '2026-01-01'
+end_26 <- '2027-01-01' # as of 07/14/2026
+```
+
+```{r}
+# define sf object to pass to `region` argument
+
+orsted_aoi <- st_read("shapefiles/Orsted_AOI.shp") |> 
+  select(geometry)
+
+# map aoi to make sure it was created correctly
+
+ggplot(orsted_aoi) + geom_sf()
+```
+
+## Retrieve vessel presence data within aoi and date ranges grouped by vessel_id
+
+```{r}
+# 2016
+
+vp_id_16 <- gfw_ais_presence(spatial_resolution = "HIGH", # 0.01 degree ~ 1 km
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", # associated with a single MMSI at a specific period of time. single vessel can have several IDs thru time
+                               start_date = start_16, # date range must be 366 days or less
+                               end_date = end_16,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2017
+
+vp_id_17 <- gfw_ais_presence(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID",
+                               start_date = start_17, 
+                               end_date = end_17,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+
+# 2018
+
+vp_id_18 <- gfw_ais_presence(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_18, 
+                               end_date = end_18,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2019
+
+vp_id_19 <- gfw_ais_presence(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_19,
+                               end_date = end_19,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2020
+
+vp_id_20 <- gfw_ais_presence(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_20, 
+                               end_date = end_20,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2021
+
+vp_id_21 <- gfw_ais_presence(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_21, 
+                               end_date = end_21,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2022
+
+vp_id_22 <- gfw_ais_presence(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_22, 
+                               end_date = end_22,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2023
+
+vp_id_23 <- gfw_ais_presence(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_23, 
+                               end_date = end_23,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2024
+
+vp_id_24 <- gfw_ais_presence(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_24, 
+                               end_date = end_24,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2025
+
+vp_id_25 <- gfw_ais_presence(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID",
+                               start_date = start_25, 
+                               end_date = end_25,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2026
+
+vp_id_26 <- gfw_ais_presence(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID",
+                               start_date = start_26, 
+                               end_date = end_26,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+```
+
+## Subset VP datasets to fishing vessel type
+
+```{r}
+# 2016
+
+vp_fv_16 <- vp_id_16 |> 
+  filter(`Vessel Type` == "FISHING")
+
+# 2017
+
+vp_fv_17 <- vp_id_17 |> 
+  filter(`Vessel Type` == "FISHING")
+
+# 2018
+
+vp_fv_18 <- vp_id_18 |> 
+  filter(`Vessel Type` == "FISHING")
+
+# 2019
+
+vp_fv_19 <- vp_id_19 |> 
+  filter(`Vessel Type` == "FISHING")
+
+# 2020
+
+vp_fv_20 <- vp_id_20 |> 
+  filter(`Vessel Type` == "FISHING")
+
+# 2021
+
+vp_fv_21 <- vp_id_21 |> 
+  filter(`Vessel Type` == "FISHING")
+
+# 2022
+
+vp_fv_22 <- vp_id_22 |> 
+  filter(`Vessel Type` == "FISHING")
+
+# 2023
+
+vp_fv_23 <- vp_id_23 |> 
+  filter(`Vessel Type` == "FISHING")
+
+# 2024
+
+vp_fv_24 <- vp_id_24 |> 
+  filter(`Vessel Type` == "FISHING")
+
+# 2025
+
+vp_fv_25 <- vp_id_25 |> 
+  filter(`Vessel Type` == "FISHING")
+
+# 2026
+
+vp_fv_26 <- vp_id_26 |> 
+  filter(`Vessel Type` == "FISHING")
+```
+
+## Retrieve apparent fishing effort data within aoi and date ranges grouped by vessel_id
+
+```{r}
+# 2016
+
+afe_id_16 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_16, 
+                               end_date = end_16,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2017
+
+afe_id_17 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH",
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_17, 
+                               end_date = end_17,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+
+# 2018
+
+afe_id_18 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH",
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_18, 
+                               end_date = end_18,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2019
+
+afe_id_19 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_19,
+                               end_date = end_19,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2020
+
+afe_id_20 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH",
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_20,
+                               end_date = end_20,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2021
+
+afe_id_21 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_21,
+                               end_date = end_21,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2022
+
+afe_id_22 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_22,
+                               end_date = end_22,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2023
+
+afe_id_23 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_23, 
+                               end_date = end_23,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2024
+
+afe_id_24 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID",
+                               start_date = start_24, 
+                               end_date = end_24,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2025
+
+afe_id_25 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH",
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID",
+                               start_date = start_25, 
+                               end_date = end_25,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+
+# 2026
+
+afe_id_26 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH",
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID",
+                               start_date = start_26,
+                               end_date = end_26,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi)
+```
+
+## Combine datasets
+
+```{r}
+# append rows
+gfw_vp_id <- rbind(vp_id_16, vp_id_17, vp_id_18, vp_id_19, vp_id_20, vp_id_21, vp_id_22, vp_id_23, vp_id_24, vp_id_25, vp_id_26)
+
+gfw_vp_fv <- rbind(vp_fv_16, vp_fv_17, vp_fv_18, vp_fv_19, vp_fv_20, vp_fv_21, vp_fv_22, vp_fv_23, vp_fv_24, vp_fv_25, vp_fv_26)
+
+gfw_afe_id <- rbind(afe_id_16, afe_id_17, afe_id_18, afe_id_19, afe_id_20, afe_id_21, afe_id_22, afe_id_23, afe_id_24, afe_id_25, afe_id_26)
+```
+
+## create yyyy-mm column
+
+```{r}
+gfw_vp_id$YearMonth <- as.Date(format(gfw_vp_id$`Time Range`, "%Y-%m-01"))
+
+gfw_vp_fv$YearMonth <- as.Date(format(gfw_vp_fv$`Time Range`, "%Y-%m-01"))
+
+gfw_afe_id$YearMonth <- as.Date(format(gfw_afe_id$`Time Range`, "%Y-%m-01"))
+```
+
+## Create development stage column
+
+```{r}
+gfw_vp_id <- gfw_vp_id |>
+  mutate(
+    `Development Stage` = case_when(
+      between(`YearMonth`,
+              as.Date("2016-01-01"),
+              as.Date("2019-08-01")) ~ "Stage 1", # 44 months of pre-monitoring
+
+      between(`YearMonth`,
+              as.Date("2019-09-01"),
+              as.Date("2023-03-01")) ~ "Stage 2", # protected species surveys began in 9/19. 43 months of pre-construction monitoring 
+
+      between(`YearMonth`,
+              as.Date("2023-04-01"),
+              as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 40 months of construction & operation across SFW, RWF, and SRW
+    )
+  )
+
+gfw_vp_fv <- gfw_vp_fv |>
+  mutate(
+    `Development Stage` = case_when(
+      between(`YearMonth`,
+              as.Date("2016-01-01"),
+              as.Date("2019-08-01")) ~ "Stage 1", # 31 months of pre-monitoring
+
+      between(`YearMonth`,
+              as.Date("2019-09-01"),
+              as.Date("2023-03-01")) ~ "Stage 2", # protected species surveys began in 9/19. 42 months of pre-construction monitoring 
+
+      between(`YearMonth`,
+              as.Date("2023-04-01"),
+              as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 37 months of construction & operation across SFW, RWF, and SRW
+    )
+  )
+
+gfw_afe_id <- gfw_afe_id |>
+  mutate(
+    `Development Stage` = case_when(
+      between(`YearMonth`,
+              as.Date("2016-01-01"),
+              as.Date("2019-08-01")) ~ "Stage 1", # 31 months of pre-monitoring
+
+      between(`YearMonth`,
+              as.Date("2019-09-01"),
+              as.Date("2023-03-01")) ~ "Stage 2", # protected species surveys began in 9/19. 42 months of pre-construction monitoring 
+
+      between(`YearMonth`,
+              as.Date("2023-04-01"),
+              as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 37 months of construction & operation across SFW, RWF, and SRW
+    )
+  )
+```
+
+## Chrs to factors
+
+```{r}
+gfw_vp_id$`Vessel Type` <- as.factor(gfw_vp_id$`Vessel Type`)
+gfw_vp_id$`Vessel Name` <- as.factor(gfw_vp_id$`Vessel Name`)
+gfw_vp_id$`Gear Type` <- as.factor(gfw_vp_id$`Gear Type`)
+gfw_vp_id$`Development Stage` <- as.factor(gfw_vp_id$`Development Stage`)
+gfw_vp_id$MMSI <- as.factor(gfw_vp_id$MMSI)
+gfw_vp_id$Flag <-  as.factor(gfw_vp_id$Flag)
+gfw_vp_id$`Vessel ID` <-  as.factor(gfw_vp_id$`Vessel ID`)
+
+gfw_vp_fv$`Gear Type` <- as.factor(gfw_vp_fv$`Gear Type`)
+gfw_vp_fv$`Vessel Name` <- as.factor(gfw_vp_fv$`Vessel Name`)
+gfw_vp_fv$`Development Stage` <- as.factor(gfw_vp_fv$`Development Stage`)
+gfw_vp_fv$MMSI <- as.factor(gfw_vp_fv$MMSI)
+gfw_vp_fv$Flag <-  as.factor(gfw_vp_fv$Flag)
+gfw_vp_fv$`Vessel ID` <-  as.factor(gfw_vp_fv$`Vessel ID`)
+
+gfw_afe_id$`Gear Type` <- as.factor(gfw_afe_id$`Gear Type`)
+gfw_afe_id$`Vessel Name` <- as.factor(gfw_afe_id$`Vessel Name`)
+gfw_afe_id$MMSI <- as.factor(gfw_afe_id$MMSI)
+gfw_afe_id$Flag <-  as.factor(gfw_afe_id$Flag)
+gfw_afe_id$`Vessel ID` <-  as.factor(gfw_afe_id$`Vessel ID`)
+```
+
+## Sniff test
+
+```{r}
+# check data
+
+summary(gfw_vp_id)
+summary(gfw_vp_fv)
+summary(gfw_afe_id) 
+## zeros present in afe data
+## Other, inconclusive, and passenger vessels in afe: 
+# Hat Trick listed is a fishing yacht. keep
+# Pasque is fishing vessel out of Falmouth according to Marine Traffic. keep
+# Viking Star and Viking Starship are offshore fishing charters out of Montauk, NY. keep.
+# Off The Grid is a fishing yacht... keep
+
+#### imposing threshold: remove any records where fishing hours are less than .33 hours (20 mins) ####
+```
+
+## Remove vessels
+
+```{r}
+# list of orsted survey and safety vessels to remove for dev stages 2 & 3
+# cross-referenced names and MMSIs in gfw_vp_id
+
+rmOrsted <- c("ASHLEY ANN II","HEATHER LYNN","AMELIA ANNE","ERICA KNIGHT","MISTER G","MORE MISERY","SWEET MISERY","CAILYN & MAREN","HARVEST MOON","BARBARA ANN","BARBARA ANNE","FLEET KING","GABRIELLE ELIZABETH","JO-ANN V","MISTER MARCO","F/V NEW HORIZON","PROVIDER", "FLEET QUEEN", "TRIUNFO", "PAMELA ANN", "KAREN NICOLE", "ANDREA A", "MADISON KATE", "ITALIAN PRINCESS", "SEA WIND", "OCEAN QUEEN", "BRITTANY ERYN", "HUNTER", "CHATHAM", "PATIENCE", "MARINER", "F/V HARVESTER", "KATHRYN MARIE", "CELTIC")
+
+# isolate orsted vessels
+
+gfw_vp_orstedVessels <- gfw_vp_id |>
+  filter(
+    `Vessel Name` %in% rmOrsted &
+    `Development Stage` %in% c("Stage 2", "Stage 3")) # 55969 obs of original 416533... 12.5% of data from all vessel AIS records
+
+# remove orsted vessels
+
+gfw_vp_fv_sub <- gfw_vp_fv |>
+  filter(
+    !(`Vessel Name` %in% rmOrsted &
+      `Development Stage` %in% c("Stage 2", "Stage 3"))) # 88088 obs of 137539... 36% of data removed
+
+gfw_afe_id_sub <- gfw_afe_id |> 
+  filter(
+    !(`Vessel Name` %in% rmOrsted &
+      `Development Stage` %in% c("Stage 2", "Stage 3"))) # 20722 obs of 61637... 66% of data removed
+
+# list of cargo vessels present in vp_fv and afe_id
+
+rmCargo <- c("CYGNUS", "SUNNANVIK")
+
+# remove cargo vessels
+
+gfw_vp_fv_sub <- gfw_vp_fv_sub |> 
+  filter(!`Vessel Name` %in% rmCargo) # 88035 obs
+
+gfw_afe_id_sub <- gfw_afe_id_sub |> 
+  filter(!`Vessel Name` %in% rmCargo) # 20696 obs
+```
+
+## Remove AFE records where fishing hours are less than .33 hours (20 mins)
+
+```{r}
+gfw_afe_id_sub <- gfw_afe_id_sub |> 
+  filter(`Apparent Fishing Hours` > 0.32) # 19068 obs
+```
+
+## remove unwanted cols
+
+```{r}
+# remove unwanted cols
+
+gfw_vp_orstedVessels <- gfw_vp_orstedVessels[, -c(7,8,12:15)]
+gfw_vp_fv_sub <- gfw_vp_fv_sub[,-c(7,8,12:15)]
+gfw_afe_id_sub <- gfw_afe_id_sub[,-c(7,8,12:15)]
+```
+
+## filter vp_fv and afe data sets by development stage
+
+```{r}
+# stage 1 - pre-monitoring
+
+gfw_vp1_fv_sub <- gfw_vp_fv_sub |> 
+  filter(`Development Stage` == "Stage 1")
+
+gfw_afe1_id_sub <- gfw_afe_id_sub |> 
+  filter(`Development Stage` == "Stage 1")
+
+# stage 2 - pre-construction monitoring
+
+gfw_vp2_fv_sub <- gfw_vp_fv_sub |> 
+  filter(`Development Stage` == "Stage 2")
+
+gfw_afe2_id_sub <- gfw_afe_id_sub |> 
+  filter(`Development Stage` == "Stage 2")
+
+# stage 3 - construction and operation
+
+gfw_vp3_fv_sub <- gfw_vp_fv_sub |> 
+  filter(`Development Stage` == "Stage 3")
+
+gfw_afe3_id_sub <- gfw_afe_id_sub |> 
+  filter(`Development Stage` == "Stage 3")
+```
+
+## more sniff tests - visualization checks
+
+```{r}
+# histograms
+
+gfw_afe_id_sub |> 
+  ggplot(aes(x=`Apparent Fishing Hours`)) + geom_histogram(binwidth = 0.5) + theme_bw()
+
+gfw_vp_fv_sub |> 
+  ggplot(aes(x=`Vessel Presence Hours`)) + geom_histogram(binwidth = 1) + theme_bw()
+
+# how to handle one-inflation in data sets?
+```
+
+```{r}
+# check dist of records by month
+
+gfw_vp_fv_sub |> 
+  ggplot(aes(x = YearMonth)) +
+  geom_bar(fill = "steelblue") +
+  theme_bw()
+
+gfw_afe_id_sub |> 
+  ggplot(aes(x = YearMonth)) +
+  geom_bar(fill = "steelblue") +
+  theme_bw() # why sudden jump in mid/late 2024 and 2025?
+
+# check by dev stage
+
+gfw_vp_fv_sub |> 
+  ggplot(aes(x = `Development Stage`)) +
+  geom_bar(fill = "steelblue") +
+  theme_bw() # steady increase a result of just more general fishing activity over time?
+
+gfw_afe_id_sub |> 
+  ggplot(aes(x = `Development Stage`)) +
+  geom_bar(fill = "steelblue") +
+  theme_bw() # BIG jump in dev stage 3
+```
+
+```{r}
+# check dist of unique vessel IDs by month
+
+IDs_perMonth <- gfw_vp_fv_sub |> 
+  group_by(YearMonth) |> 
+  summarise(unique_id_count = n_distinct(`Vessel ID`))
+
+IDs_perMonth |> 
+  ggplot(aes(x = as.factor(YearMonth), y = unique_id_count)) +
+  geom_col(fill = "steelblue") +
+  theme_bw() # trend seems consistent over time... not seeing any big spikes in later years that should indicate more vessels fishing in the area
+
+# check by dev stage
+
+IDs_perDev <- gfw_vp_fv_sub |> 
+  group_by(`Development Stage`) |> 
+  summarise(unique_id_count = n_distinct(`Vessel ID`))
+
+IDs_perDev |> 
+  ggplot(aes(x = as.factor(`Development Stage`), y = unique_id_count)) +
+  geom_col(fill = "steelblue") +
+  theme_bw() # slight decrease in no. of vessels from stage 1 to 2 then small rebound in 3
+```
+
+## Export data sets
+
+```{r}
+# all vp
+
+write_csv(gfw_vp_id, "processed/gfw_vp_id.csv")
+
+# orsted vessels 
+
+write_csv(gfw_vp_orstedVessels, "processed/gfw_vp_orstedVessels.csv")
+
+# vp_fv
+
+write_csv(gfw_vp_fv, "processed/gfw_vp_fv.csv")
+write_csv(gfw_vp_fv_sub, "processed/gfw_vp_fv_sub.csv")
+write_csv(gfw_vp1_fv_sub, "processed/gfw_vp1_fv_sub.csv")
+write_csv(gfw_vp2_fv_sub, "processed/gfw_vp2_fv_sub.csv")
+write_csv(gfw_vp3_fv_sub, "processed/gfw_vp3_fv_sub.csv")
+
+# afe_id
+
+write_csv(gfw_afe_id, "gfw_afe_id.csv")
+write_csv(gfw_afe_id_sub, "processed/gfw_afe_id_sub.csv")
+write_csv(gfw_afe1_id_sub, "processed/gfw_afe1_id_sub.csv")
+write_csv(gfw_afe2_id_sub, "processed/gfw_afe2_id_sub.csv")
+write_csv(gfw_afe3_id_sub, "processed/gfw_afe3_id_sub.csv")
+```

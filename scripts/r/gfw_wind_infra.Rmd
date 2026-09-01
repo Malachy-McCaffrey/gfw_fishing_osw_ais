@@ -1,0 +1,36 @@
+---
+title: "MM_gfw_fixedInfra_202511"
+author: "Malachy McCaffrey"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load packages
+```{r Packages}
+library(tidyverse)
+library(sf)
+```
+
+## Read data
+```{r Data}
+fixed <- read_csv("sar_fixed_infrastructure_202511.csv")
+
+aoi <- st_read("shapefiles/aoi.shp") |> 
+  select(geometry)
+```
+
+## Subset data to wind infra arouna aoi
+```{r Subset}
+wind <- fixed |> 
+  filter(label == c("noise", "wind", "unknown"))
+
+wind_aoi <- fixed |> 
+  filter(label == c("noise", "wind", "unknown")) |> 
+  filter(between(lon, -71.45, -70.7)) |> 
+  filter(between(lat, 40.9, 41.4))
+```
+

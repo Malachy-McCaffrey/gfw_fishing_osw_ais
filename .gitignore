@@ -47,8 +47,9 @@ rsconnect/
 # Ignore exported notebook formats if you do not want to track them
 *.html
 *.pdf
-# ...except rendered deliverables under reports/
-!reports/**/*.html
+# Rendered Quarto HTML stays untracked - it is reproducible from the .qmd source
+# and each self-contained render is ~2 MB, which would bloat history quickly.
+# Final PDF deliverables (posters, submitted reports) are committed deliberately.
 !reports/**/*.pdf
 # ==========================================
 # Python Runtime & Build Artifacts
@@ -96,3 +97,9 @@ data/**/*.json
 
 # Claude Code machine-local settings
 .claude/settings.local.json
+
+# ==========================================
+# Private Planning Notes
+# ==========================================
+# Working notes and implementation bookkeeping, not part of the published record
+planning/

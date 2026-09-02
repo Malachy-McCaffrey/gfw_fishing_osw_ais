@@ -1,0 +1,303 @@
+---
+title: "Spatiotemporal Responses of Fishing Vessels to Offshore Wind Development"
+subtitle: "Analysis work plan — ICES Annual Science Conference poster"
+author: "Malachy McCaffrey"
+date: 2026-09-02
+date-format: "D MMMM YYYY"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    number-sections: true
+    theme: cosmo
+    code-tools: true
+    fig-cap-location: top
+    embed-resources: true
+execute:
+  echo: true
+  eval: false
+  warning: false
+---
+
+## Context
+
+::: {.callout-important}
+## Deadline
+Poster upload to Whova by **end of day 2026-09-03**. Scope below is sized for approximately one working day.
+:::
+
+The existing analysis chain is ArcGIS-dependent (`python/scripts/arcpy/*.py`), so it cannot be reproduced by anyone without a Pro licence, and it reads from a local geodatabase that is not in the repository. The ICES poster asks a specific question — **how do vessel presence hours and apparent fishing effort hours differ between mobile and fixed gear across the three Ørsted development stages** — and the current outputs answer it only as three hotspot maps that a reader must compare by eye.
+
+This plan ports the analysis to pure open-source Python (`geopandas` + `libpysal` + `esda`), reframes the output around **stage-to-stage change** rather than three static maps, and documents it in Quarto under FAIR principles. Everything runs from files already committed to the repository. **No arcpy, no geodatabase.**
+
+Three findings from exploration shape the design:
+
+1. **Gear labels degrade over time.** `Gear Type` is a fixed per-vessel registry attribute (0 of 14,903 vessels carry more than one label). The generic `FISHING` label resolves to neither mobile nor fixed, and its share of apparent-fishing-effort (AFE) hours goes 12.5% → 9.8% → **41.6%** across stages while apparent "mobile" drops 74.0% → 75.3% → **40.7%**. Those are the same vessels moving into an unlabelled bucket. Handled by carrying **unresolved as its own class** and reporting the coverage shift as a result, not by hiding it.
+2. **Polygon-based Queen contiguity is broken on this grid.** Diagnosed and resolved — see @sec-queen.
+3. **`Vessel ID` is finer-grained than MMSI in this extract, and stage-dependently so.** See @sec-identity.
+
+## Why Queen contiguity fails on this grid, and how it is fixed {#sec-queen}
+
+### Cause
+
+`gfw_orsted_sqGrid.ipynb` builds the grid by drawing an independent 0.01° × 0.01° square around each unique GFW point (`half = 0.005`), rather than generating a single tessellated fishnet. Each polygon therefore carries its own four corner coordinates, computed separately. Reprojecting WGS84 → UTM 19N with `PRESERVE_SHAPE` then moves each polygon's vertices independently, so two cells that should share an edge end up with corner coordinates differing in the last few decimal places. `libpysal`'s `Queen.from_dataframe` tests for *shared vertices*, finds none, and concludes the cells are not neighbours.
+
+### Symptom
+
+Measured on the committed shapefile `data/shp/aoi/Orsted_sqGrid_utm19n.shp`:
+
+| Weights method | Mean neighbours | Components | Islands |
+|---|---:|---:|---:|
+| `Queen.from_dataframe` (naive port) | **1.96** | **74** | 0 |
+| `KNN(k=8)` | 8.00 | 1 | 0 |
+| **Lattice-derived Queen (adopted)** | **7.80** | **1** | **0** |
+
+::: {.callout-warning}
+## Why this matters
+A mean of 1.96 neighbours on what should be an 8-neighbour lattice would have made Gi\* and Local Moran's I close to meaningless — most cells would have been compared against two arbitrary neighbours, and 74 disconnected components would have fragmented the global statistics.
+:::
+
+### Fix (verified)
+
+The cells sit on an exact 0.01° lattice, so contiguity is recoverable analytically from the `Lon_C` / `Lat_C` centroid attributes already on the shapefile — no geometry predicate, no tolerance to tune. Two cells are Queen neighbours iff their integer lattice indices differ by at most 1 on each axis.
+
+```{python}
+#| label: lattice-queen
+r = np.round(grid.Lat_C / 0.01).astype(int)
+c = np.round(grid.Lon_C / 0.01).astype(int)
+idx = {(a, b): i for i, (a, b) in enumerate(zip(r, c))}
+neighbors = {
+    i: [idx[(a + da, b + db)]
+        for da in (-1, 0, 1) for db in (-1, 0, 1)
+        if (da, db) != (0, 0) and (a + da, b + db) in idx]
+    for i, (a, b) in enumerate(zip(r, c))
+}
+w = libpysal.weights.W(neighbors)
+w.transform = "r"
+```
+
+Resulting neighbour-count distribution: 3,107 cells with the full 8, and 43 / 128 / 35 / 62 cells with 4 / 5 / 6 / 7 (grid edges and interior holes) — exactly the expected profile.
+
+`KNN(k=8)` was rejected despite also being connected: it forces exactly 8 neighbours everywhere, inventing neighbours across the grid's edges and interior gaps where none exist.
+
+## Vessel identity: why MMSI is the counting unit {#sec-identity}
+
+GFW's resolved vessel-identity product does link a hull across MMSI changes using name, call sign, registry data, and machine learning. **But that is not what this extract contains.** The pull used `group_by = "VESSEL_ID"` against the 4Wings endpoint, which returns identity *segments*. Measured on `gfw_vp_id.csv`:
+
+- **0** Vessel IDs span more than one MMSI (max = 1)
+- **1,258** MMSIs span more than one Vessel ID (max = 5)
+
+MMSI `367052470` resolves to five Vessel IDs differing only in self-reported completeness:
+
+| Vessel ID | Vessel Name | CallSign |
+|---|---|---|
+| `32b606172…` | SEVEN B 5 | WAN6419 |
+| `1c694baa2…` | *(null)* | WAN6419 |
+| `e2309c089…` | SEVEN B 5 | *(null)* |
+| `e5ad57b2d…` | SEVEN B S V | WAN6419 |
+| `0d3191538…` | SEVEN B S V | *(null)* |
+
+One hull, five IDs. This matches the note already in the pull script at `gfw_vp_afe_dataPull_090126.Rmd:90`.
+
+The inflation is **stage-dependent**, which is why it matters here:
+
+| | Stage 1 | Stage 2 | Stage 3 |
+|---|---:|---:|---:|
+| distinct Vessel ID | 5,782 | 6,055 | 7,396 |
+| distinct MMSI | 5,120 | 5,691 | 7,067 |
+| ratio | **1.129** | 1.064 | **1.047** |
+
+Counting Vessel IDs inflates Stage 1 by 12.9% and Stage 3 by 4.7%, manufacturing a spurious downward trend in vessel counts across precisely the comparison the poster makes. Since every Vessel ID nests within exactly one MMSI, MMSI is a clean strict coarsening.
+
+**Decision.** MMSI is the primary counting unit for `SumVesselCount` and all per-vessel normalisation. Vessel ID counts are reported alongside as a sensitivity column.
+
+::: {.callout-note}
+## Stated limitation
+MMSI can be reassigned or misreported, so it is not a perfect hull identifier either. Resolving hull identity properly requires GFW's vessel-identity endpoint, and is deferred to the thesis alongside the gear crosswalk.
+:::
+
+## Decisions locked
+
+| Decision | Choice |
+|---|---|
+| Gear handling | Four-class: `MOBILE` / `FIXED` / `POLE_AND_LINE` / `UNRESOLVED`. No external crosswalk. |
+| Spatial support | Existing `Orsted_sqGrid_utm19n.shp`, 3,375 cells, EPSG:32619 |
+| Weights | Queen contiguity, row-standardised — built from lattice indices |
+| Emphasis | **Stage-to-stage change**, not three independent maps |
+| Toolchain | `geopandas` / `libpysal` / `esda` / `scipy`. arcpy forbidden. |
+| Deferred to thesis | MMSI→gear crosswalk (111 AFE + 404 VP MMSIs), sensitivity re-run, space-time cube / emerging hotspots |
+
+## Verified feasibility
+
+A full end-to-end dry run has already passed (61 s for one stage, arcpy never imported):
+
+- `gpd.sjoin` of `gfw_vp1_fv_sub.csv` onto the grid matched **3,164 distinct cells — exactly reproducing the arcpy `SpatialJoin` count** reported in `gfw_vp_stage_grid_summary.ipynb`. Same for Stages 2 and 3 (3,218 / 3,269).
+- All 23,078 Stage 1 points fell inside the grid; zero unmatched.
+- `MonthMeanVesselHrs` mean 0.1624 / median 0.0909 reproduced the notebook's `describe()` exactly.
+- `esda.Moran` I = 0.696, z = 39.8 on sqrt-transformed Stage 1 vessel presence.
+
+## Implementation
+
+### Phase 0 — package scaffold (~30 min)
+
+`src/gfw_fishing_osw_ais/` is currently a one-function stub. Add a `config.py` (repo-relative paths, stage windows, gear-class mapping, CRS constants, `RANDOM_SEED = 42`) and an `io.py` (`load_grid()`, `load_stage()`, `load_owf()`, `load_aoi()`).
+
+Stage windows come from `gfw_vp_afe_dataPull_090126.Rmd:396-411`. The *44 / 43 / 40* month comments are the correct ones; the 31 / 42 / 37 set elsewhere in that file is stale.
+
+| Stage | Window | Months | Rationale |
+|---|---|---:|---|
+| Stage 1 | 2016-01-01 → 2019-08-01 | 44 | Pre-monitoring baseline |
+| Stage 2 | 2019-09-01 → 2023-03-01 | 43 | Protected-species surveys began 09/2019 |
+| Stage 3 | 2023-04-01 → 2026-07-01 | 40 | Seabed prep for SFW began 04/2023 |
+
+#### Gear classification
+
+Every `Gear Type` value present in the two datasets is assigned:
+
+| Class | GFW `Gear Type` values | AFE rows | Rationale |
+|---|---|---|---|
+| **MOBILE** | `TRAWLERS`, `DREDGE_FISHING`, `OTHER_PURSE_SEINES`, `TUNA_PURSE_SEINES`, `PURSE_SEINES`, `TROLLERS`, `DRIFTING_LONGLINES` | 18,310 / 441 / 101 / 39 / 1 / 1 / 8 | Gear is towed, dragged, or drifts with the vessel |
+| **FIXED** | `SET_GILLNETS`, `POTS_AND_TRAPS`, `SET_LONGLINES`, `FIXED_GEAR` | 2,769 / 1,611 / 53 / 1,851 | Gear is anchored or deployed and returned to |
+| **POLE_AND_LINE** | `POLE_AND_LINE` | 3,150 | Own class — see below |
+| **UNRESOLVED** | `FISHING`, `INCONCLUSIVE`, `NA` | 32,139 / 973 / 83 | Fishing vessel, gear not determined by GFW |
+| **EXCLUDED** | `PASSENGER`, `OTHER` (AFE only) | 100 / 8 | Non-fishing; the AFE pull was never filtered to `Vessel Type == "FISHING"` unlike VP (`Rmd:203-254`) |
+
+::: {.callout-tip}
+## Why `POLE_AND_LINE` gets its own class
+Commercial pole-and-line is not a Southern New England fishery, and the vessel names in this class — MISTE ROSE, FISHIN ADDICTION 17, TUF GUY, TRANQUILITY, WATERPROOF, MACKEREL SKY, PREVAIL, BLUE ANGEL — indicate **recreational and for-hire charter vessels carrying AIS**, consistent with the charter and yacht vessels deliberately retained during MarineTraffic adjudication at `Rmd:481-486`. (`SAKONNET LOBSTER 2` also appears here, evidently a mislabelled pot boat.)
+
+Merging it into MOBILE would relabel likely-recreational activity as commercial mobile gear; merging into UNRESOLVED would hide a substantively interesting signal.
+:::
+
+**Sparsity caveat — differs by dataset:**
+
+| | Stage 1 | Stage 2 | Stage 3 |
+|---|---:|---:|---:|
+| VP cells occupied | 1,030 (30.5%) | 1,249 (37.0%) | 1,439 (42.6%) |
+| VP vessels (MMSI) | 66 | 90 | 130 |
+| AFE cells occupied | **81 (2.4%)** | **149 (4.4%)** | **209 (6.2%)** |
+| AFE vessels / hours | 13 / 144 h | 18 / 264 h | 31 / 397 h |
+
+Therefore **vessel presence gets a full pole-and-line Gi\* surface; apparent fishing effort does not** — 81 occupied cells against 3,375 is 97.6% structural zeros, and the resulting surface would be unstable. Report the AFE pole-and-line class descriptively instead (hours 144 → 264 → 397, vessels 13 → 31, a near-tripling worth stating), and record in the methods why no AFE hotspot surface is shown for it.
+
+Add `scipy` and `statsmodels` to `pyproject.toml` (`scipy` is currently only a transitive dependency of `scikit-learn`).
+
+### Phase 1 — exploration: distribution and limitations (~2 h)
+
+**`explore.py`.** Reuse the tests already written in `python/scripts/arcpy/gfw_vp_monthmeanhrs_distribution_diagnostics.py:75-114` — that script is already pure `scipy`/`matplotlib` and needs only its input repointed.
+
+Per dataset × stage × gear class, report `n`, `pct_zero`, mean, median, sd, `scipy.stats.skew`, `kurtosis`, Shapiro-Wilk, D'Agostino K², and a raw vs `sqrt` vs `log1p` skew comparison.
+
+#### Limitations to quantify and state explicitly
+
+All confirmed during exploration:
+
+- `Vessel Presence Hours` is an **integer count of hours with ≥1 AIS position**, not an integrated duration — min 1, median 1, max 24. One-inflated; flagged unresolved in the Rmd at line 587.
+- AFE carries a `> 0.32` hour threshold (`Rmd:531-535`); VP does not.
+- Ørsted charter vessels are removed **only for Stages 2–3** (`Rmd:494-516`) — deliberate, but an asymmetry that must be stated for any before/after reading.
+- `Vessel ID` is not stable per hull: 1,258 MMSIs map to more than one Vessel ID. Use MMSI for vessel counts (@sec-identity).
+- `MonthMean*` divides by **stage-wide month count, not per-cell active months** (`gfw_vp_stage_grid_summary.py:180-186`) → structural zero-inflation; 211 / 157 / 106 cells are zero by construction.
+- Stage 3's final month (July 2026) is partial — data ends 2026-07-13.
+- **AIS coverage rises over the study period.** AFE rows go 3,528 → 9,773 → 48,336 while distinct vessels only go 186 → 232 → 303. This is the dominant confound; the Rmd flags it at lines 601 / 613 / 626 without resolving it. Report absolute hours *and* per-vessel normalised rates.
+- Gear-label degradation — reported as a first-class result, not a footnote.
+
+### Phase 2 — aggregation and weights (~1.5 h)
+
+**`aggregate.py`** — port `summarize_stage()` from `gfw_vp_stage_grid_summary.py:175-212`. That logic is already plain pandas; the only arcpy piece is the spatial join:
+
+```{python}
+#| label: spatial-join
+pts = gpd.GeoDataFrame(
+    df, geometry=gpd.points_from_xy(df.Lon, df.Lat), crs=4326
+).to_crs(32619)
+j = gpd.sjoin(pts, grid[["cell_id", "geometry"]], how="left", predicate="within")
+```
+
+Then group by `cell_id` → `SumHrs`, `SumVesselCount` (nunique **MMSI**, not Vessel ID), `TotalRecords`; reindex onto all 3,375 cells and `fillna(0)`; `MonthMean = SumHrs / n_months_in_stage`; `sqrt` transform as the primary field, raw retained as a sensitivity check (matching the arcpy workflow's dual-field approach).
+
+**`weights.py`** — see @sec-queen. Do **not** use `Queen.from_dataframe`. Assert `w.n_components == 1` and `w.mean_neighbors > 7` as a guard.
+
+### Phase 3 — spatial statistics (~2 h)
+
+**`spatial_stats.py`**, run per dataset (VP, AFE) × stage (1, 2, 3) × gear class — mobile, fixed, unresolved, plus pole-and-line for VP only (21 runs).
+
+| arcpy tool | Open-source replacement |
+|---|---|
+| `SpatialAutocorrelation` | `esda.Moran(y, w)` → `I`, `z_norm`, `p_norm` |
+| `HotSpots` (Gi\*, `APPLY_FDR`) | `esda.G_Local(y, w, star=True)` + BH-FDR on `p_norm` |
+| `ClustersOutliers` (`APPLY_FDR`, 499 perms) | `esda.Moran_Local(y, w, permutations=999, seed=42)` + BH-FDR on `p_sim` |
+| `HighLowClustering` | `esda.G(y, w)` — optional, drop if time-pressed |
+
+Two things the arcpy version got loose that the port should fix:
+
+- **Set the Gi\* self-weight explicitly** via `libpysal.weights.fill_diagonal(w, 1.0)` rather than letting `esda` infer it (it warns and assumes the row maximum).
+- **Seed the permutations.** The arcpy workflow sets no seed, so its Local Moran's results are not reproducible.
+
+Emit ArcGIS-compatible field names so the existing pandas comparison code at `gfw_vp_fv_spatial_stats_workflow.py:427-527` still works: `Gi_Bin` (−3…+3 from FDR-adjusted z), `COType` (HH / HL / LH / LL, blank if not significant), `GiZScore`, `LMiZScore`.
+
+### Phase 4 — stage-change analysis and poster figures (~2 h)
+
+**`transitions.py`**:
+
+- **Gi\* bin transition matrices**, Stage 1→2 and Stage 2→3, per gear class: a 7×7 crosstab of `Gi_Bin` for the record, condensed to hot / not-significant / cold 3×3 for display.
+- **Cells gaining / losing / retaining hotspot status** per transition, with counts and area in km² (from the grid's `Area_km2`).
+- **`COType` transition counts** — cells entering or leaving HH clusters.
+
+Normalise by stage length (44 / 43 / 40 months) wherever absolute hours are compared, and report per-vessel rates (MMSI-denominated) alongside absolute hours so the AIS-coverage confound stays visible.
+
+#### Wind-project overlay
+
+`data/shp/owf/` holds the project outlines, all in **EPSG:3857** — reproject to 32619 to match the grid:
+
+| Layer | Features | Use |
+|---|---:|---|
+| `SFW.shp` | 1 | South Fork Wind — construction began Stage 3 (04/2023) |
+| `RWF.shp` | 2 | Revolution Wind |
+| `SRW.shp` | 2 | Sunrise Wind |
+| `SNE_OWFs.shp` | 490 | Source layer only — carries `COMPANY` / `LEASE_NUMB` / `LEASE_TYPE` if labels are wanted. Filter to the three Ørsted leases before drawing. |
+
+::: {.callout-warning}
+## Layers to exclude from all figures
+Do not plot `VW1.shp`, `VW1_Buffer.shp`, `SRW_Buffer.shp`, or unfiltered `SNE_OWFs.shp`. Vineyard Wind 1 is not an Ørsted project and lies outside the study AOI, which is the dissolved union of the SFW + RWF + SRW 10 km buffers only (`gfw_aoi_creation.py:63-68`). The `*_Buffer` layers are AOI-construction intermediates, not features to display.
+:::
+
+Draw SFW / RWF / SRW as unfilled polygons with a heavy outline over every hotspot and change map, labelled, with the AOI boundary (`Orsted_AOI.shp`) as a light outer frame. This is what lets a viewer read hotspot movement *relative to the lease areas* rather than in empty space — the single highest-value addition to the figures.
+
+#### Poster figure strategy: change map vs three maps
+
+Neither alone, and the choice differs by medium.
+
+Three separate Gi\* maps make the reader hold one map in working memory while scanning the next, then infer the difference. At a poster session, with roughly 30–60 seconds of attention and people reading over shoulders, that inference mostly does not happen; viewers see "three blue-and-red maps" and move on. A change map does the differencing *for* the reader and states the finding directly, which is what the research question actually asks.
+
+But a change map alone is unreadable without knowing what the baseline looked like — "gained hotspot" means nothing if you cannot see there was no hotspot there before. And the transition **matrix** is a table: analytically the cleanest summary, and the worst possible poster object.
+
+**Recommended layout:**
+
+1. **Hero panel (largest)** — two change maps side by side, Stage 1→2 and Stage 2→3, cells coloured *gained hot* / *stable hot* / *lost hot* / *gained cold* / *stable cold* / *no change*, with Ørsted lease outlines overlaid. This carries the finding.
+2. **Reference strip (small)** — the three per-stage Gi\* maps at roughly quarter size, shared colour scale, as visual context for the hero panel.
+3. **Small multiples by gear class** — the hero panel repeated compactly for mobile / fixed / pole-and-line / unresolved (pole-and-line for VP only). This is where the gear story lives.
+4. **Transition matrices → not on the poster.** Put the condensed 3×3 versions in the Quarto document and link via QR code; keep only headline numbers as text annotations ("X km² gained hotspot status, Y km² lost").
+
+If time runs short, cut in this order: transition matrices → reference strip → unresolved-class panels. **Keep the two hero change maps.**
+
+### Phase 5 — Quarto and FAIR (~1.5 h)
+
+`reports/_quarto.yml` plus:
+
+- `reports/01-data-exploration.qmd` — Phase 1 output, distributions, and the limitations section.
+- `reports/02-spatial-analysis.qmd` — Phases 2–4, methods and results.
+
+Rendered HTML is committable: `.gitignore` already carries `!reports/**/*.html` and `!reports/**/*.pdf`.
+
+FAIR items, scoped to what is achievable before the deadline:
+
+- **Findable / Accessible** — the source data is gitignored, so document the exact `gfwr` v3.0 calls that regenerate it: `gfw_ais_presence()` and `gfw_ais_fishing_hours()` with `spatial_resolution="HIGH"`, `temporal_resolution="DAILY"`, `group_by="VESSEL_ID"`, `region_source="USER_SHAPEFILE"`, across 11 calendar-year calls (`Rmd:88-195`, `262-369`).
+- **Interoperable** — write outputs as GeoPackage and Parquet with CRS declared; publish a data dictionary for all 18 columns and the gear-class codebook.
+- **Reusable** — `uv.lock` pins the environment; add `CITATION.cff` and a licence; record the GFW data licence and attribution.
+
+---
+
+::: {.callout-note appearance="simple"}
+Implementation bookkeeping — files touched, the verification checklist, out-of-scope items with cost estimates, reference figures from exploration, and known bugs in the archived ArcGIS/R code — is kept separately in `planning/work-plan-appendices.md` (gitignored).
+:::

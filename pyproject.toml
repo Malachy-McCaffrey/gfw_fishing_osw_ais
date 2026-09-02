@@ -15,6 +15,7 @@ dependencies = [
     "geopandas>=1.1.4",
     "gfw-api-python-client>=1.4.0",
     "hvplot>=0.12.2",
+    "jupyter>=1.1.1",
     "jupyterlab>=4.6.3",
     "matplotlib>=3.11.1",
     "netcdf4>=1.7.4",

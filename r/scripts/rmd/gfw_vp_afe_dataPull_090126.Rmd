@@ -646,21 +646,21 @@ write_csv(gfw_vp_id, "data/external/gfw/gfw_vp_id.csv")
 
 # orsted vessels 
 
-write_csv(gfw_vp_orstedVessels, "data/interim/gfw/gfw_vp_orstedVessels.csv")
+write_csv(gfw_vp_orstedVessels, "data/processed/gfw/gfw_vp_orstedVessels.csv")
 
 # vp_fv
 
 write_csv(gfw_vp_fv, "data/interim/gfw/gfw_vp_fv.csv")
-write_csv(gfw_vp_fv_sub, "data/interim/gfw/gfw_vp_fv_sub.csv")
-write_csv(gfw_vp1_fv_sub, "data/interim/gfw/gfw_vp1_fv_sub.csv")
-write_csv(gfw_vp2_fv_sub, "data/interim/gfw/gfw_vp2_fv_sub.csv")
-write_csv(gfw_vp3_fv_sub, "data/interim/gfw/gfw_vp3_fv_sub.csv")
+write_csv(gfw_vp_fv_sub, "data/processed/gfw/gfw_vp_fv_sub.csv")
+write_csv(gfw_vp1_fv_sub, "data/processed/gfw/gfw_vp1_fv_sub.csv")
+write_csv(gfw_vp2_fv_sub, "data/processed/gfw/gfw_vp2_fv_sub.csv")
+write_csv(gfw_vp3_fv_sub, "data/processed/gfw/gfw_vp3_fv_sub.csv")
 
 # afe_id
 
 write_csv(gfw_afe_id, "data/external/gfw/gfw_afe_id.csv")
-write_csv(gfw_afe_id_sub, "data/interim/gfw/gfw_afe_id_sub.csv")
-write_csv(gfw_afe1_id_sub, "data/interim/gfw/gfw_afe1_id_sub.csv")
-write_csv(gfw_afe2_id_sub, "data/interim/gfw/gfw_afe2_id_sub.csv")
-write_csv(gfw_afe3_id_sub, "data/interim/gfw/gfw_afe3_id_sub.csv")
+write_csv(gfw_afe_id_sub, "data/processed/gfw/gfw_afe_id_sub.csv")
+write_csv(gfw_afe1_id_sub, "data/processed/gfw/gfw_afe1_id_sub.csv")
+write_csv(gfw_afe2_id_sub, "data/processed/gfw/gfw_afe2_id_sub.csv")
+write_csv(gfw_afe3_id_sub, "data/processed/gfw/gfw_afe3_id_sub.csv")
 ```

@@ -25,8 +25,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 DATA_DIR = REPO_ROOT / "data"
 EXTERNAL_GFW_DIR = DATA_DIR / "external" / "gfw"
-INTERIM_GFW_DIR = DATA_DIR / "interim" / "gfw"
 PROCESSED_DIR = DATA_DIR / "processed"
+
+# The cleaned per-stage CSVs the analysis reads. These were written to
+# data/interim/gfw by the R pipeline and later moved to data/processed/gfw;
+# the R script (Rmd:645-665) still writes to the old location, so a re-pull
+# will need either that path updated or the files moved again.
+INTERIM_GFW_DIR = PROCESSED_DIR / "gfw"
 SHP_AOI_DIR = DATA_DIR / "shp" / "aoi"
 SHP_OWF_DIR = DATA_DIR / "shp" / "owf"
 

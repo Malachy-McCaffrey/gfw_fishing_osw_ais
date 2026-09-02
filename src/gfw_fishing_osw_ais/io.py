@@ -178,6 +178,7 @@ def load_stage(dataset: str, stage: int) -> pd.DataFrame:
             f"expected only '{stage_spec.label}'"
         )
 
+    df = _apply_supplementary_removals(df, dataset, stage)
     df["gear_class"] = classify_gear(df["Gear Type"])
 
     n_excluded = int((df["gear_class"] == cfg.EXCLUDED).sum())
@@ -256,6 +257,39 @@ def month_denominator(dataset: str, stage: int, df: pd.DataFrame | None = None) 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+def _apply_supplementary_removals(
+    df: pd.DataFrame, dataset: str, stage: int
+) -> pd.DataFrame:
+    """Drop charter and non-fishing vessels the R pipeline's filter missed.
+
+    Two removals, matched on MMSI rather than vessel name:
+
+    * ``RM_ALL_STAGES_MMSI`` -- not fishing vessels at all, removed everywhere.
+    * ``RM_CHARTER_MMSI`` -- offshore-wind charter vessels, removed only for
+      ``RM_CHARTER_STAGES``. These are genuine fishing hulls, so their
+      pre-construction records are real activity and are kept, mirroring how
+      the R pipeline treated the original 34 (``Rmd:494-516``).
+    """
+    mmsi = df[cfg.VESSEL_COUNT_COLUMN].astype("string")
+    hours_col = cfg.DATASETS[dataset].hours_column
+
+    drop = mmsi.isin(cfg.RM_ALL_STAGES_MMSI)
+    if stage in cfg.RM_CHARTER_STAGES:
+        drop |= mmsi.isin(cfg.RM_CHARTER_MMSI)
+
+    if not drop.any():
+        return df
+
+    removed = df[drop]
+    for code, group in removed.groupby(mmsi[drop], observed=True):
+        name = cfg.RM_CHARTER_MMSI.get(code) or cfg.RM_ALL_STAGES_MMSI.get(code, "?")
+        log.info(
+            "%s stage %d: removing %s (MMSI %s) -- %d rows, %.1f hours",
+            dataset, stage, name, code, len(group), group[hours_col].sum(),
+        )
+    return df[~drop].copy()
+
+
 def _dataset_spec(dataset: str) -> cfg.DatasetSpec:
     try:
         return cfg.DATASETS[dataset]

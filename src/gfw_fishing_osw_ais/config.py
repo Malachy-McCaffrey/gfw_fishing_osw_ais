@@ -277,6 +277,48 @@ VESSEL_COUNT_COLUMN = "MMSI"
 VESSEL_COUNT_SENSITIVITY_COLUMN = "Vessel ID"
 
 # ---------------------------------------------------------------------------
+# Supplementary vessel removals
+# ---------------------------------------------------------------------------
+# The R pipeline removed 34 named Orsted survey and safety vessels for Stages
+# 2-3 (Rmd:494-516). That filter matched on `Vessel Name` and leaked: several
+# charter vessels active during Revolution Wind construction were not on the
+# list. The removals below are applied on top of the interim CSVs.
+#
+# **Keyed by MMSI, not name.** Name matching is what let these through in the
+# first place, and it is genuinely unsafe here: "TRADITION" alone spans six
+# MMSIs across two vessel types, only one of which is a charter.
+#
+# Identified by a behavioural screen -- appearing in Stage 3 with little or no
+# prior history, working 35-60% of their hours inside the lease areas against
+# a fleet baseline of 18.9%, in a 5-7 month burst beginning October 2024, the
+# month after Revolution Wind's first turbine was installed.
+#
+# VIRGINIA WAVE is the anchor case: it is a confirmed Orsted charter, having
+# grounded off Beavertail State Park while working for Revolution Wind, yet it
+# carries 1,029 hours of "apparent fishing effort" in Stage 3.
+RM_CHARTER_MMSI = {
+    "368080240": "AMELIA JOYCE",
+    "368250590": "JACK M",
+    "368231710": "LILY M",
+    "368280420": "EDWARD&JOSEPH",
+    "368361590": "TRADITION",       # this MMSI only; the name spans six hulls
+    "367723210": "SAINTS ANGELS",
+    "367696380": "VIRGINIA WAVE",
+}
+
+# Charter vessels are genuine fishing hulls, so their pre-construction records
+# are real fishing activity and are retained. This mirrors the stage-conditional
+# treatment the R pipeline already applied to the original 34.
+RM_CHARTER_STAGES = (2, 3)
+
+# Removed from every stage: not a fishing vessel under any circumstances.
+# NOAA Gloria Michelle is a NOAA Fisheries research vessel, but GFW classes it
+# as FISHING / TRAWLERS, so it was inflating the MOBILE gear class.
+RM_ALL_STAGES_MMSI = {
+    "338066383": "NOAA GLORIA MICHELLE",
+}
+
+# ---------------------------------------------------------------------------
 # Offshore wind project layers
 # ---------------------------------------------------------------------------
 # The three Orsted projects, drawn on every map.

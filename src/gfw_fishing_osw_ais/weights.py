@@ -178,17 +178,28 @@ def lattice_queen(
 
 
 def gi_star_weights(grid: gpd.GeoDataFrame) -> weights.W:
-    """Queen weights including each cell's own value, for Getis-Ord Gi*.
+    """Binary Queen weights including each cell's own value, for Getis-Ord Gi*.
 
-    Gi* differs from Gi by including the focal cell in its own neighbourhood.
-    Setting the self-weight explicitly avoids ``esda``'s fallback, which warns
-    and assumes the self-weight equals the row maximum -- a guess that depends
-    on whether the matrix has already been standardised.
+    Two things matter here and both are easy to get wrong.
 
-    Self-weights are added *before* row standardisation so every cell carries
-    equal weight across itself and its neighbours.
+    **The weights must stay binary.** Gi* is a ratio of the neighbourhood sum
+    to the global sum, and its variance term depends on the *number* of
+    neighbours through the weight sum ``W_i``. Row standardisation forces
+    ``W_i = 1`` for every cell, which collapses that term and compresses the
+    z-scores toward zero. On this grid it is the difference between a maximum
+    |z| of 10.78 and of 3.96 -- i.e. between 832 FDR-significant hot and cold
+    cells and none at all. Callers must also pass ``transform="B"`` to
+    ``esda.G_Local``, whose default of ``"R"`` would otherwise re-standardise
+    the matrix in place and undo this.
+
+    **The focal cell must be in its own neighbourhood.** That is what
+    distinguishes Gi* from Gi. Setting it explicitly avoids ``esda``'s
+    fallback, which warns and assumes the self-weight equals the row maximum.
+
+    Contrast ``lattice_queen``, which *is* row-standardised: Moran's I and
+    Local Moran's I both expect that.
     """
-    return lattice_queen(grid, row_standardize=True, include_self=True)
+    return lattice_queen(grid, row_standardize=False, include_self=True)
 
 
 def validate_weights(

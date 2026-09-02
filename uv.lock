@@ -1039,7 +1039,9 @@ dependencies = [
     { name = "rioxarray" },
     { name = "scikit-image" },
     { name = "scikit-learn" },
+    { name = "scipy" },
     { name = "shapely" },
+    { name = "statsmodels" },
     { name = "xarray" },
     { name = "zarr" },
 ]
@@ -1067,7 +1069,9 @@ requires-dist = [
     { name = "rioxarray", specifier = ">=0.23.0" },
     { name = "scikit-image", specifier = ">=0.26.0" },
     { name = "scikit-learn", specifier = ">=1.9.0" },
+    { name = "scipy", specifier = ">=1.18.1" },
     { name = "shapely", specifier = ">=2.1.2" },
+    { name = "statsmodels", specifier = ">=0.15.0" },
     { name = "xarray", specifier = ">=2026.7.0" },
     { name = "zarr", specifier = ">=3.3.0" },
 ]

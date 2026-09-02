@@ -29,7 +29,9 @@ dependencies = [
     "rioxarray>=0.23.0",
     "scikit-image>=0.26.0",
     "scikit-learn>=1.9.0",
+    "scipy>=1.18.1",
     "shapely>=2.1.2",
+    "statsmodels>=0.15.0",
     "xarray>=2026.7.0",
     "zarr>=3.3.0",
 ]

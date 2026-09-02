@@ -51,6 +51,11 @@ rsconnect/
 # and each self-contained render is ~2 MB, which would bloat history quickly.
 # Final PDF deliverables (posters, submitted reports) are committed deliberately.
 !reports/**/*.pdf
+
+# Generated figures, same reasoning: ~2.7 MB per full run of viz.py, and
+# regenerable from the analysis modules. Remove this line if a specific figure
+# needs to travel with the repo.
+reports/figures/
 # ==========================================
 # Python Runtime & Build Artifacts
 # ==========================================

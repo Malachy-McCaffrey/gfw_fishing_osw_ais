@@ -62,6 +62,8 @@ dist/
 venv/
 env/
 ENV/
+renv/library/
+renv/staging/
 # ==========================================
 # Data & Large Files
 # ==========================================
@@ -77,3 +79,5 @@ ENV/
 .env
 .secrets
 .positai
+
+

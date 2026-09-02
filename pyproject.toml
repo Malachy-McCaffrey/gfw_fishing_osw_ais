@@ -1,0 +1,41 @@
+[project]
+name = "gfw-fishing-osw-ais"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Malachy-McCaffrey", email = "mmccaffrey61@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "contextily>=1.7.1",
+    "dask>=2026.8.0",
+    "earthpy>=0.9.4",
+    "folium>=0.20.0",
+    "geopandas>=1.1.4",
+    "gfw-api-python-client>=1.4.0",
+    "hvplot>=0.12.2",
+    "jupyterlab>=4.6.3",
+    "matplotlib>=3.11.1",
+    "netcdf4>=1.7.4",
+    "numpy>=2.5.2",
+    "odc-stac>=0.5.3",
+    "planet>=3.6.0",
+    "pyogrio>=0.13.0",
+    "pysal>=26.7",
+    "pystac-client>=0.9.0",
+    "rasterio>=1.5.1",
+    "rioxarray>=0.23.0",
+    "scikit-image>=0.26.0",
+    "scikit-learn>=1.9.0",
+    "shapely>=2.1.2",
+    "xarray>=2026.7.0",
+    "zarr>=3.3.0",
+]
+
+[project.scripts]
+gfw-fishing-osw-ais = "gfw_fishing_osw_ais:main"
+
+[build-system]
+requires = ["uv_build>=0.12.9,<0.13.0"]
+build-backend = "uv_build"

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(**/.env*)",
+      "Bash(git push:*)",
+      "Bash(rm:*)",
+      "Edit(./data/**)",
+      "Edit(./uv.lock)",
+      "Edit(./renv.lock)"
+    ],
+    "ask": [
+      "Bash(uv add:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}

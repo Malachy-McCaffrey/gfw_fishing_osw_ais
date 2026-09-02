@@ -31,7 +31,9 @@ vignettes/*.pdf
 # R Environment Variables
 .Renviron
 # pkgdown site
-docs/
+docs/**
+!docs/**/
+!docs/**/*.md
 # translation temp files
 po/*~
 # RStudio Connect folder
@@ -45,6 +47,9 @@ rsconnect/
 # Ignore exported notebook formats if you do not want to track them
 *.html
 *.pdf
+# ...except rendered deliverables under reports/
+!reports/**/*.html
+!reports/**/*.pdf
 # ==========================================
 # Python Runtime & Build Artifacts
 # ==========================================
@@ -67,10 +72,19 @@ renv/staging/
 # ==========================================
 # Data & Large Files
 # ==========================================
-# Notebooks often generate large datasets or logs that shouldn't be on GitHub
-*.csv
-*.json
-*.xlsx
+# Bulk and derived data live on disk, not in git. Keep the directories
+# themselves so scripts that write into them work on a fresh clone.
+data/external/*
+data/interim/*
+data/processed/*
+data/raw/*
+!data/external/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+!data/raw/.gitkeep
+# Data-shaped json anywhere under data/ (config json elsewhere stays tracked)
+data/**/*.json
+# Runtime artifacts, repo-wide
 *.log
 *.sqlite
 # ==========================================
@@ -78,6 +92,7 @@ renv/staging/
 # ==========================================
 .env
 .secrets
-.positai
 
 
+# Claude Code machine-local settings
+.claude/settings.local.json

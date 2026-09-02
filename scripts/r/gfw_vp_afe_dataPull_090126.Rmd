@@ -383,11 +383,11 @@ gfw_afe_id <- rbind(afe_id_16, afe_id_17, afe_id_18, afe_id_19, afe_id_20, afe_i
 ## create yyyy-mm column
 
 ```{r}
-gfw_vp_id$YearMonth <- as.Date(format(gfw_vp_id$`Time Range`, "%Y-%m-01"))
+gfw_vp_id$'Year Month' <- as.Date(format(gfw_vp_id$`Time Range`, "%Y-%m-01"))
 
-gfw_vp_fv$YearMonth <- as.Date(format(gfw_vp_fv$`Time Range`, "%Y-%m-01"))
+gfw_vp_fv$'Year Month' <- as.Date(format(gfw_vp_fv$`Time Range`, "%Y-%m-01"))
 
-gfw_afe_id$YearMonth <- as.Date(format(gfw_afe_id$`Time Range`, "%Y-%m-01"))
+gfw_afe_id$'Year Month' <- as.Date(format(gfw_afe_id$`Time Range`, "%Y-%m-01"))
 ```
 
 ## Create development stage column
@@ -396,15 +396,15 @@ gfw_afe_id$YearMonth <- as.Date(format(gfw_afe_id$`Time Range`, "%Y-%m-01"))
 gfw_vp_id <- gfw_vp_id |>
   mutate(
     `Development Stage` = case_when(
-      between(`YearMonth`,
+      between(`Year Month`,
               as.Date("2016-01-01"),
               as.Date("2019-08-01")) ~ "Stage 1", # 44 months of pre-monitoring
 
-      between(`YearMonth`,
+      between(`Year Month`,
               as.Date("2019-09-01"),
               as.Date("2023-03-01")) ~ "Stage 2", # protected species surveys began in 9/19. 43 months of pre-construction monitoring 
 
-      between(`YearMonth`,
+      between(`Year Month`,
               as.Date("2023-04-01"),
               as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 40 months of construction & operation across SFW, RWF, and SRW
     )
@@ -430,15 +430,15 @@ gfw_vp_fv <- gfw_vp_fv |>
 gfw_afe_id <- gfw_afe_id |>
   mutate(
     `Development Stage` = case_when(
-      between(`YearMonth`,
+      between(`Year Month`,
               as.Date("2016-01-01"),
               as.Date("2019-08-01")) ~ "Stage 1", # 31 months of pre-monitoring
 
-      between(`YearMonth`,
+      between(`Year Month`,
               as.Date("2019-09-01"),
               as.Date("2023-03-01")) ~ "Stage 2", # protected species surveys began in 9/19. 42 months of pre-construction monitoring 
 
-      between(`YearMonth`,
+      between(`Year Month`,
               as.Date("2023-04-01"),
               as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 37 months of construction & operation across SFW, RWF, and SRW
     )
@@ -494,26 +494,26 @@ summary(gfw_afe_id)
 # list of orsted survey and safety vessels to remove for dev stages 2 & 3
 # cross-referenced names and MMSIs in gfw_vp_id
 
-rmOrsted <- c("ASHLEY ANN II","HEATHER LYNN","AMELIA ANNE","ERICA KNIGHT","MISTER G","MORE MISERY","SWEET MISERY","CAILYN & MAREN","HARVEST MOON","BARBARA ANN","BARBARA ANNE","FLEET KING","GABRIELLE ELIZABETH","JO-ANN V","MISTER MARCO","F/V NEW HORIZON","PROVIDER", "FLEET QUEEN", "TRIUNFO", "PAMELA ANN", "KAREN NICOLE", "ANDREA A", "MADISON KATE", "ITALIAN PRINCESS", "SEA WIND", "OCEAN QUEEN", "BRITTANY ERYN", "HUNTER", "CHATHAM", "PATIENCE", "MARINER", "F/V HARVESTER", "KATHRYN MARIE", "CELTIC")
+rmOrsted <- c("ASHLEY ANN II","HEATHER LYNN","AMELIA ANNE","ERICA KNIGHT","MISTER G","MORE MISERY","SWEET MISERY","CAILYN & MAREN","HARVEST MOON","BARBARA ANN","BARBARA ANNE","FLEET KING","GABRIELLE ELIZABETH","JO-ANN V","MISTER MARCO","F/V NEW HORIZON","PROVIDER", "FLEET QUEEN", "TRIUNFO", "PAMELA ANN", "KAREN NICOLE", "ANDREA A", "MADISON KATE", "ITALIAN PRINCESS", "SEA WIND", "OCEAN QUEEN", "BRITTANY ERYN", "HUNTER", "CHATHAM", "PATIENCE", "MARINER", "F/V HARVESTER", "KATHRYN MARIE", "CELTIC", "BETH ANNE")
 
 # isolate orsted vessels
 
 gfw_vp_orstedVessels <- gfw_vp_id |>
   filter(
     `Vessel Name` %in% rmOrsted &
-    `Development Stage` %in% c("Stage 2", "Stage 3")) # 55969 obs of original 416533... 12.5% of data from all vessel AIS records
+    `Development Stage` %in% c("Stage 2", "Stage 3")) # 57904 obs of original 416533... 13.9% of data from all vessel AIS records
 
 # remove orsted vessels
 
 gfw_vp_fv_sub <- gfw_vp_fv |>
   filter(
     !(`Vessel Name` %in% rmOrsted &
-      `Development Stage` %in% c("Stage 2", "Stage 3"))) # 88088 obs of 137539... 36% of data removed
+      `Development Stage` %in% c("Stage 2", "Stage 3"))) # 86153 obs of 137539... 37% of data removed
 
 gfw_afe_id_sub <- gfw_afe_id |> 
   filter(
     !(`Vessel Name` %in% rmOrsted &
-      `Development Stage` %in% c("Stage 2", "Stage 3"))) # 20722 obs of 61637... 66% of data removed
+      `Development Stage` %in% c("Stage 2", "Stage 3"))) # 18932 obs of 61637... 69% of data removed
 
 # list of cargo vessels present in vp_fv and afe_id
 
@@ -522,17 +522,17 @@ rmCargo <- c("CYGNUS", "SUNNANVIK")
 # remove cargo vessels
 
 gfw_vp_fv_sub <- gfw_vp_fv_sub |> 
-  filter(!`Vessel Name` %in% rmCargo) # 88035 obs
+  filter(!`Vessel Name` %in% rmCargo) # 86100... 53 obs removed
 
 gfw_afe_id_sub <- gfw_afe_id_sub |> 
-  filter(!`Vessel Name` %in% rmCargo) # 20696 obs
+  filter(!`Vessel Name` %in% rmCargo) # 18906... 26 obs removed
 ```
 
 ## Remove AFE records where fishing hours are less than .33 hours (20 mins)
 
 ```{r}
 gfw_afe_id_sub <- gfw_afe_id_sub |> 
-  filter(`Apparent Fishing Hours` > 0.32) # 19068 obs
+  filter(`Apparent Fishing Hours` > 0.32) # 17311... 1595 obs removed
 ```
 
 ## remove unwanted cols
@@ -646,21 +646,21 @@ write_csv(gfw_vp_id, "data/external/gfw/gfw_vp_id.csv")
 
 # orsted vessels 
 
-write_csv(gfw_vp_orstedVessels, "data/interim/gfw_vp_orstedVessels.csv")
+write_csv(gfw_vp_orstedVessels, "data/interim/gfw/gfw_vp_orstedVessels.csv")
 
 # vp_fv
 
-write_csv(gfw_vp_fv, "data/interim/gfw_vp_fv.csv")
-write_csv(gfw_vp_fv_sub, "data/interim/gfw_vp_fv_sub.csv")
-write_csv(gfw_vp1_fv_sub, "data/interim/gfw_vp1_fv_sub.csv")
-write_csv(gfw_vp2_fv_sub, "data/interim/gfw_vp2_fv_sub.csv")
-write_csv(gfw_vp3_fv_sub, "data/interim/gfw_vp3_fv_sub.csv")
+write_csv(gfw_vp_fv, "data/interim/gfw/gfw_vp_fv.csv")
+write_csv(gfw_vp_fv_sub, "data/interim/gfw/gfw_vp_fv_sub.csv")
+write_csv(gfw_vp1_fv_sub, "data/interim/gfw/gfw_vp1_fv_sub.csv")
+write_csv(gfw_vp2_fv_sub, "data/interim/gfw/gfw_vp2_fv_sub.csv")
+write_csv(gfw_vp3_fv_sub, "data/interim/gfw/gfw_vp3_fv_sub.csv")
 
 # afe_id
 
 write_csv(gfw_afe_id, "data/external/gfw/gfw_afe_id.csv")
-write_csv(gfw_afe_id_sub, "data/interim/gfw_afe_id_sub.csv")
-write_csv(gfw_afe1_id_sub, "data/interim/gfw_afe1_id_sub.csv")
-write_csv(gfw_afe2_id_sub, "data/interim/gfw_afe2_id_sub.csv")
-write_csv(gfw_afe3_id_sub, "data/interim/gfw_afe3_id_sub.csv")
+write_csv(gfw_afe_id_sub, "data/interim/gfw/gfw_afe_id_sub.csv")
+write_csv(gfw_afe1_id_sub, "data/interim/gfw/gfw_afe1_id_sub.csv")
+write_csv(gfw_afe2_id_sub, "data/interim/gfw/gfw_afe2_id_sub.csv")
+write_csv(gfw_afe3_id_sub, "data/interim/gfw/gfw_afe3_id_sub.csv")
 ```

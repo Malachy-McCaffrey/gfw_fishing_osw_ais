@@ -72,7 +72,7 @@ end_26 <- '2027-01-01' # as of 07/14/2026
 ```{r}
 # define sf object to pass to `region` argument
 
-orsted_aoi <- st_read("shapefiles/Orsted_AOI.shp") |> 
+orsted_aoi <- st_read("data/shp/aoi/Orsted_AOI.shp") |> 
   select(geometry)
 
 # map aoi to make sure it was created correctly
@@ -642,25 +642,25 @@ IDs_perDev |>
 ```{r}
 # all vp
 
-write_csv(gfw_vp_id, "processed/gfw_vp_id.csv")
+write_csv(gfw_vp_id, "data/external/gfw/gfw_vp_id.csv")
 
 # orsted vessels 
 
-write_csv(gfw_vp_orstedVessels, "processed/gfw_vp_orstedVessels.csv")
+write_csv(gfw_vp_orstedVessels, "data/interim/gfw_vp_orstedVessels.csv")
 
 # vp_fv
 
-write_csv(gfw_vp_fv, "processed/gfw_vp_fv.csv")
-write_csv(gfw_vp_fv_sub, "processed/gfw_vp_fv_sub.csv")
-write_csv(gfw_vp1_fv_sub, "processed/gfw_vp1_fv_sub.csv")
-write_csv(gfw_vp2_fv_sub, "processed/gfw_vp2_fv_sub.csv")
-write_csv(gfw_vp3_fv_sub, "processed/gfw_vp3_fv_sub.csv")
+write_csv(gfw_vp_fv, "data/interim/gfw_vp_fv.csv")
+write_csv(gfw_vp_fv_sub, "data/interim/gfw_vp_fv_sub.csv")
+write_csv(gfw_vp1_fv_sub, "data/interim/gfw_vp1_fv_sub.csv")
+write_csv(gfw_vp2_fv_sub, "data/interim/gfw_vp2_fv_sub.csv")
+write_csv(gfw_vp3_fv_sub, "data/interim/gfw_vp3_fv_sub.csv")
 
 # afe_id
 
-write_csv(gfw_afe_id, "gfw_afe_id.csv")
-write_csv(gfw_afe_id_sub, "processed/gfw_afe_id_sub.csv")
-write_csv(gfw_afe1_id_sub, "processed/gfw_afe1_id_sub.csv")
-write_csv(gfw_afe2_id_sub, "processed/gfw_afe2_id_sub.csv")
-write_csv(gfw_afe3_id_sub, "processed/gfw_afe3_id_sub.csv")
+write_csv(gfw_afe_id, "data/external/gfw/gfw_afe_id.csv")
+write_csv(gfw_afe_id_sub, "data/interim/gfw_afe_id_sub.csv")
+write_csv(gfw_afe1_id_sub, "data/interim/gfw_afe1_id_sub.csv")
+write_csv(gfw_afe2_id_sub, "data/interim/gfw_afe2_id_sub.csv")
+write_csv(gfw_afe3_id_sub, "data/interim/gfw_afe3_id_sub.csv")
 ```

@@ -183,4 +183,4 @@ explore.vessel_identity_inflation("vp")
 
 The CSVs this document reads are gitignored. To regenerate them, run `r/scripts/rmd/gfw_vp_afe_dataPull_090126.Rmd` with a valid `GFW_TOKEN`.
 
-The vessel removals it applies are read from `references/vessel_removals.csv`, which is tracked, and are matched on **MMSI** rather than `Vessel Name` — a name match cannot reliably remove a vessel, because one hull emits several name strings. The script validates that file on load and stops if it is malformed. Python reads the same file, so the two cannot drift apart. `data/external/RmVessels_RunningList.csv` is the superseded predecessor of that list and is no longer read by anything.
+The vessel removals it applies are read from `references/vessel_removals.csv`, which is tracked, and are matched on **MMSI** rather than `Vessel Name` — a name match cannot reliably remove a vessel, because one hull emits several name strings. The script validates that file on load and stops if it is malformed. Python reads the same file, so the two cannot drift apart.

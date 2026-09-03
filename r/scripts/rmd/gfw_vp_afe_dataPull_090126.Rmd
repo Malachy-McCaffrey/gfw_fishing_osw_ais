@@ -506,8 +506,9 @@ summary(gfw_afe_id)
 #     hulls. Likewise "KATHY MARIE" (366758680) is a different vessel from
 #     "KATHRYN MARIE" (367387310), which is the one on the list.
 #
-# The vessel list is read from the running list rather than hard-coded here, so
-# adding a vessel means editing the CSV, not this script.
+# The vessel list is read from references/vessel_removals.csv rather than being
+# hard-coded here, so adding a vessel means editing that CSV, not this script.
+# Python reads the same file, so the two languages cannot drift apart.
 
 rmPath <- "references/vessel_removals.csv"
 

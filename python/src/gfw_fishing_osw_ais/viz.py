@@ -116,15 +116,22 @@ def hero_figure(
     owf: gpd.GeoDataFrame,
     aoi: gpd.GeoDataFrame | None = None,
     gear_class: str | None = None,
+    panel_height: float = 6.0,
 ) -> plt.Figure:
     """The poster's lead panel: both stage transitions, side by side.
 
     Annotated with the area gained and lost, so the headline numbers are on the
     figure rather than only in a table the reader has to find.
+
+    ``panel_height`` sets the figure height in inches and so its aspect ratio.
+    The default is tuned for a portrait A0 poster, where the panel spans the
+    full column width and every centimetre of height is contested: at 6.0 the
+    rendered figure is roughly 2:1, against 1.6:1 at the old 7.4. The maps
+    themselves are unchanged -- what is reclaimed is vertical whitespace.
     """
     spec = cfg.DATASETS[dataset]
     pairs = [p for p in cfg.STAGE_TRANSITIONS if (*p, gear_class) in transitions_out]
-    fig, axes = plt.subplots(1, len(pairs), figsize=(7.0 * len(pairs), 7.4))
+    fig, axes = plt.subplots(1, len(pairs), figsize=(7.0 * len(pairs), panel_height))
     axes = [axes] if len(pairs) == 1 else list(axes)
 
     for ax, (a, b) in zip(axes, pairs):
@@ -191,6 +198,7 @@ def gear_small_multiples(
     aoi: gpd.GeoDataFrame | None = None,
     from_stage: int = 2,
     to_stage: int = 3,
+    ncols: int | None = None,
 ) -> plt.Figure:
     """One change map per gear class, for the transition that matters most.
 
@@ -198,14 +206,25 @@ def gear_small_multiples(
     alongside the interpretable classes rather than hidden, because its growth
     across stages is a finding in its own right -- it reflects GFW registry
     coverage rather than fleet behaviour.
+
+    ``ncols`` defaults to one wide row, which is right on a landscape screen.
+    On a portrait poster it is not: vessel presence has four gear classes, and
+    a 1x4 row is 3.2:1, so spanning a narrow column leaves each map too small
+    to read. Passing ``ncols=2`` stacks them 2x2 at roughly 1.6:1 instead.
     """
     spec = cfg.DATASETS[dataset]
     classes = [
         g for g in cfg.ANALYSIS_GEAR_CLASSES
         if (from_stage, to_stage, g) in transitions_out
     ]
-    fig, axes = plt.subplots(1, len(classes), figsize=(4.2 * len(classes), 4.9))
-    axes = [axes] if len(classes) == 1 else list(axes)
+    ncols = ncols or len(classes)
+    nrows = -(-len(classes) // ncols)          # ceiling division
+    fig, axes = plt.subplots(
+        nrows, ncols, figsize=(4.2 * ncols, 4.9 * nrows)
+    )
+    axes = list(fig.axes)                      # row-major, works for any shape
+    for spare in axes[len(classes):]:          # a 2x2 holding 3 maps
+        spare.set_axis_off()
 
     for ax, gear_class in zip(axes, classes):
         result = transitions_out[(from_stage, to_stage, gear_class)]
@@ -227,18 +246,38 @@ def gear_small_multiples(
         f"{cfg.STAGES[to_stage].label} by gear class",
         fontsize=13, y=0.98,
     )
-    fig.tight_layout(rect=(0, 0.14, 1, 0.94))
+    # The legend band is a fixed height, so it needs a smaller share of a
+    # taller multi-row figure.
+    fig.tight_layout(rect=(0, 0.14 if nrows == 1 else 0.08, 1, 0.94))
     return fig
 
 
-def save(fig: plt.Figure, name: str, dpi: int = 300) -> str:
-    """Write a figure to ``reports/figures`` at poster resolution."""
+def save(
+    fig: plt.Figure,
+    name: str,
+    dpi: int = 300,
+    formats: tuple[str, ...] = ("png", "pdf"),
+) -> list[str]:
+    """Write a figure to ``reports/figures``, by default as both PNG and PDF.
+
+    The PDF is the print master. These are polygon maps with text, so a raster
+    has to carry every cell edge as pixels: spanning the 76 cm live width of a
+    portrait A0 at 300 dpi would need roughly 9,000 px, and the PNGs written
+    here land at about 115 dpi at that size. A vector PDF has no such ceiling
+    and is the smaller file besides.
+
+    The PNG is kept because the Quarto reports embed it and browsers render it
+    without a plugin.
+    """
     cfg.FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    path = cfg.FIGURES_DIR / f"{name}.png"
-    fig.savefig(path, dpi=dpi, bbox_inches="tight", facecolor="white")
+    written = []
+    for fmt in formats:
+        path = cfg.FIGURES_DIR / f"{name}.{fmt}"
+        fig.savefig(path, dpi=dpi, bbox_inches="tight", facecolor="white")
+        written.append(str(path))
     plt.close(fig)
-    log.info("Wrote %s", path)
-    return str(path)
+    log.info("Wrote %s", ", ".join(written))
+    return written
 
 
 # ---------------------------------------------------------------------------

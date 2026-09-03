@@ -39,10 +39,10 @@ def hpm(gear, stage):
     return f"{_rates.loc[(gear, stage), 'hours_per_month']:.1f}"
 
 
-def hot_net(gear):
+def hot_net(gear, ds="afe"):
     """Signed Stage 2 to Stage 3 change in Gi* hot area, km2."""
-    cells_2, _ = ss.run_stage("afe", 2, gear, grid=_grid)
-    cells_3, _ = ss.run_stage("afe", 3, gear, grid=_grid)
+    cells_2, _ = ss.run_stage(ds, 2, gear, grid=_grid)
+    cells_3, _ = ss.run_stage(ds, 3, gear, grid=_grid)
     summary = tr.change_summary(cells_2, cells_3, _grid).set_index("change")
     net = summary.loc["gained hot", "area_km2"] - summary.loc["lost hot", "area_km2"]
     return f"{net:+.1f}".replace("-", "−")
@@ -209,6 +209,44 @@ Every figure above except the struck-through *Stage 3 (pre)* column is computed 
 Eight of the eleven rest on a **behavioural screen** (`Identified_By == "behavioural_screen"`, `Confidence` of `probable` or `possible`); a ninth, *Cailyn and Maren*, on a name-and-timing match to an already-listed hull. Only *Virginia Wave* and NOAA *Gloria Michelle* are confirmed by outside evidence. The pattern is convergent — lease concentration, onset timing, burst duration, operating intensity — but MarineTraffic lists all of them as "Fishing," because chartering a commercial fishing hull is exactly what these projects do. State this as a behavioural screen pending vessel-identity confirmation, not as established fact.
 
 The screen also has a structural blind spot: it detects vessels whose behaviour *changed*, so an established fishing vessel that took a charter is hard to distinguish from one that shifted grounds. *Virginia Wave* escaped the first screen for precisely this reason.
+
+## Poster layout: apparent fishing effort leads {#sec-poster}
+
+The plan framed the question as "how do vessel presence hours and apparent fishing effort hours differ between mobile and fixed gear", treating the two datasets as co-equal, and never said which should lead the poster. That choice is now made: **apparent fishing effort leads; vessel presence becomes the replication panel.** Effort answers the question directly. Presence is the broader proxy and earns its place as an independent check rather than a second headline.
+
+### What replicates, and what does not
+
+| Stage 2 → 3, net hotspot area | Mobile | Fixed |
+|---|---:|---:|
+| Apparent fishing effort | `{python} hot_net("MOBILE")` km² | `{python} hot_net("FIXED")` km² |
+| Vessel presence | `{python} hot_net("MOBILE", "vp")` km² | `{python} hot_net("FIXED", "vp")` km² |
+
+Fixed expands far more than mobile in both measures. But **mobile contracts only in effort** — in vessel presence mobile also expands, at roughly half the fixed rate. "Mobile withdrew" is an effort-only claim and must not be captioned onto the presence panel.
+
+What replicates cleanly is per-vessel intensity: fixed rises in both measures while mobile returns to baseline in both (see the table in `02-spatial-analysis.qmd`). That is what the vessel-presence panel is captioned on, and it is the stronger claim anyway.
+
+### The format forced three changes to `viz.py`
+
+A0 portrait, 84.1 × 118.9 cm; at 4 cm margins the live area is 76.1 × 110.9 cm. The figures had been drawn for a landscape screen — every one a single wide row — and did not fit: hero, gear panel, presence panel and reference strip at full width needed 135.5 cm, 24.6 cm more than exists, before any title or text. Scaled to full width the PNGs also landed at 111–119 dpi, below the 150 dpi floor for poster print.
+
+- **`save` writes a vector PDF alongside the PNG.** Reaching 300 dpi as raster across 76 cm would need roughly 9,000 px; a vector has no ceiling and is the smaller file. The PNG stays because the Quarto reports embed it.
+- **`hero_figure` takes `panel_height`**, defaulting to 6.0 in rather than 7.4. This tightened the rendered aspect from 1.63 to 1.75, reclaiming 3.1 cm of height. The intended target was 2.0; it is not reachable this way, because the suptitle and legend are fixed-height bands that take a *larger* share as the figure shrinks. Getting past 1.75 would mean dropping the per-figure title and legend and setting them once in the poster layout instead.
+- **`gear_small_multiples` takes `ncols`.** Intended to stack vessel presence 2×2 for a narrow column. Measured, that was worse, not better: four near-square maps in a 2×2 are inherently about 1:1, and the result came out at 0.74 — 49.9 cm tall in a 37 cm column, against 17.4 cm for the single row at 55 cm. The parameter is kept because a narrow tall column is a real case, but this poster uses the single row.
+
+### Allocation
+
+| Band | Height |
+|---|---:|
+| Title, authors, affiliation, standfirst | 11.0 cm |
+| Hero — `afe_hero_change`, full width | 43.6 cm |
+| Gear finding — `afe_gear_change_s2s3`, full width | 33.1 cm |
+| Two columns — `vp_gear_change_s2s3` at 55 cm ∥ findings and caveats at 19 cm | 17.4 cm |
+| Footer — QR to the Quarto reports, references, acknowledgements | 5.0 cm |
+| **Total** | **110.1 of 110.9 cm** |
+
+The reference strip (`afe_stage_gi`, 31.6 cm at full width) does not fit and is cut. That follows the plan's own cut order, amended for a single-dataset lead: transition matrices → reference strip → unresolved panel → vessel-presence replication last, because with one dataset leading it is the replication that carries the credibility.
+
+Two things the poster must state in text rather than leave to the figures: apparent fishing effort is a **model output**, not observed fishing; and the absence of cold spots on every effort panel is a **result**, not an omission — a cell cannot sit significantly below a floor of zero.
 
 ## Unchanged from the plan
 

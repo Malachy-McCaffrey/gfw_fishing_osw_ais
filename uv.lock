@@ -1046,6 +1046,11 @@ dependencies = [
     { name = "zarr" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "contextily", specifier = ">=1.7.1" },
@@ -1075,6 +1080,9 @@ requires-dist = [
     { name = "xarray", specifier = ">=2026.7.0" },
     { name = "zarr", specifier = ">=3.3.0" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.1.1" }]
 
 [[package]]
 name = "giddy"
@@ -1229,6 +1237,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b6/af/d3bd711fd65b5a124aa626390dc55b474da0da3a72f9c0ff0e023047b0cc/inequality-1.1.2.tar.gz", hash = "sha256:2010253c26cfe3745d36beb02aeff5503e1b21cb06e1d52aa7f13c37acd9adf1", size = 2675815, upload-time = "2025-07-10T19:20:30.901Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1b/3e/27b49f22761620969f634836a55586fc554e9dd3a7dfc88971f6652835aa/inequality-1.1.2-py3-none-any.whl", hash = "sha256:66b88642476d74c7aadc2f0cb493c6e09cb1ed926fd67e367968af887db8fa92", size = 21913, upload-time = "2025-07-10T19:20:29.589Z" },
+]
+
+[[package]]
+name = "iniconfig"
+version = "2.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/72/34/14ca021ce8e5dfedc35312d08ba8bf51fdd999c576889fc2c24cb97f4f10/iniconfig-2.3.0.tar.gz", hash = "sha256:c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730", size = 20503, upload-time = "2025-10-18T21:55:43.219Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cb/b1/3846dd7f199d53cb17f49cba7e651e9ce294d8497c8c150530ed11865bb8/iniconfig-2.3.0-py3-none-any.whl", hash = "sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12", size = 7484, upload-time = "2025-10-18T21:55:41.639Z" },
 ]
 
 [[package]]
@@ -2730,6 +2747,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pluggy"
+version = "1.6.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
+]
+
+[[package]]
 name = "pointpats"
 version = "2.6.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3472,6 +3498,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/81/06/053bf90500067d27d7a1299a7f58cfe29656e3b8b91d3734b94f2121babd/pystac_ext_xarray_assets-1.0.1.tar.gz", hash = "sha256:7d75e79a2b8702d1f572eecdf8af6b29a1013789f6de5e688a5a3c9c14254de6", size = 6945, upload-time = "2026-08-10T15:55:31.226Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ab/a1/4efc99e95c551d63896e667537ee7f1cc0c0583488ac4c6a4ca3c7bd00fe/pystac_ext_xarray_assets-1.0.1-py3-none-any.whl", hash = "sha256:114631f3585aa18d73fa9cae8e256d8937d455af4d9fb4e84f5d0981d2ec3bc4", size = 3931, upload-time = "2026-08-10T15:55:30.065Z" },
+]
+
+[[package]]
+name = "pytest"
+version = "9.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "iniconfig" },
+    { name = "packaging" },
+    { name = "pluggy" },
+    { name = "pygments" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e4/47/b9efed96c114afcfa3c9d3fe98a76a1d14c74a9e266d397cf6eb64be5e01/pytest-9.1.1.tar.gz", hash = "sha256:1088fbde8f2b49d95a549a195707afa7a76a3ce9bcadc26b6d71f0ffda5fe313", size = 1636369, upload-time = "2026-06-19T10:58:32.857Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/24/25/1de2678b631f5a49215c6c96fff41ba892b0a34df68d6d80292b1b48aa7f/pytest-9.1.1-py3-none-any.whl", hash = "sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c", size = 386536, upload-time = "2026-06-19T10:58:31.347Z" },
 ]
 
 [[package]]

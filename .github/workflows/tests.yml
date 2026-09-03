@@ -1,0 +1,29 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # --locked fails if uv.lock has drifted from pyproject.toml, so a
+      # dependency added without relocking is caught here rather than on
+      # someone else's machine.
+      - name: Install the locked environment
+        run: uv sync --locked --dev
+
+      # The GFW extracts are gitignored, so the tests that need them skip.
+      # Everything resting on the committed spatial layers, the removal list
+      # and the pure functions still runs.
+      - name: Run tests
+        run: uv run python -m pytest -q

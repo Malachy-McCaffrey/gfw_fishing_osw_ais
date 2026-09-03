@@ -1,7 +1,7 @@
 [project]
 name = "gfw-fishing-osw-ais"
 version = "0.1.0"
-description = "Add your description here"
+description = "Spatiotemporal analysis of AIS vessel presence and apparent fishing effort across three phases of offshore wind development in Southern New England"
 readme = "README.md"
 authors = [
     { name = "Malachy-McCaffrey", email = "mmccaffrey61@gmail.com" }
@@ -36,9 +36,6 @@ dependencies = [
     "zarr>=3.3.0",
 ]
 
-[project.scripts]
-gfw-fishing-osw-ais = "gfw_fishing_osw_ais:main"
-
 [build-system]
 requires = ["uv_build>=0.12.9,<0.13.0"]
 build-backend = "uv_build"
@@ -46,5 +43,13 @@ build-backend = "uv_build"
 # The package lives at python/src/gfw_fishing_osw_ais, not the uv_build
 # default of src/. Note the backend is uv_build, so a [tool.hatch.*] block
 # would be inert here.
+[tool.pytest.ini_options]
+testpaths = ["python/tests"]
+
 [tool.uv.build-backend]
 module-root = "python/src"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

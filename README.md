@@ -12,6 +12,7 @@ Geospatial analysis and statistical modeling workflows to quantify AIS vessel pr
 | `python/src/gfw_fishing_osw_ais/` | The analysis package: loaders, aggregation, spatial weights, spatial statistics, plots. |
 | `reports/*.qmd` | The written analysis. Renders to self-contained HTML. |
 | `references/` | Data dictionary and the vessel removal list. |
+| `python/tests/` | Test suite. Runs on a bare clone; tests needing the GFW extracts skip. |
 | `data/shp/` | Committed spatial inputs — analysis grid, AOI, wind-project footprints. |
 | `python/notebooks/`, `python/scripts/arcpy/` | **Archived, not part of the reproducible path.** Exploratory notebooks and the original ArcGIS chain, superseded by `python/src/`. The arcpy scripts embed absolute geodatabase paths and require an ArcGIS Pro licence. |
 
@@ -24,7 +25,7 @@ Geospatial analysis and statistical modeling workflows to quantify AIS vessel pr
 ## Requirements
 
 - **Python 3.12** and [uv](https://docs.astral.sh/uv/). The lockfile pins every version.
-- **R**, with `gfwr`, `tidyverse`, `sf` and `lubridate`. The pull was run against gfwr v3.0.
+- **R 4.5** with [renv](https://rstudio.github.io/renv/). `renv.lock` pins all 129 packages, including `gfwr` 3.0 from the Global Fishing Watch r-universe.
 - **Quarto** (developed against 1.10) to render the reports.
 - **A Global Fishing Watch API token.** Request one from the GFW API portal at <https://globalfishingwatch.org/our-apis>.
 
@@ -36,17 +37,25 @@ Geospatial analysis and statistical modeling workflows to quantify AIS vessel pr
 GFW_TOKEN=your_token_here
 ```
 
-`r/scripts/gfw_api_access_token.R` opens that file for editing and installs `gfwr` if needed.
+`r/scripts/gfw_api_access_token.R` opens that file for editing. It also carries an `install.packages("gfwr")` call, which `renv::restore()` in the next step makes unnecessary.
 
-**2. Run the data pull.** Knit `r/scripts/rmd/gfw_vp_afe_dataPull_090126.Rmd` **with the repository root as the working directory** — every path in it is repo-relative. It queries the API in eleven calendar-year calls per dataset, creates its own output directories, and writes the analysis CSVs into `data/processed/gfw/`.
+**2. Restore the R environment.** From the repository root, in R:
 
-**3. Install the Python environment.**
+```r
+renv::restore()
+```
+
+`renv` activates itself through the committed `.Rprofile`, so opening the project in R or RStudio is enough to pick it up.
+
+**3. Run the data pull.** Knit `r/scripts/rmd/gfw_vp_afe_dataPull_090126.Rmd` **with the repository root as the working directory** — every path in it is repo-relative. It queries the API in eleven calendar-year calls per dataset, creates its own output directories, and writes the analysis CSVs into `data/processed/gfw/`.
+
+**4. Install the Python environment.**
 
 ```sh
 uv sync --locked
 ```
 
-**4. Render the reports.**
+**5. Render the reports.**
 
 ```sh
 cd reports
@@ -55,12 +64,26 @@ uv run quarto render
 
 Run Quarto through `uv run` so it resolves the project interpreter rather than a system Python.
 
+## Tests
+
+```sh
+uv run python -m pytest
+```
+
+The suite covers the input validators, the gear lookup, the spatial-weights
+construction, and the vessel removals. It runs on a bare clone: everything
+resting on the committed spatial layers and the removal list executes, and the
+tests that need the GFW extracts skip rather than fail. CI runs the same command
+on every push.
+
 ## Notes on reproducibility
 
 - **Paths resolve from the repository root**, located by walking up to `pyproject.toml`. Nothing needs editing to run on another machine, and there are no absolute paths in `python/src`, `r/scripts` or `reports`.
 - **Permutation-based statistics are seeded** (`config.RANDOM_SEED`), so Local Moran's I results are stable across runs. Gi\* uses analytic p-values and is deterministic by construction. The archived arcpy workflow set no seed and could not be reproduced.
 - **The vessel removal list is a single tracked file**, `references/vessel_removals.csv`, read by both the R pull and Python and schema-validated on load in each. Adding or reclassifying a vessel is a one-row edit; nothing vessel-specific is hard-coded in either language.
 - **No arcpy.** The analysis runs entirely on open-source geospatial tooling, so it reproduces without an ArcGIS licence.
+- **Both environments are locked**, `uv.lock` for Python and `renv.lock` for R, so the analysis runs against the versions it was written against rather than whatever is current.
+- **Quarto renders are frozen** (`freeze: auto`): only a document whose source changed is re-executed. The cache under `reports/_freeze/` is gitignored; commit it if you want the reports to render on a machine without the GFW extracts.
 
 ## Citation
 

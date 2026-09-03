@@ -14,10 +14,39 @@ format:
     code-tools: true
     embed-resources: true
 execute:
-  echo: true
-  eval: false
+  echo: false
   warning: false
+  message: false
 ---
+
+```{python}
+#| label: reported-values
+# This document carried no executable code, so every figure in it was typed and
+# none of them regenerated. Consolidating the vessel removal list silently
+# invalidated all of them. The statistics below are now read from the analysis.
+import warnings, logging
+warnings.filterwarnings("ignore")
+logging.basicConfig(level=logging.ERROR)
+
+from gfw_fishing_osw_ais import io, spatial_stats as ss, transitions as tr
+
+_rates = tr.stage_rates("afe").set_index(["gear_class", "stage"])
+_grid = io.load_grid()
+
+
+def hpm(gear, stage):
+    """Apparent fishing effort, hours per month, stage-length normalised."""
+    return f"{_rates.loc[(gear, stage), 'hours_per_month']:.1f}"
+
+
+def hot_net(gear):
+    """Signed Stage 2 to Stage 3 change in Gi* hot area, km2."""
+    cells_2, _ = ss.run_stage("afe", 2, gear, grid=_grid)
+    cells_3, _ = ss.run_stage("afe", 3, gear, grid=_grid)
+    summary = tr.change_summary(cells_2, cells_3, _grid).set_index("change")
+    net = summary.loc["gained hot", "area_km2"] - summary.loc["lost hot", "area_km2"]
+    return f"{net:+.1f}".replace("-", "−")
+```
 
 ## Purpose
 
@@ -167,13 +196,13 @@ The pre-correction analysis showed **mobile-gear effort flat** into Stage 3 and 
 
 | AFE hours/month | Stage 1 | Stage 2 | Stage 3 (pre) | Stage 3 (final) |
 |---|---:|---:|---:|---:|
-| All gear | 147.5 | 186.2 | ~~359.2~~ | **230.4** |
-| Mobile | 107.3 | 137.1 | ~~136.2~~ | **106.8** |
-| Fixed | 10.3 | 13.0 | ~~54.5~~ | **44.4** |
+| All gear | `{python} hpm("ALL", 1)` | `{python} hpm("ALL", 2)` | ~~359.2~~ | **`{python} hpm("ALL", 3)`** |
+| Mobile | `{python} hpm("MOBILE", 1)` | `{python} hpm("MOBILE", 2)` | ~~136.2~~ | **`{python} hpm("MOBILE", 3)`** |
+| Fixed | `{python} hpm("FIXED", 1)` | `{python} hpm("FIXED", 2)` | ~~54.5~~ | **`{python} hpm("FIXED", 3)`** |
 
-Stage 2 → 3 hotspot area, net change: **mobile −9 km², fixed +141 km²**. The gear separation the poster asks about is sharper after correction, not weaker.
+Stage 2 → 3 hotspot area, net change: **mobile `{python} hot_net("MOBILE")` km², fixed `{python} hot_net("FIXED")` km²**. The gear separation the poster asks about is sharper after correction, not weaker.
 
-Figures above are computed against the full 46-vessel removal list in `references/vessel_removals.csv`. They differ slightly from earlier drafts, which removed only the thirteen supplementary MMSIs: the fuller list also catches Ørsted-listed hulls that the old name-based R filter leaked into the extracts, and those are almost entirely fixed-gear.
+Every figure above except the struck-through *Stage 3 (pre)* column is computed at render time from `references/vessel_removals.csv` and the current extracts, so it cannot fall out of step with them. The struck-through values are kept as literals deliberately: they record a superseded result that the present inputs can no longer reproduce.
 
 ### Caveat to carry into the write-up
 

@@ -38,21 +38,15 @@ GFW_TOKEN=your_token_here
 
 `r/scripts/gfw_api_access_token.R` opens that file for editing and installs `gfwr` if needed.
 
-**2. Create the pull's output directories.** The export chunk writes into subdirectories that do not exist on a fresh clone:
+**2. Run the data pull.** Knit `r/scripts/rmd/gfw_vp_afe_dataPull_090126.Rmd` **with the repository root as the working directory** — every path in it is repo-relative. It queries the API in eleven calendar-year calls per dataset, creates its own output directories, and writes the analysis CSVs into `data/processed/gfw/`.
 
-```sh
-mkdir -p data/external/gfw data/processed/gfw
-```
-
-**3. Run the data pull.** Knit `r/scripts/rmd/gfw_vp_afe_dataPull_090126.Rmd` **with the repository root as the working directory** — every path in it is repo-relative. It queries the API in eleven calendar-year calls per dataset and writes the analysis CSVs into `data/processed/gfw/`.
-
-**4. Install the Python environment.**
+**3. Install the Python environment.**
 
 ```sh
 uv sync --locked
 ```
 
-**5. Render the reports.**
+**4. Render the reports.**
 
 ```sh
 cd reports

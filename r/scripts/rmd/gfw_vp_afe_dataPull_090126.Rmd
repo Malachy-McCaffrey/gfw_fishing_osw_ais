@@ -726,6 +726,13 @@ IDs_perDev |>
 ## Export data sets
 
 ```{r}
+# git tracks data/external and data/processed but not their gfw/ subdirectories,
+# so on a fresh clone these do not exist and write_csv() would fail on the first
+# export. Create them here rather than making the reader do it by hand.
+
+dir.create("data/external/gfw",  recursive = TRUE, showWarnings = FALSE)
+dir.create("data/processed/gfw", recursive = TRUE, showWarnings = FALSE)
+
 # all vp
 
 write_csv(gfw_vp_id, "data/external/gfw/gfw_vp_id.csv")

@@ -413,17 +413,17 @@ gfw_vp_id <- gfw_vp_id |>
 gfw_vp_fv <- gfw_vp_fv |>
   mutate(
     `Development Stage` = case_when(
-      between(`YearMonth`,
+      between(`Year Month`,
               as.Date("2016-01-01"),
-              as.Date("2019-08-01")) ~ "Stage 1", # 31 months of pre-monitoring
+              as.Date("2019-08-01")) ~ "Stage 1", # 44 months of pre-monitoring
 
-      between(`YearMonth`,
+      between(`Year Month`,
               as.Date("2019-09-01"),
-              as.Date("2023-03-01")) ~ "Stage 2", # protected species surveys began in 9/19. 42 months of pre-construction monitoring 
+              as.Date("2023-03-01")) ~ "Stage 2", # protected species surveys began in 9/19. 43 months of pre-construction monitoring
 
-      between(`YearMonth`,
+      between(`Year Month`,
               as.Date("2023-04-01"),
-              as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 37 months of construction & operation across SFW, RWF, and SRW
+              as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 40 months of construction & operation across SFW, RWF, and SRW
     )
   )
 
@@ -565,17 +565,24 @@ message("Removed ", length(rmCharter), " charter vessels (stages 2-3) and ",
         "vp_fv: ", nrow(gfw_vp_fv), " -> ", nrow(gfw_vp_fv_sub),
         " | afe: ", nrow(gfw_afe_id), " -> ", nrow(gfw_afe_id_sub))
 
-# list of cargo vessels present in vp_fv and afe_id
+# Cargo vessels that GFW misclassified as FISHING, removed from every stage.
+#
+# Also matched on MMSI, for the same reason as above: "CYGNUS" alone spans five
+# MMSIs across three vessel types (FISHING, CARGO and PASSENGER), so a name
+# rule removes four unrelated hulls along with the intended one.
+#
+# These two are the hulls the original name-based filter actually caught --
+# both Norwegian-flagged and typed FISHING / INCONCLUSIVE by GFW. Confirmed by
+# row count: they account for exactly the 53 vessel-presence and 26 apparent-
+# effort records the original inline comments recorded.
+rmCargo <- c("257394000",   # CYGNUS
+             "259286000")   # SUNNANVIK
 
-rmCargo <- c("CYGNUS", "SUNNANVIK")
+gfw_vp_fv_sub <- gfw_vp_fv_sub |>
+  filter(!as.character(MMSI) %in% rmCargo)
 
-# remove cargo vessels
-
-gfw_vp_fv_sub <- gfw_vp_fv_sub |> 
-  filter(!`Vessel Name` %in% rmCargo) # 86100... 53 obs removed
-
-gfw_afe_id_sub <- gfw_afe_id_sub |> 
-  filter(!`Vessel Name` %in% rmCargo) # 18906... 26 obs removed
+gfw_afe_id_sub <- gfw_afe_id_sub |>
+  filter(!as.character(MMSI) %in% rmCargo)
 ```
 
 ## Remove AFE records where fishing hours are less than .33 hours (20 mins)
@@ -641,12 +648,12 @@ gfw_vp_fv_sub |>
 # check dist of records by month
 
 gfw_vp_fv_sub |> 
-  ggplot(aes(x = YearMonth)) +
+  ggplot(aes(x = `Year Month`)) +
   geom_bar(fill = "steelblue") +
   theme_bw()
 
 gfw_afe_id_sub |> 
-  ggplot(aes(x = YearMonth)) +
+  ggplot(aes(x = `Year Month`)) +
   geom_bar(fill = "steelblue") +
   theme_bw() # why sudden jump in mid/late 2024 and 2025?
 
@@ -667,11 +674,11 @@ gfw_afe_id_sub |>
 # check dist of unique vessel IDs by month
 
 IDs_perMonth <- gfw_vp_fv_sub |> 
-  group_by(YearMonth) |> 
+  group_by(`Year Month`) |> 
   summarise(unique_id_count = n_distinct(`Vessel ID`))
 
 IDs_perMonth |> 
-  ggplot(aes(x = as.factor(YearMonth), y = unique_id_count)) +
+  ggplot(aes(x = as.factor(`Year Month`), y = unique_id_count)) +
   geom_col(fill = "steelblue") +
   theme_bw() # trend seems consistent over time... not seeing any big spikes in later years that should indicate more vessels fishing in the area
 
@@ -700,7 +707,7 @@ write_csv(gfw_vp_orstedVessels, "data/processed/gfw/gfw_vp_orstedVessels.csv")
 
 # vp_fv
 
-write_csv(gfw_vp_fv, "data/interim/gfw/gfw_vp_fv.csv")
+write_csv(gfw_vp_fv, "data/processed/gfw/gfw_vp_fv.csv")
 write_csv(gfw_vp_fv_sub, "data/processed/gfw/gfw_vp_fv_sub.csv")
 write_csv(gfw_vp1_fv_sub, "data/processed/gfw/gfw_vp1_fv_sub.csv")
 write_csv(gfw_vp2_fv_sub, "data/processed/gfw/gfw_vp2_fv_sub.csv")

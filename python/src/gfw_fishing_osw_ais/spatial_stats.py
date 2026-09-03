@@ -20,7 +20,10 @@ Output field names mirror the ArcGIS ones (``Gi_Bin``, ``COType``,
 Two things the archived workflow left loose are fixed here:
 
 * **Seeded permutations.** The arcpy run set no seed, so its Local Moran's
-  results were not reproducible. Everything here uses ``cfg.RANDOM_SEED``.
+  results were not reproducible. Local Moran's is the only estimator here that
+  reports a simulated p-value, and it takes ``cfg.RANDOM_SEED``. The global
+  statistics report analytic values and are asked for no permutations at all,
+  so nothing unseeded reaches a result.
 * **Explicit Gi\\* self-weight.** Weights come from ``weights.gi_star_weights``,
   which puts the focal cell in its own neighbourhood before row
   standardisation, rather than relying on esda's fallback guess that the
@@ -131,7 +134,9 @@ def run_stage(
         return cells, globals_
 
     # --- Global: Moran's I (SpatialAutocorrelation) ------------------------
-    moran = esda.Moran(y, w)
+    # permutations=0: only the analytic z/p are read below, so the default
+    # 999 conditional randomisations would be computed and thrown away.
+    moran = esda.Moran(y, w, permutations=0)
     globals_.update(
         morans_i=float(moran.I),
         morans_z=float(moran.z_norm),
@@ -140,7 +145,7 @@ def run_stage(
 
     # --- Global: Getis-Ord General G (HighLowClustering) -------------------
     # Undefined if any value is negative; sqrt of a non-negative mean is safe.
-    general_g = esda.G(y, w)
+    general_g = esda.G(y, w, permutations=0)
     globals_.update(
         general_g=float(general_g.G),
         general_g_z=float(general_g.z_norm),

@@ -83,7 +83,7 @@ The plan said "normalise by stage length (44 / 43 / 40)". The archived arcpy cod
 
 ### Data directory moved
 
-The cleaned per-stage CSVs moved from `data/interim/gfw` to `data/processed/gfw` mid-implementation. `cfg.INTERIM_GFW_DIR` points at the new location. **The R pipeline still writes to the old path** (`Rmd:645-665`), so a re-pull needs that script updated or the outputs moved again.
+The cleaned per-stage CSVs moved from `data/interim/gfw` to `data/processed/gfw` mid-implementation. Both sides now agree on the new location: `cfg.PROCESSED_GFW_DIR` reads it, and the R pull writes there and creates the directory itself, so a re-pull needs no manual step.
 
 ### Package relocated to `python/src/`
 

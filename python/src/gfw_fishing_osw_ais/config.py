@@ -44,11 +44,11 @@ DATA_DIR = REPO_ROOT / "data"
 EXTERNAL_GFW_DIR = DATA_DIR / "external" / "gfw"
 PROCESSED_DIR = DATA_DIR / "processed"
 
-# The cleaned per-stage CSVs the analysis reads. These were written to
-# data/interim/gfw by the R pipeline and later moved to data/processed/gfw;
-# the R script (Rmd:645-665) still writes to the old location, so a re-pull
-# will need either that path updated or the files moved again.
-INTERIM_GFW_DIR = PROCESSED_DIR / "gfw"
+# The cleaned per-stage CSVs the analysis reads. An early version of the R
+# pull wrote these to data/interim/gfw and they were moved here by hand; the
+# pull now writes straight to data/processed/gfw and creates the directory
+# itself, so a re-pull needs no manual step and the two sides cannot diverge.
+PROCESSED_GFW_DIR = PROCESSED_DIR / "gfw"
 SHP_AOI_DIR = DATA_DIR / "shp" / "aoi"
 SHP_OWF_DIR = DATA_DIR / "shp" / "owf"
 
@@ -88,7 +88,7 @@ FDR_ALPHA = 0.05
 # Development stages
 # ---------------------------------------------------------------------------
 # Windows are inherited from the R data pull, which already wrote a
-# "Development Stage" column into every interim CSV:
+# "Development Stage" column into every per-stage CSV:
 #   r/scripts/rmd/gfw_vp_afe_dataPull_090126.Rmd:396-411
 #
 # NOTE: that file carries two contradictory sets of month-count comments. The
@@ -222,7 +222,7 @@ class DatasetSpec:
 
     key: str
     label: str
-    hours_column: str      # column name in the interim CSVs
+    hours_column: str      # column name in the per-stage CSVs
     stage_file: str        # format template, {stage} -> 1/2/3
     sum_field: str
     month_mean_field: str
@@ -260,10 +260,10 @@ DATASETS = {
 
 DATASET_KEYS = tuple(DATASETS)
 
-# Columns present in every data/interim/gfw/*_sub.csv -- 12 of the external
+# Columns present in every data/processed/gfw/*_sub.csv -- 12 of the external
 # files' 18 (Rmd:543-545 drops timestamps, IMO, CallSign, transmission dates).
 # The dataset-specific hours column sits between "MMSI" and "Development Stage".
-INTERIM_COLUMNS = (
+PROCESSED_COLUMNS = (
     "Lat",
     "Lon",
     "Time Range",
@@ -299,7 +299,7 @@ VESSEL_COUNT_SENSITIVITY_COLUMN = "Vessel ID"
 # The R pipeline removed 34 named Orsted survey and safety vessels for Stages
 # 2-3 (Rmd:494-516). That filter matched on `Vessel Name` and leaked: several
 # charter vessels active during Revolution Wind construction were not on the
-# list. The removals below are applied on top of the interim CSVs.
+# list. The removals below are applied on top of the per-stage CSVs.
 #
 # **Keyed by MMSI, not name.** Name matching is what let these through in the
 # first place, and it is genuinely unsafe here: "TRADITION" alone spans six

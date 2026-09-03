@@ -224,7 +224,7 @@ def load_stage(dataset: str, stage: int) -> pd.DataFrame:
     """Load one dataset/stage CSV, typed and with ``gear_class`` attached.
 
     ``dataset`` is ``"vp"`` or ``"afe"``; ``stage`` is 1, 2 or 3. These are the
-    cleaned interim files, i.e. after the R pipeline removed Orsted charter
+    cleaned per-stage files, i.e. after the R pipeline removed Orsted charter
     vessels (Stages 2-3 only), cargo vessels, and -- for AFE -- records at or
     below the 0.32 hour threshold (``Rmd:494-535``).
 
@@ -234,9 +234,9 @@ def load_stage(dataset: str, stage: int) -> pd.DataFrame:
     spec = _dataset_spec(dataset)
     stage_spec = _stage_spec(stage)
 
-    path = cfg.INTERIM_GFW_DIR / spec.stage_file.format(stage=stage)
+    path = cfg.PROCESSED_GFW_DIR / spec.stage_file.format(stage=stage)
     if not path.exists():
-        raise FileNotFoundError(f"Interim file not found: {path}")
+        raise FileNotFoundError(f"Stage file not found: {path}")
 
     df = pd.read_csv(
         path,

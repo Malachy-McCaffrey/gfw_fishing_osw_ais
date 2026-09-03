@@ -40,6 +40,7 @@ from . import io
 log = logging.getLogger(__name__)
 
 __all__ = [
+    "lease_share",
     "change_classes",
     "change_summary",
     "cotype_transitions",
@@ -239,6 +240,47 @@ def stage_rates(dataset: str) -> pd.DataFrame:
                     "hours_per_vessel_month": round(
                         hours / n_months / n_vessels if n_vessels else np.nan, 4
                     ),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def lease_share(dataset: str) -> pd.DataFrame:
+    """Activity inside the wind-lease polygons versus elsewhere in the AOI.
+
+    The hotspot maps show where activity concentrates; this answers the blunter
+    question of whether it happens inside the lease footprints at all. Both are
+    normalised by stage length so the three stages are comparable.
+
+    Read the absolute and share columns together. A falling ``pct_in_lease``
+    with a flat ``in_lease_hours_per_month`` means the fishery grew *around*
+    the leases rather than withdrawing from them -- a different claim from an
+    absolute decline, and the one these data actually support.
+    """
+    spec = cfg.DATASETS[dataset]
+    owf = io.load_owf()
+    leases = owf.geometry.union_all()
+
+    rows = []
+    for stage in cfg.STAGE_NUMBERS:
+        df = io.load_stage(dataset, stage)
+        pts = io.to_points(df)
+        pts["in_lease"] = pts.geometry.within(leases)
+        n_months = io.month_denominator(dataset, stage, df)
+
+        for gear_class in (None,) + cfg.ANALYSIS_GEAR_CLASSES:
+            sub = pts if gear_class is None else pts[pts["gear_class"] == gear_class]
+            total = float(sub[spec.hours_column].sum())
+            inside = float(sub.loc[sub["in_lease"], spec.hours_column].sum())
+            rows.append(
+                {
+                    "dataset": dataset,
+                    "stage": stage,
+                    "stage_label": cfg.STAGES[stage].label,
+                    "gear_class": gear_class or "ALL",
+                    "in_lease_hours_per_month": round(inside / n_months, 1),
+                    "outside_hours_per_month": round((total - inside) / n_months, 1),
+                    "pct_in_lease": round(100 * inside / total, 1) if total else np.nan,
                 }
             )
     return pd.DataFrame(rows)

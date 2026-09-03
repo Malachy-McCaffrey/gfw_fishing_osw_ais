@@ -52,10 +52,10 @@ rsconnect/
 # Final PDF deliverables (posters, submitted reports) are committed deliberately.
 !reports/**/*.pdf
 
-# Generated figures, same reasoning: ~2.7 MB per full run of viz.py, and
-# regenerable from the analysis modules. Remove this line if a specific figure
-# needs to travel with the repo.
-reports/figures/
+# Poster figures are tracked deliberately as deliverables. The Quarto build
+# cache under reports/.quarto/ stays ignored (see reports/.gitignore) -- it is
+# machine-local state and deno-kv-file is a 1.5 MB SQLite database that would
+# conflict on every render.
 # ==========================================
 # Python Runtime & Build Artifacts
 # ==========================================
@@ -101,8 +101,3 @@ data/**/*.json
 # Claude Code machine-local settings
 .claude/settings.local.json
 
-# ==========================================
-# Private Planning Notes
-# ==========================================
-# Working notes and implementation bookkeeping, not part of the published record
-planning/

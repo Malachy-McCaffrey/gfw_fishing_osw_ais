@@ -20,7 +20,7 @@ Geospatial analysis and statistical modeling workflows to quantify AIS vessel pr
 
 **Committed:** the spatial layers under `data/shp/` (analysis grid of 3,375 cells at 0.01° in EPSG:32619, the study-area boundary, five offshore-wind layers), the vessel removal list, and the poster figures under `reports/figures/`.
 
-**Not committed:** the Global Fishing Watch extracts under `data/external/gfw/` and `data/processed/gfw/`. These are the files the analysis actually reads, and regenerating them requires a GFW API token and a run of the R pull. Rendered Quarto HTML is also untracked — it is reproducible from the `.qmd` sources.
+**Not committed:** the Global Fishing Watch extracts under `data/external/gfw/` and `data/processed/gfw/`. These are the files the analysis reads, and regenerating them requires a GFW API token and a run of the R pull. You only need them to *change* the analysis — the frozen render cache lets you rebuild the reports as they stand without either. Rendered HTML is untracked, being reproducible from the `.qmd` sources.
 
 ## Requirements
 
@@ -83,7 +83,7 @@ on every push.
 - **The vessel removal list is a single tracked file**, `references/vessel_removals.csv`, read by both the R pull and Python and schema-validated on load in each. Adding or reclassifying a vessel is a one-row edit; nothing vessel-specific is hard-coded in either language.
 - **No arcpy.** The analysis runs entirely on open-source geospatial tooling, so it reproduces without an ArcGIS licence.
 - **Both environments are locked**, `uv.lock` for Python and `renv.lock` for R, so the analysis runs against the versions it was written against rather than whatever is current.
-- **Quarto renders are frozen** (`freeze: auto`): only a document whose source changed is re-executed. The cache under `reports/_freeze/` is gitignored; commit it if you want the reports to render on a machine without the GFW extracts.
+- **Quarto renders are frozen** (`freeze: auto`) and the cache under `reports/_freeze/` is committed, so `quarto render` rebuilds every report from a bare clone **without a GFW token or the extracts**. Editing a `.qmd` re-executes that document, which does need the data; refresh the cache in the same commit.
 
 ## Citation
 

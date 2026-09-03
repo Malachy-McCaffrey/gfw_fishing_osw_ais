@@ -28,8 +28,10 @@ execute:
   warning: false
   message: false
   # Only re-execute a document whose source changed. Results are cached under
-  # reports/_freeze/, which is machine-local and gitignored -- commit it
-  # instead if you want the reports to render without the GFW extracts.
+  # reports/_freeze/, which is committed: it is what lets someone without a GFW
+  # API token render these reports from a bare clone. Editing a .qmd re-executes
+  # that document, which does need the extracts -- so refresh the cache in the
+  # same commit as the edit.
   freeze: auto
 
 author: "Malachy McCaffrey"

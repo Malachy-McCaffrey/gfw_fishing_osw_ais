@@ -509,32 +509,60 @@ summary(gfw_afe_id)
 # The vessel list is read from the running list rather than hard-coded here, so
 # adding a vessel means editing the CSV, not this script.
 
-rmVessels <- read_csv("data/external/RmVessels_RunningList.csv",
-                      col_types = cols(MMSI = col_character(),
-                                       .default = col_character()))
+rmPath <- "references/vessel_removals.csv"
 
-# A vessel with no MMSI cannot be filtered. Warn loudly rather than silently
-# retaining it -- a blank here means its records stay in the analysis.
-rmMissing <- rmVessels |> filter(is.na(MMSI) | MMSI == "")
+rmVessels <- read_csv(rmPath, col_types = cols(.default = col_character()))
 
-if (nrow(rmMissing) > 0) {
-  warning("No MMSI recorded for: ", paste(rmMissing$Vessel_Name, collapse = ", "),
-          ". These vessels will NOT be removed. Add their MMSI to ",
-          "data/external/RmVessels_RunningList.csv.", call. = FALSE)
+# --- Schema validation ---------------------------------------------------
+# The removal list is the single most consequential judgement in this analysis,
+# so it is validated on read rather than trusted. A typo, a truncated MMSI or a
+# duplicated row would otherwise fail silently or, worse, not at all.
+
+stopifnot(
+  "removal list is missing required columns" =
+    all(c("Vessel_Name", "MMSI", "Scope", "Identified_By",
+          "Confidence", "Date_Added") %in% names(rmVessels))
+)
+
+rmProblems <- c(
+  if (any(is.na(rmVessels$Vessel_Name) | rmVessels$Vessel_Name == ""))
+    "blank Vessel_Name",
+  if (any(!grepl("^[0-9]{9}$", rmVessels$MMSI)))
+    paste0("MMSI is not 9 digits: ",
+           paste(rmVessels$Vessel_Name[!grepl("^[0-9]{9}$", rmVessels$MMSI)],
+                 collapse = ", ")),
+  if (any(duplicated(rmVessels$MMSI)))
+    paste0("duplicate MMSI: ",
+           paste(unique(rmVessels$MMSI[duplicated(rmVessels$MMSI)]),
+                 collapse = ", ")),
+  if (!all(rmVessels$Scope %in% c("stages_2_3", "all_stages")))
+    paste0("unknown Scope value: ",
+           paste(setdiff(rmVessels$Scope, c("stages_2_3", "all_stages")),
+                 collapse = ", ")),
+  if (!all(rmVessels$Confidence %in% c("confirmed", "probable", "possible")))
+    paste0("unknown Confidence value: ",
+           paste(setdiff(rmVessels$Confidence,
+                         c("confirmed", "probable", "possible")),
+                 collapse = ", "))
+)
+
+if (length(rmProblems) > 0) {
+  stop("Invalid ", rmPath, ":\n  - ", paste(rmProblems, collapse = "\n  - "),
+       call. = FALSE)
 }
 
-# Removed from EVERY stage, not just 2-3. NOAA Gloria Michelle is a NOAA
-# Fisheries research vessel, flagged in the running list's Notes column as not
-# Orsted-chartered. GFW classes it FISHING / TRAWLERS, so it inflates the
-# mobile gear class, and unlike a chartered fishing hull it has no genuine
-# pre-construction fishing baseline worth retaining.
-rmAllStages <- c("338066383")
+# --- Derive the two removal sets from Scope ------------------------------
+# Nothing vessel-specific is hard-coded here: adding a vessel, or changing how
+# it is treated, is a one-row edit to the CSV.
+#
+# stages_2_3 -- chartered working fishing hulls. Their stage 1 records are real
+#   fishing activity and are kept; only stages 2-3 project work is dropped.
+# all_stages -- not fishing vessels at all, so there is no baseline to keep.
+#   Currently just NOAA Gloria Michelle, a NOAA Fisheries research vessel that
+#   GFW classes FISHING / TRAWLERS, inflating the mobile gear class.
 
-# Charter vessels are working fishing hulls, so their stage 1 records are real
-# fishing activity and are kept. Only their stages 2-3 project work is removed.
-rmCharter <- rmVessels |>
-  filter(!is.na(MMSI), MMSI != "", !MMSI %in% rmAllStages) |>
-  pull(MMSI)
+rmCharter   <- rmVessels |> filter(Scope == "stages_2_3") |> pull(MMSI)
+rmAllStages <- rmVessels |> filter(Scope == "all_stages") |> pull(MMSI)
 
 # MMSI was coerced to a factor above, so compare on as.character().
 

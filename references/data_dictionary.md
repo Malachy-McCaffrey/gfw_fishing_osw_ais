@@ -118,13 +118,36 @@ Applied in Python on top of the R pipeline's filter, keyed on **MMSI** because
 name matching cannot reliably remove a vessel (one hull emits several name
 strings). See `00b-plan-revisions.qmd`.
 
-**Stage-conditional** (Stages 2–3 removed, Stage 1 retained as genuine fishing) —
-`config.RM_CHARTER_MMSI`: AMELIA JOYCE, JACK M, LILY M, EDWARD&JOSEPH,
-TRADITION (368361590 only), SAINTS ANGELS, VIRGINIA WAVE, CAILYN & MAREN /
-CAILYN MAREN, F/V HARVESTER / HARVESTER, CAILYN AND MAREN, ARGO, GULF STREAM.
+The list lives in `references/vessel_removals.csv` -- tracked, unlike `data/`,
+so the filter ships with the repository. Both languages read that one file:
+Python via `io.load_removal_list()`, R via the validation block in the pull
+script. Adding a vessel, or changing how one is treated, is a one-row edit to
+the CSV; nothing vessel-specific is hard-coded in either language.
 
-**All stages** — `config.RM_ALL_STAGES_MMSI`: NOAA GLORIA MICHELLE (research
-vessel, classed by GFW as FISHING/TRAWLERS).
+| Column | Meaning |
+|---|---|
+| `Vessel_Name` | Reported name. For the log only -- matching is on MMSI |
+| `MMSI` | 9 digits, unique within the file |
+| `Operation` | `Safety` or `Survey` -- the charter role |
+| `Scope` | `stages_2_3` or `all_stages`, see below |
+| `Identified_By` | `orsted_list`, `behavioural_screen`, `marinetraffic`, `name_variant`, `known_research_vessel` |
+| `Confidence` | `confirmed`, `probable`, `possible` |
+| `Date_Added` | ISO `yyyy-mm-dd`. Blank for the original Orsted list |
+| `Notes` | Free text |
+
+`Scope` carries the stage-conditional treatment:
+
+- **`stages_2_3`** -- chartered working fishing hulls. Stages 2-3 are removed,
+  Stage 1 is retained as genuine fishing activity.
+- **`all_stages`** -- not a fishing vessel under any circumstances, so there is
+  no baseline worth keeping. Currently only NOAA Gloria Michelle, a NOAA
+  Fisheries research vessel that GFW classes as FISHING/TRAWLERS.
+
+Both readers validate the file on load and fail loudly, listing every problem
+found rather than stopping at the first: blank names, an MMSI that is not 9
+digits, duplicate MMSI, unknown `Scope` or `Confidence` values, a `Date_Added`
+that is not ISO. `load_removal_list()` logs the breakdown by scope and
+confidence on every read; the list currently holds 46 vessels.
 
 ---
 

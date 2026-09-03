@@ -313,47 +313,33 @@ VESSEL_COUNT_SENSITIVITY_COLUMN = "Vessel ID"
 # VIRGINIA WAVE is the anchor case: it is a confirmed Orsted charter, having
 # grounded off Beavertail State Park while working for Revolution Wind, yet it
 # carries 1,029 hours of "apparent fishing effort" in Stage 3.
-RM_CHARTER_MMSI = {
-    # --- Identified by the behavioural screen -----------------------------
-    "368080240": "AMELIA JOYCE",
-    "368250590": "JACK M",
-    "368231710": "LILY M",
-    "368280420": "EDWARD&JOSEPH",
-    "368361590": "TRADITION",       # this MMSI only; the name spans six hulls
-    "367723210": "SAINTS ANGELS",
-    "367696380": "VIRGINIA WAVE",
-    # --- Name-variant leaks past the R filter -----------------------------
-    # Same hulls as entries the R pipeline already removed. Their records
-    # survived only because the self-reported name string differed, the same
-    # identity fragmentation that gives one MMSI several Vessel IDs. Adding
-    # the MMSI removes every spelling at once.
-    "338389953": "CAILYN & MAREN / CAILYN MAREN",     # rmOrsted: "CAILYN & MAREN"
-    "367336020": "F/V HARVESTER / HARVESTER",         # rmOrsted: "F/V HARVESTER"
-    # --- Probable charters, weaker evidence -------------------------------
-    # CAILYN AND MAREN: distinct MMSI, but 80% of its hours fall inside the
-    # lease areas and it begins 2025-12, just after 338389953 stops in
-    # 2025-09 -- consistent with the same hull re-registered.
-    "338538875": "CAILYN AND MAREN",
-    # ARGO and GULF STREAM: two-day bursts at 17-19 hours per day against a
-    # fishing norm nearer 4-5, with 54-73% of hours inside the leases. ARGO's
-    # earlier activity was 0% in-lease, so this is a behavioural change rather
-    # than a vessel that always worked there. Small volumes, so the effect on
-    # results is marginal either way.
-    "338350046": "ARGO",
-    "368128790": "GULF STREAM",
-}
+# The list itself lives in references/vessel_removals.csv -- tracked, unlike
+# data/, so the filter ships with the repository and a collaborator can
+# reproduce it. Load it with io.load_removal_list(), which validates the schema.
+VESSEL_REMOVALS_PATH = REFERENCES_DIR / "vessel_removals.csv"
 
-# Charter vessels are genuine fishing hulls, so their pre-construction records
-# are real fishing activity and are retained. This mirrors the stage-conditional
-# treatment the R pipeline already applied to the original 34.
+# Closed vocabularies, enforced on read.
+#   stages_2_3 -- chartered working fishing hulls; stage 1 records are genuine
+#                 fishing and are retained.
+#   all_stages -- not a fishing vessel at all, so there is no baseline to keep.
+REMOVAL_SCOPES = ("stages_2_3", "all_stages")
+
+# How the vessel was identified, and how much weight that carries.
+#   confirmed -- external evidence (Orsted list, press report, known vessel)
+#   probable  -- convergent behavioural evidence
+#   possible  -- behavioural signature on small volume
+CONFIDENCE_LEVELS = ("confirmed", "probable", "possible")
+
+# Date_Added is validated for format whenever it is non-blank, so the column
+# has to be present for that check to run at all. Requiring it here turns a
+# missing column into the collected "missing columns" error rather than a
+# KeyError raised mid-validation.
+REMOVAL_REQUIRED_COLUMNS = (
+    "Vessel_Name", "MMSI", "Scope", "Identified_By", "Confidence", "Date_Added",
+)
+
+# Stages from which a "stages_2_3" vessel is removed.
 RM_CHARTER_STAGES = (2, 3)
-
-# Removed from every stage: not a fishing vessel under any circumstances.
-# NOAA Gloria Michelle is a NOAA Fisheries research vessel, but GFW classes it
-# as FISHING / TRAWLERS, so it was inflating the MOBILE gear class.
-RM_ALL_STAGES_MMSI = {
-    "338066383": "NOAA GLORIA MICHELLE",
-}
 
 # ---------------------------------------------------------------------------
 # Offshore wind project layers

@@ -22,6 +22,7 @@ directory is placed on ``sys.path`` directly. Imported normally as
 from __future__ import annotations
 
 import logging
+from functools import lru_cache
 
 import geopandas as gpd
 import pandas as pd
@@ -34,6 +35,7 @@ __all__ = [
     "classify_gear",
     "load_aoi",
     "load_grid",
+    "load_removal_list",
     "load_owf",
     "load_stage",
     "month_denominator",
@@ -140,6 +142,80 @@ def classify_gear(gear_type: pd.Series) -> pd.Series:
             "Unmapped Gear Type value(s) %s -> %s", unknown, cfg.GEAR_CLASS_FALLBACK
         )
     return normalised.map(cfg.GEAR_CLASS_MAP).fillna(cfg.GEAR_CLASS_FALLBACK)
+
+
+@lru_cache(maxsize=1)
+def load_removal_list() -> pd.DataFrame:
+    """Load and validate the vessel removal list.
+
+    This list is the most consequential judgement in the analysis -- removing
+    or keeping these 46 vessels materially changes every result -- so it is
+    validated on read rather than trusted. A typo, a truncated MMSI or a
+    duplicated row would otherwise fail silently, or not at all.
+
+    Lives in ``references/`` rather than ``data/`` so that it is version
+    controlled and ships with the repository. The same file is read by the R
+    pull script, so there is one source of truth.
+
+    Raises ``ValueError`` listing every problem found, rather than stopping at
+    the first.
+    """
+    path = cfg.VESSEL_REMOVALS_PATH
+    if not path.exists():
+        raise FileNotFoundError(f"Vessel removal list not found: {path}")
+
+    removals = pd.read_csv(path, dtype="string").fillna("")
+
+    missing = set(cfg.REMOVAL_REQUIRED_COLUMNS) - set(removals.columns)
+    if missing:
+        raise ValueError(f"{path.name} missing columns: {sorted(missing)}")
+
+    problems = []
+
+    blank = removals.loc[removals["Vessel_Name"].str.strip() == ""]
+    if len(blank):
+        problems.append(f"{len(blank)} row(s) with a blank Vessel_Name")
+
+    bad_mmsi = removals.loc[~removals["MMSI"].str.fullmatch(r"\d{9}", na=False)]
+    if len(bad_mmsi):
+        problems.append(
+            "MMSI is not 9 digits for: "
+            + ", ".join(f"{r.Vessel_Name} ({r.MMSI!r})" for r in bad_mmsi.itertuples())
+        )
+
+    dupes = removals.loc[removals["MMSI"].duplicated(keep=False), "MMSI"].unique()
+    if len(dupes):
+        problems.append(f"duplicate MMSI: {', '.join(sorted(dupes))}")
+
+    for column, allowed in (
+        ("Scope", cfg.REMOVAL_SCOPES),
+        ("Confidence", cfg.CONFIDENCE_LEVELS),
+    ):
+        unknown = sorted(set(removals[column]) - set(allowed))
+        if unknown:
+            problems.append(f"unknown {column} value(s): {', '.join(unknown)}")
+
+    dated = removals.loc[removals["Date_Added"].str.strip() != "", "Date_Added"]
+    bad_dates = dated[~dated.str.fullmatch(r"\d{4}-\d{2}-\d{2}", na=False)]
+    if len(bad_dates):
+        problems.append(f"Date_Added not ISO yyyy-mm-dd: {', '.join(bad_dates)}")
+
+    if problems:
+        raise ValueError(
+            f"Invalid {path}:\n  - " + "\n  - ".join(problems)
+        )
+
+    log.info(
+        "Loaded removal list: %d vessels (%d stages 2-3, %d all stages; "
+        "%d confirmed, %d probable, %d possible)",
+        len(removals),
+        (removals["Scope"] == "stages_2_3").sum(),
+        (removals["Scope"] == "all_stages").sum(),
+        (removals["Confidence"] == "confirmed").sum(),
+        (removals["Confidence"] == "probable").sum(),
+        (removals["Confidence"] == "possible").sum(),
+    )
+    return removals
 
 
 def load_stage(dataset: str, stage: int) -> pd.DataFrame:
@@ -260,32 +336,36 @@ def month_denominator(dataset: str, stage: int, df: pd.DataFrame | None = None) 
 def _apply_supplementary_removals(
     df: pd.DataFrame, dataset: str, stage: int
 ) -> pd.DataFrame:
-    """Drop charter and non-fishing vessels the R pipeline's filter missed.
+    """Drop charter and non-fishing vessels, matched on MMSI not vessel name.
 
-    Two removals, matched on MMSI rather than vessel name:
+    Applied on top of whatever the R pipeline already removed. This is
+    deliberately redundant: filtering the same MMSI twice removes nothing
+    extra, and the redundancy is what caught the vessels the earlier
+    name-based R filter leaked.
 
-    * ``RM_ALL_STAGES_MMSI`` -- not fishing vessels at all, removed everywhere.
-    * ``RM_CHARTER_MMSI`` -- offshore-wind charter vessels, removed only for
-      ``RM_CHARTER_STAGES``. These are genuine fishing hulls, so their
-      pre-construction records are real activity and are kept, mirroring how
-      the R pipeline treated the original 34 (``Rmd:494-516``).
+    Scope comes from the removal list, not from code -- see
+    ``load_removal_list``.
     """
+    removals = load_removal_list()
     mmsi = df[cfg.VESSEL_COUNT_COLUMN].astype("string")
     hours_col = cfg.DATASETS[dataset].hours_column
 
-    drop = mmsi.isin(cfg.RM_ALL_STAGES_MMSI)
+    all_stages = removals.loc[removals["Scope"] == "all_stages", "MMSI"]
+    charter = removals.loc[removals["Scope"] == "stages_2_3", "MMSI"]
+
+    drop = mmsi.isin(set(all_stages))
     if stage in cfg.RM_CHARTER_STAGES:
-        drop |= mmsi.isin(cfg.RM_CHARTER_MMSI)
+        drop |= mmsi.isin(set(charter))
 
     if not drop.any():
         return df
 
-    removed = df[drop]
-    for code, group in removed.groupby(mmsi[drop], observed=True):
-        name = cfg.RM_CHARTER_MMSI.get(code) or cfg.RM_ALL_STAGES_MMSI.get(code, "?")
+    names = removals.set_index("MMSI")["Vessel_Name"].to_dict()
+    for code, group in df[drop].groupby(mmsi[drop], observed=True):
         log.info(
             "%s stage %d: removing %s (MMSI %s) -- %d rows, %.1f hours",
-            dataset, stage, name, code, len(group), group[hours_col].sum(),
+            dataset, stage, names.get(code, "?"), code,
+            len(group), group[hours_col].sum(),
         )
     return df[~drop].copy()
 

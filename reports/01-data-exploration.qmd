@@ -181,7 +181,6 @@ explore.vessel_identity_inflation("vp")
 
 ## Reproducing the source data
 
-The CSVs this document reads are gitignored. To regenerate them, run `r/scripts/rmd/gfw_vp_afe_dataPull_090126.Rmd` with a valid `GFW_TOKEN`. Two things to know before you do:
+The CSVs this document reads are gitignored. To regenerate them, run `r/scripts/rmd/gfw_vp_afe_dataPull_090126.Rmd` with a valid `GFW_TOKEN`. One thing to know before you do:
 
-1. The script writes to `data/interim/gfw`, but the analysis now reads `data/processed/gfw`.
 2. The `rmOrsted` filter matches on `Vessel Name`, which cannot reliably remove a vessel — one hull emits several name strings. Rebuild it on MMSI. The supplementary removals in `cfg.RM_CHARTER_MMSI` compensate for this in Python, but the root cause is in the R script.

@@ -2,6 +2,12 @@ project:
   type: default
   output-dir: .
 
+# The chunks are Python, executed through Jupyter. Naming the engine means
+# Quarto does not have to infer it, and makes the requirement explicit to a
+# reader. Render with `uv run quarto render` so the interpreter resolved is the
+# project's locked environment rather than whatever python is on PATH.
+engine: jupyter
+
 format:
   html:
     toc: true
@@ -21,6 +27,10 @@ execute:
   echo: true
   warning: false
   message: false
+  # Only re-execute a document whose source changed. Results are cached under
+  # reports/_freeze/, which is machine-local and gitignored -- commit it
+  # instead if you want the reports to render without the GFW extracts.
+  freeze: auto
 
 author: "Malachy McCaffrey"
 date: last-modified

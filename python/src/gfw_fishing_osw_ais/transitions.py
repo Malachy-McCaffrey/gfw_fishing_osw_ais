@@ -68,16 +68,20 @@ CHANGE_ORDER = (
 
 # Colours for the change map. Reds for hot-side, blues for cold-side, muted
 # grey for cells that never reached significance in either stage.
+# Keyed to the same warm ramp as the ASLO 2026 poster's Gi* confidence
+# classes, so the two posters read as one body of work: the strongest change
+# takes the 99% red, the weakest the 90% orange. "No change" is the poster's
+# near-white, which sits quietly over the ocean basemap.
 CHANGE_COLORS = {
-    "stable hot": "#b2182b",
-    "gained hot": "#ef8a62",
-    "lost hot": "#fddbc7",
+    "stable hot": "#d62f27",
+    "gained hot": "#ed7551",
+    "lost hot": "#fab984",
     "hot to cold": "#7b3294",
     "cold to hot": "#c2a5cf",
-    "stable cold": "#2166ac",
-    "gained cold": "#67a9cf",
-    "lost cold": "#d1e5f0",
-    "no change": "#f0f0f0",
+    "stable cold": "#2f6fb0",
+    "gained cold": "#7fa9d4",
+    "lost cold": "#c5d9ec",
+    "no change": "#f7f7f2",
 }
 
 

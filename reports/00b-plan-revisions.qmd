@@ -231,18 +231,31 @@ A0 portrait, 84.1 × 118.9 cm; at 4 cm margins the live area is 76.1 × 110.9 cm
 
 - **`save` writes a vector PDF alongside the PNG.** Reaching 300 dpi as raster across 76 cm would need roughly 9,000 px; a vector has no ceiling and is the smaller file. The PNG stays because the Quarto reports embed it.
 - **`hero_figure` takes `panel_height`**, defaulting to 6.0 in rather than 7.4. This tightened the rendered aspect from 1.63 to 1.75, reclaiming 3.1 cm of height. The intended target was 2.0; it is not reachable this way, because the suptitle and legend are fixed-height bands that take a *larger* share as the figure shrinks. Getting past 1.75 would mean dropping the per-figure title and legend and setting them once in the poster layout instead.
+- **Cartography.** The panels also gained an Esri Ocean basemap, a north arrow,
+  a scale bar, and a locator inset, and took the ASLO 2026 poster's palette, so
+  the two posters read as one body of work. The basemap tiles are cached under
+  `references/basemap/` and committed rather than fetched at render time.
 - **`gear_small_multiples` takes `ncols`.** Intended to stack vessel presence 2×2 for a narrow column. Measured, that was worse, not better: four near-square maps in a 2×2 are inherently about 1:1, and the result came out at 0.74 — 49.9 cm tall in a 37 cm column, against 17.4 cm for the single row at 55 cm. The parameter is kept because a narrow tall column is a real case, but this poster uses the single row.
 
 ### Allocation
 
 | Band | Height |
 |---|---:|
-| Title, authors, affiliation, standfirst | 11.0 cm |
-| Hero — `afe_hero_change`, full width | 43.6 cm |
-| Gear finding — `afe_gear_change_s2s3`, full width | 33.1 cm |
-| Two columns — `vp_gear_change_s2s3` at 55 cm ∥ findings and caveats at 19 cm | 17.4 cm |
+| Title, authors, affiliation, standfirst | 10.0 cm |
+| Hero — `afe_hero_change`, full width | 47.0 cm |
+| Gear finding — `afe_gear_change_s2s3`, full width | 31.7 cm |
+| Two columns — `vp_gear_change_s2s3` at 44 cm ∥ findings and caveats at 30 cm | 13.6 cm |
 | Footer — QR to the Quarto reports, references, acknowledgements | 5.0 cm |
-| **Total** | **110.1 of 110.9 cm** |
+| Gutters between bands, 3 × 1.2 cm | 3.6 cm |
+| **Total** | **110.9 of 110.9 cm** |
+
+These heights were re-derived after the figures gained an ocean basemap. Panels
+are now framed on the basemap raster rather than cropped to the data, so each
+one carries the raster's 0.86 aspect: the hero grew from 43.6 cm to 47.0 cm at
+full width, and the earlier allocation no longer fit. The vessel-presence panel
+absorbs the difference by narrowing to 44 cm, which leaves a wider text column
+beside it. Re-derive these again after any change to figure geometry —
+`viz.PANEL_ASPECT` is the value they hang on.
 
 The reference strip (`afe_stage_gi`, 31.6 cm at full width) does not fit and is cut. That follows the plan's own cut order, amended for a single-dataset lead: transition matrices → reference strip → unresolved panel → vessel-presence replication last, because with one dataset leading it is the replication that carries the credibility.
 

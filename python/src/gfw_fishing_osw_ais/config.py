@@ -56,6 +56,20 @@ REPORTS_DIR = REPO_ROOT / "reports"
 FIGURES_DIR = REPORTS_DIR / "figures"
 REFERENCES_DIR = REPO_ROOT / "references"
 
+# Cached Esri Ocean Basemap tiles, already warped to the analysis CRS. Fetched
+# once by python/scripts/fetch_basemap.py and committed, so that regenerating a
+# figure needs no network and returns the same pixels years from now -- a live
+# tile fetch would make the figures quietly irreproducible.
+BASEMAP_DIR = REFERENCES_DIR / "basemap"
+BASEMAP_AOI_PATH = BASEMAP_DIR / "aoi_ocean_utm19n.tif"
+BASEMAP_REGION_PATH = BASEMAP_DIR / "region_gray_utm19n.tif"
+
+# Required by Esri's terms of use; reproduced on every figure that draws them.
+BASEMAP_ATTRIBUTION = (
+    "Basemap: Esri Ocean — GEBCO, NOAA, CHS, OSU, UNH, CSUMB, "
+    "National Geographic, DeLorme, NAVTEQ"
+)
+
 GRID_PATH = SHP_AOI_DIR / "Orsted_sqGrid_utm19n.shp"
 AOI_PATH = SHP_AOI_DIR / "Orsted_AOI.shp"
 

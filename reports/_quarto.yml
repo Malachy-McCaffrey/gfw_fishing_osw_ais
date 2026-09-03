@@ -32,6 +32,11 @@ execute:
   # API token render these reports from a bare clone. Editing a .qmd re-executes
   # that document, which does need the extracts -- so refresh the cache in the
   # same commit as the edit.
+  #
+  # Freeze keys on the .qmd source ONLY. It does not notice when the Python
+  # package changes underneath it, so a palette or plotting change in viz.py
+  # leaves these figures silently stale. Force a refresh with:
+  #     uv run quarto render <doc>.qmd -M execute.freeze:false
   freeze: auto
 
 author: "Malachy McCaffrey"

@@ -41,6 +41,18 @@ where $h_{ij}$ are hours in cell $i$ and $M_s$ is the number of months in stage 
 
 Statistics run on $\sqrt{\text{MonthMean}}$, chosen on the evidence in `01-data-exploration.qmd`.
 
+### Basemap
+
+Maps are drawn over the Esri Ocean Basemap, cached as GeoTIFF under
+`references/basemap/` and warped to the analysis CRS. The tiles are committed
+rather than fetched at render time, so a figure regenerated years from now is
+the same figure -- a live tile request would make these quietly irreproducible.
+Re-create the cache with `python/scripts/fetch_basemap.py`.
+
+Esri's terms require the credit carried on each figure: *Tiles (C) Esri --
+Sources: GEBCO, NOAA, CHS, OSU, UNH, CSUMB, National Geographic, DeLorme,
+NAVTEQ, and Esri*.
+
 ### Spatial weights
 
 ::: {.callout-warning}

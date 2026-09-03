@@ -491,29 +491,79 @@ summary(gfw_afe_id)
 ## Remove vessels
 
 ```{r}
-# list of orsted survey and safety vessels to remove for dev stages 2 & 3
-# cross-referenced names and MMSIs in gfw_vp_id
+# Orsted survey and safety vessels, plus non-fishing vessels, to remove.
+#
+# MATCHED ON MMSI, NOT VESSEL NAME. Name matching cannot reliably remove a
+# vessel, because one hull emits several self-reported name strings. It failed
+# in both directions:
+#
+#   - Leaked. "CAILYN & MAREN" and "CAILYN MAREN" are the same MMSI
+#     (338389953); "F/V HARVESTER" and "HARVESTER" are both 367336020. The
+#     name-based filter removed only the exact spellings listed and left the
+#     variants in, worth ~260 vessel-presence hours in stage 3 alone.
+#   - Over-matched. "TRADITION" spans six MMSIs across two vessel types, only
+#     one of which is a charter, so any name rule would delete five unrelated
+#     hulls. Likewise "KATHY MARIE" (366758680) is a different vessel from
+#     "KATHRYN MARIE" (367387310), which is the one on the list.
+#
+# The vessel list is read from the running list rather than hard-coded here, so
+# adding a vessel means editing the CSV, not this script.
 
-rmOrsted <- c("ASHLEY ANN II","HEATHER LYNN","AMELIA ANNE","ERICA KNIGHT","MISTER G","MORE MISERY","SWEET MISERY","CAILYN & MAREN","HARVEST MOON","BARBARA ANN","BARBARA ANNE","FLEET KING","GABRIELLE ELIZABETH","JO-ANN V","MISTER MARCO","F/V NEW HORIZON","PROVIDER", "FLEET QUEEN", "TRIUNFO", "PAMELA ANN", "KAREN NICOLE", "ANDREA A", "MADISON KATE", "ITALIAN PRINCESS", "SEA WIND", "OCEAN QUEEN", "BRITTANY ERYN", "HUNTER", "CHATHAM", "PATIENCE", "MARINER", "F/V HARVESTER", "KATHRYN MARIE", "CELTIC", "BETH ANNE")
+rmVessels <- read_csv("data/external/RmVessels_RunningList.csv",
+                      col_types = cols(MMSI = col_character(),
+                                       .default = col_character()))
+
+# A vessel with no MMSI cannot be filtered. Warn loudly rather than silently
+# retaining it -- a blank here means its records stay in the analysis.
+rmMissing <- rmVessels |> filter(is.na(MMSI) | MMSI == "")
+
+if (nrow(rmMissing) > 0) {
+  warning("No MMSI recorded for: ", paste(rmMissing$Vessel_Name, collapse = ", "),
+          ". These vessels will NOT be removed. Add their MMSI to ",
+          "data/external/RmVessels_RunningList.csv.", call. = FALSE)
+}
+
+# Removed from EVERY stage, not just 2-3. NOAA Gloria Michelle is a NOAA
+# Fisheries research vessel, flagged in the running list's Notes column as not
+# Orsted-chartered. GFW classes it FISHING / TRAWLERS, so it inflates the
+# mobile gear class, and unlike a chartered fishing hull it has no genuine
+# pre-construction fishing baseline worth retaining.
+rmAllStages <- c("338066383")
+
+# Charter vessels are working fishing hulls, so their stage 1 records are real
+# fishing activity and are kept. Only their stages 2-3 project work is removed.
+rmCharter <- rmVessels |>
+  filter(!is.na(MMSI), MMSI != "", !MMSI %in% rmAllStages) |>
+  pull(MMSI)
+
+# MMSI was coerced to a factor above, so compare on as.character().
 
 # isolate orsted vessels
 
 gfw_vp_orstedVessels <- gfw_vp_id |>
   filter(
-    `Vessel Name` %in% rmOrsted &
-    `Development Stage` %in% c("Stage 2", "Stage 3")) # 57904 obs of original 416533... 13.9% of data from all vessel AIS records
+    as.character(MMSI) %in% rmCharter &
+    `Development Stage` %in% c("Stage 2", "Stage 3"))
 
-# remove orsted vessels
+# remove orsted charter vessels (stages 2-3) and non-fishing vessels (all stages)
 
 gfw_vp_fv_sub <- gfw_vp_fv |>
   filter(
-    !(`Vessel Name` %in% rmOrsted &
-      `Development Stage` %in% c("Stage 2", "Stage 3"))) # 86153 obs of 137539... 37% of data removed
+    !(as.character(MMSI) %in% rmCharter &
+      `Development Stage` %in% c("Stage 2", "Stage 3")),
+    !as.character(MMSI) %in% rmAllStages)
 
-gfw_afe_id_sub <- gfw_afe_id |> 
+gfw_afe_id_sub <- gfw_afe_id |>
   filter(
-    !(`Vessel Name` %in% rmOrsted &
-      `Development Stage` %in% c("Stage 2", "Stage 3"))) # 18932 obs of 61637... 69% of data removed
+    !(as.character(MMSI) %in% rmCharter &
+      `Development Stage` %in% c("Stage 2", "Stage 3")),
+    !as.character(MMSI) %in% rmAllStages)
+
+# Report what was removed, so a re-run surfaces changes rather than hiding them.
+message("Removed ", length(rmCharter), " charter vessels (stages 2-3) and ",
+        length(rmAllStages), " non-fishing vessels (all stages). ",
+        "vp_fv: ", nrow(gfw_vp_fv), " -> ", nrow(gfw_vp_fv_sub),
+        " | afe: ", nrow(gfw_afe_id), " -> ", nrow(gfw_afe_id_sub))
 
 # list of cargo vessels present in vp_fv and afe_id
 

@@ -27,7 +27,7 @@ Revisions fall into three kinds — **defects found** (things the plan or a naiv
 
 ::: {.callout-important}
 ## The one that matters most
-Thirteen offshore-wind charter and research vessels were removed that the original R filter missed. Before that correction, the analysis would have reported **increased fishing effort inside Revolution Wind during construction** and a **448 km² cold-spot region**, both of which were artifacts. See @sec-charter.
+Eleven offshore-wind charter and research vessels were removed that the original R filter missed, along with two already-listed hulls whose variant name strings had leaked past it. Before that correction, the analysis would have reported **increased fishing effort inside Revolution Wind during construction** and a **448 km² cold-spot region**, both of which were artifacts. See @sec-charter.
 :::
 
 ## Defects found
@@ -128,7 +128,7 @@ Three vessels — AMELIA JOYCE, JACK M, LILY M — accounted for **91% of unreso
 
 All three appear in **October 2024** — the month after Revolution Wind installed its first turbine — work inside the lease at three times the fleet rate, then stop by spring 2025. A 5–7 month burst, not a fishing season.
 
-**The anchor case** is the *Virginia Wave*, a fishing vessel confirmed chartered by Revolution Wind (it grounded off Beavertail State Park while working for the project), which carries 1,029 hours of "apparent fishing effort" in Stage 3 and appears nowhere on the R pipeline's removal list.
+**The anchor case** is the *Virginia Wave*, a fishing vessel confirmed chartered by Revolution Wind (it grounded off Beavertail State Park while working for the project), which carries 1,029 hours of "apparent fishing effort" in Stage 3 and appeared nowhere on the R pipeline's removal list as it then stood.
 
 ### Why the original filter leaked
 
@@ -147,10 +147,14 @@ This is the same identity fragmentation that gives MMSI `367052470` five Vessel 
 
 ### What was removed
 
-Thirteen vessels, in `cfg.RM_CHARTER_MMSI` and `cfg.RM_ALL_STAGES_MMSI`:
+Thirteen MMSIs were added to the filter, of which two — `338389953` and `367336020` — are hulls already on Ørsted's list whose variant name strings had leaked past the name-based match. The net addition is therefore **eleven vessels**, bringing the list to 46.
 
-- **Stage-conditional (2–3 removed, Stage 1 kept)** — 12 charter vessels, all genuine fishing hulls whose pre-construction records are real activity. Mirrors the treatment of the original 34.
-- **All stages** — NOAA GLORIA MICHELLE, a NOAA Fisheries research vessel that GFW classes as `FISHING`/`TRAWLERS`, so it was inflating the mobile gear class.
+Every removal now lives in `references/vessel_removals.csv`, read by both the R pull script and Python, with the stage treatment carried in a `Scope` column rather than in code:
+
+- **`stages_2_3`** (Stages 2–3 removed, Stage 1 kept) — 45 charter vessels, all genuine fishing hulls whose pre-construction records are real activity. Mirrors the treatment already applied to Ørsted's own list.
+- **`all_stages`** — NOAA GLORIA MICHELLE, a NOAA Fisheries research vessel that GFW classes as `FISHING`/`TRAWLERS`, so it was inflating the mobile gear class.
+
+The same file records `Identified_By` and `Confidence` for each vessel, so the strength of the evidence travels with the list rather than sitting in a code comment.
 
 **Investigated and deliberately retained:** KATHY MARIE (366758680) is a different hull from the listed KATHRYN MARIE (367387310), with its own decade of history and a normal 4.8 h/active day — removing it on name similarity would repeat the error being fixed. BENTHIC HARVESTER has a suggestive name and a `FIXED_GEAR` label but contributes zero hours to Stage 3 fixed effort.
 
@@ -171,7 +175,7 @@ Stage 2 → 3 hotspot area, net change: **mobile −9 km², fixed +161 km²**. T
 
 ### Caveat to carry into the write-up
 
-Eleven of the thirteen were identified by a **behavioural screen**; only *Virginia Wave* is confirmed by outside evidence. The pattern is convergent — lease concentration, onset timing, burst duration, operating intensity — but MarineTraffic lists all of them as "Fishing," because chartering a commercial fishing hull is exactly what these projects do. State this as a behavioural screen pending vessel-identity confirmation, not as established fact.
+Eight of the eleven rest on a **behavioural screen** (`Identified_By == "behavioural_screen"`, `Confidence` of `probable` or `possible`); a ninth, *Cailyn and Maren*, on a name-and-timing match to an already-listed hull. Only *Virginia Wave* and NOAA *Gloria Michelle* are confirmed by outside evidence. The pattern is convergent — lease concentration, onset timing, burst duration, operating intensity — but MarineTraffic lists all of them as "Fishing," because chartering a commercial fishing hull is exactly what these projects do. State this as a behavioural screen pending vessel-identity confirmation, not as established fact.
 
 The screen also has a structural blind spot: it detects vessels whose behaviour *changed*, so an established fishing vessel that took a charter is hard to distinguish from one that shifted grounds. *Virginia Wave* escaped the first screen for precisely this reason.
 
@@ -181,4 +185,6 @@ For the record, these survived implementation intact: Queen contiguity on the ex
 
 ## Still deferred to the thesis
 
-The MMSI→gear crosswalk and resolved-only sensitivity analysis (13–20 h); ISA distance-band peak search; space-time cube and emerging hotspots; and **rebuilding the R `rmOrsted` filter on MMSI rather than vessel name**, which is a 15-minute change but requires re-running the R pull.
+The MMSI→gear crosswalk and resolved-only sensitivity analysis (13–20 h); ISA distance-band peak search; space-time cube and emerging hotspots.
+
+No longer deferred: the R `rmOrsted` filter has since been rebuilt on MMSI and reads the same `references/vessel_removals.csv` as Python, so the two languages can no longer disagree about which vessels are removed. Regenerating the source CSVs still requires re-running the R pull.

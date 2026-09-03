@@ -262,7 +262,7 @@ Structurally, Global Moran's I for effort climbs 0.347 → 0.418 → 0.498 — a
 
 **The unresolved class expands most of all** (+258 km² net) and is not interpretable as a gear signal — it reflects GFW registry coverage. Some genuine mobile and fixed activity sits in that panel. It is shown rather than hidden for exactly that reason.
 
-**Thirteen offshore-wind charter and research vessels were removed** beyond the original 34, after they were found driving an apparent fishing-effort increase inside the Revolution Wind lease. Eleven were identified by a behavioural screen rather than confirmed by registry evidence. Before that correction the analysis showed mobile effort flat and a 448 km² cold-spot region that does not exist. The screen also cannot detect an established fishing vessel that takes a charter — the *Virginia Wave* escaped the first pass for exactly that reason. Full detail in `00b-plan-revisions.qmd`.
+**Eleven offshore-wind charter and research vessels were removed** beyond the 35 on Ørsted's own list, after they were found driving an apparent fishing-effort increase inside the Revolution Wind lease. Eight were identified by a behavioural screen rather than confirmed by registry evidence. Before that correction the analysis showed mobile effort flat and a 448 km² cold-spot region that does not exist. The screen also cannot detect an established fishing vessel that takes a charter — the *Virginia Wave* escaped the first pass for exactly that reason. Full detail in `00b-plan-revisions.qmd`.
 
 **AIS coverage grows across the study period**, so absolute hours are not comparable between stages without the per-vessel normalisation reported above.
 

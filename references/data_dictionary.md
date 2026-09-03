@@ -124,6 +124,11 @@ Python via `io.load_removal_list()`, R via the validation block in the pull
 script. Adding a vessel, or changing how one is treated, is a one-row edit to
 the CSV; nothing vessel-specific is hard-coded in either language.
 
+`data/external/RmVessels_RunningList.csv` is the **superseded** predecessor of this list: the same 46
+vessels, but untracked and without the `Scope`, `Identified_By`, `Confidence` and `Date_Added` columns.
+Neither pipeline reads it any more. It is left in place rather than deleted because `data/` is not
+modified by this project.
+
 | Column | Meaning |
 |---|---|
 | `Vessel_Name` | Reported name. For the log only -- matching is on MMSI |

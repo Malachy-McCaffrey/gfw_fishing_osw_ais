@@ -167,7 +167,7 @@ For mobile gear, hours per vessel-month is 1.28 → 1.56 → 1.19 — it rises t
 ### Other caveats
 
 - **Apparent fishing effort carries a `> 0.32` hour threshold** (`Rmd:531-535`); vessel presence does not. The two datasets are filtered differently.
-- **Ørsted charter vessels are removed for Stages 2–3 only**, retaining their pre-construction records as genuine fishing. This is deliberate but asymmetric, and must be stated for any before/after reading. Thirteen vessels beyond the original 34 were identified during this analysis — see `00b-plan-revisions.qmd`.
+- **Ørsted charter vessels are removed for Stages 2–3 only**, retaining their pre-construction records as genuine fishing. This is deliberate but asymmetric, and must be stated for any before/after reading. Eleven vessels beyond the 35 on Ørsted's own list were identified during this analysis, each with its scope and confidence recorded in `references/vessel_removals.csv` — see `00b-plan-revisions.qmd`.
 - **`Vessel ID` is not a stable hull identifier.** The 4Wings `group_by="VESSEL_ID"` returns identity *segments*: 1,258 MMSIs map to more than one Vessel ID, up to five. The inflation is stage-dependent, so counting Vessel IDs would manufacture a spurious decline. MMSI is used throughout.
 
 ```{python}
@@ -181,6 +181,6 @@ explore.vessel_identity_inflation("vp")
 
 ## Reproducing the source data
 
-The CSVs this document reads are gitignored. To regenerate them, run `r/scripts/rmd/gfw_vp_afe_dataPull_090126.Rmd` with a valid `GFW_TOKEN`. One thing to know before you do:
+The CSVs this document reads are gitignored. To regenerate them, run `r/scripts/rmd/gfw_vp_afe_dataPull_090126.Rmd` with a valid `GFW_TOKEN`.
 
-2. The `rmOrsted` filter matches on `Vessel Name`, which cannot reliably remove a vessel — one hull emits several name strings. Rebuild it on MMSI. The supplementary removals in `cfg.RM_CHARTER_MMSI` compensate for this in Python, but the root cause is in the R script.
+The vessel removals it applies are read from `references/vessel_removals.csv`, which is tracked, and are matched on **MMSI** rather than `Vessel Name` — a name match cannot reliably remove a vessel, because one hull emits several name strings. The script validates that file on load and stops if it is malformed. Python reads the same file, so the two cannot drift apart. `data/external/RmVessels_RunningList.csv` is the superseded predecessor of that list and is no longer read by anything.

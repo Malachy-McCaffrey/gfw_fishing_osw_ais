@@ -1,0 +1,27 @@
+project:
+  type: default
+  output-dir: .
+
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    number-sections: true
+    theme: cosmo
+    code-fold: true
+    code-tools: true
+    df-print: kable
+    fig-cap-location: top
+    fig-width: 9
+    fig-dpi: 160
+    embed-resources: true
+
+execute:
+  echo: true
+  warning: false
+  message: false
+
+author: "Malachy McCaffrey"
+date: last-modified
+date-format: "D MMMM YYYY"

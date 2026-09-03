@@ -1,0 +1,34 @@
+cff-version: 1.2.0
+title: >-
+  Spatiotemporal Responses of AIS-Broadcasting Fishing Vessels to
+  Offshore Wind Development in Southern New England
+message: If you use this software or its outputs, please cite it.
+type: software
+authors:
+  - family-names: McCaffrey
+    given-names: Malachy
+    affiliation: University of Rhode Island
+repository-code: https://github.com/Malachy-McCaffrey/gfw_fishing_osw_ais
+abstract: >-
+  Open-source geospatial workflow quantifying AIS vessel presence and apparent
+  fishing effort across three phases of offshore wind development at the
+  Orsted South Fork, Revolution and Sunrise Wind projects in Southern New
+  England. Implements Global Moran's I, Getis-Ord Gi* hotspot analysis, Anselin
+  Local Moran's I cluster and outlier analysis, and stage-to-stage hotspot
+  transition analysis using geopandas, libpysal and esda.
+keywords:
+  - offshore wind
+  - fisheries
+  - AIS
+  - spatial statistics
+  - Global Fishing Watch
+  - hotspot analysis
+# license: add once a LICENSE file is chosen (see README)
+date-released: '2026-09-02'
+references:
+  - type: database
+    title: Global Fishing Watch AIS-based vessel presence and apparent fishing effort
+    year: 2026
+    notes: >-
+      Accessed via the 4Wings API using gfwr v3.0. Data licensed CC BY-SA 4.0.
+    url: https://globalfishingwatch.org

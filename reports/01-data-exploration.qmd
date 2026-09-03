@@ -1,0 +1,187 @@
+---
+title: "Data Exploration and Limitations"
+subtitle: "GFW vessel presence and apparent fishing effort, Ørsted AOI 2016–2026"
+---
+
+## What these data are
+
+Two response variables, both pulled from the Global Fishing Watch 4Wings API via `gfwr` v3.0 and both constrained to the Ørsted area of interest — the dissolved union of the South Fork Wind, Revolution Wind and Sunrise Wind 10 km buffers.
+
+| | Vessel presence | Apparent fishing effort |
+|---|---|---|
+| `gfwr` call | `gfw_ais_presence()` | `gfw_ais_fishing_hours()` |
+| Measure | Count of hours with ≥1 AIS position | Hours classified as fishing by GFW's behavioural model |
+| Grain | vessel × 0.01° cell × day | vessel × 0.01° cell × day |
+| Units | integer, 1–24 | continuous, 0–25.3 |
+
+Both were pulled at `spatial_resolution="HIGH"` (0.01°, ~1 km), `temporal_resolution="DAILY"`, `group_by="VESSEL_ID"`, `region_source="USER_SHAPEFILE"`, across eleven calendar-year calls (`gfw_vp_afe_dataPull_090126.Rmd:88-195, 262-369`). No `filter_by` was applied at the API, so no flag, gear or confidence filtering happened server-side.
+
+**These are not the same measure.** Presence is an hour *count*; effort is an integrated *duration*. Do not ratio one against the other without saying so.
+
+```{python}
+#| label: setup
+import warnings, logging
+warnings.filterwarnings("ignore")
+logging.basicConfig(level=logging.ERROR)
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from gfw_fishing_osw_ais import config as cfg, explore, io, transitions as tr
+
+pd.set_option("display.width", 200)
+```
+
+## Development stages
+
+Stage boundaries were assigned in the R pull and carried through as a `Development Stage` column. They are near-balanced in length, which is what makes a three-way comparison viable.
+
+```{python}
+#| label: tbl-stages
+#| tbl-cap: "Development stage definitions"
+pd.DataFrame([
+    {"Stage": s.label, "Start": s.start, "End": s.end,
+     "Months": s.n_months, "Rationale": s.description}
+    for s in cfg.STAGES.values()
+])
+```
+
+## Gear classification
+
+`Gear Type` is a fixed per-vessel registry attribute — no vessel in the dataset carries more than one label — so classification is a lookup, not an inference.
+
+`POLE_AND_LINE` is kept separate rather than folded into mobile gear. Commercial pole-and-line is not a Southern New England fishery, and the vessel names in that class (MISTE ROSE, FISHIN ADDICTION 17, TUF GUY, TRANQUILITY, PREVAIL) indicate recreational and for-hire charter vessels carrying AIS.
+
+`UNRESOLVED` collects `FISHING`, `INCONCLUSIVE` and missing labels — fishing vessels whose gear GFW did not determine. It is carried through the analysis as a reported class rather than dropped, because its growth across stages is a finding in its own right (@sec-degradation).
+
+```{python}
+#| label: tbl-gear
+#| tbl-cap: "Gear classes and their constituent GFW labels"
+rows = []
+for cls in cfg.ANALYSIS_GEAR_CLASSES + (cfg.EXCLUDED,):
+    labels = sorted(k for k, v in cfg.GEAR_CLASS_MAP.items() if v == cls)
+    rows.append({"Class": cls, "GFW Gear Type values": ", ".join(labels)})
+pd.DataFrame(rows)
+```
+
+## Composition by stage and gear
+
+```{python}
+#| label: tbl-composition-afe
+#| tbl-cap: "Apparent fishing effort: composition by stage and gear class"
+comp_afe = explore.gear_composition("afe")
+comp_afe
+```
+
+```{python}
+#| label: tbl-composition-vp
+#| tbl-cap: "Vessel presence: composition by stage and gear class"
+explore.gear_composition("vp")
+```
+
+### Gear labels degrade across stages {#sec-degradation}
+
+The share of effort GFW could not assign a gear to rises sharply into Stage 3. This is a change in registry coverage, not in fleet behaviour, and it means any gear-stratified comparison across stages is partly measuring GFW's metadata rather than the fishery.
+
+```{python}
+#| label: fig-degradation
+#| fig-cap: "Share of apparent fishing hours by gear class across stages. The unresolved share more than doubles into Stage 3."
+pivot = comp_afe.pivot(index="stage", columns="gear_class", values="pct_stage_hours")
+pivot = pivot[list(cfg.ANALYSIS_GEAR_CLASSES)]
+
+fig, ax = plt.subplots(figsize=(8, 4.2))
+bottom = np.zeros(len(pivot))
+colors = {"MOBILE": "#b2182b", "FIXED": "#2166ac",
+          "POLE_AND_LINE": "#f4a582", "UNRESOLVED": "#999999"}
+for col in pivot.columns:
+    ax.bar([cfg.STAGES[s].label for s in pivot.index], pivot[col],
+           bottom=bottom, label=col.replace("_", " ").title(), color=colors[col])
+    bottom += pivot[col].to_numpy()
+ax.set_ylabel("% of stage apparent fishing hours")
+ax.legend(frameon=False, ncol=4, loc="upper center", bbox_to_anchor=(0.5, -0.08))
+ax.spines[["top", "right"]].set_visible(False)
+plt.tight_layout()
+```
+
+## Distribution of the analysis variable
+
+The spatial statistics run on per-cell monthly mean hours. That variable is heavily right-skewed and structurally zero-inflated: `MonthMean` divides by the *whole stage length*, so a cell inactive for the entire stage is an exact zero.
+
+```{python}
+#| label: tbl-distribution
+#| tbl-cap: "Per-cell distribution diagnostics, apparent fishing effort"
+explore.distribution_diagnostics("afe")
+```
+
+Every normality test rejects at p ≈ 0. That is expected, not a problem — but it is why the statistics run on a transformed surface.
+
+### Which transform
+
+```{python}
+#| label: tbl-transform
+#| tbl-cap: "Skewness under raw, sqrt and log1p transforms"
+pd.concat([explore.transform_comparison("vp").query("gear_class == 'ALL'"),
+           explore.transform_comparison("afe").query("gear_class == 'ALL'")])
+```
+
+**Square root wins for both datasets and every stage**, and by a wide margin over `log1p`. This confirms the choice made in the archived ArcGIS workflow and extends it to the gear-stratified surfaces, which had not previously been checked. Neither transform fully normalises the variable — the spike at exactly zero does not move under any monotonic transform — but sqrt gets furthest.
+
+The raw field is retained throughout as a sensitivity check.
+
+## Limitations
+
+Each of these is a measured quantity, not an adjective.
+
+```{python}
+#| label: tbl-limitations
+#| tbl-cap: "Quantified dataset limitations"
+pd.concat([explore.limitations("vp"), explore.limitations("afe")])
+```
+
+### Vessel presence is one-inflated
+
+```{python}
+#| label: one-inflation
+lim = explore.limitations("vp")
+mode_share = lim.query("limitation == 'pct_records_at_hour_mode'")[["stage", "value"]]
+mode_share.columns = ["Stage", "% of records at modal hour value"]
+mode_share
+```
+
+Between 94% and 98% of vessel-presence records sit at the modal value of one hour. The variable counts hours in which a vessel had at least one AIS position, so it is a discrete count with a hard floor, not a continuous duration. Any distributional model would need a one-inflated or hurdle treatment. Apparent fishing effort does not share this property.
+
+### AIS coverage grows over the study period
+
+```{python}
+#| label: tbl-rates
+#| tbl-cap: "Effort normalised by stage length and by vessel count"
+rates = tr.stage_rates("afe")
+rates.query("gear_class in ['ALL', 'MOBILE', 'FIXED']")
+```
+
+Absolute hours are not comparable across stages on their own. Reporting hours per month alongside hours per vessel-month separates the two explanations: if hours per month rises while hours per vessel-month is flat, the increase is fleet coverage rather than intensified activity.
+
+For mobile gear, hours per vessel-month is 1.28 → 1.56 → 1.19 — it rises then returns below baseline. For fixed gear it is 1.03 → 0.93 → 1.76, a genuine intensification on top of a growing fleet.
+
+### Other caveats
+
+- **Apparent fishing effort carries a `> 0.32` hour threshold** (`Rmd:531-535`); vessel presence does not. The two datasets are filtered differently.
+- **Ørsted charter vessels are removed for Stages 2–3 only**, retaining their pre-construction records as genuine fishing. This is deliberate but asymmetric, and must be stated for any before/after reading. Thirteen vessels beyond the original 34 were identified during this analysis — see `00b-plan-revisions.qmd`.
+- **`Vessel ID` is not a stable hull identifier.** The 4Wings `group_by="VESSEL_ID"` returns identity *segments*: 1,258 MMSIs map to more than one Vessel ID, up to five. The inflation is stage-dependent, so counting Vessel IDs would manufacture a spurious decline. MMSI is used throughout.
+
+```{python}
+#| label: tbl-identity
+#| tbl-cap: "Vessel ID inflation relative to MMSI, by stage"
+explore.vessel_identity_inflation("vp")
+```
+
+- **Stage 3's final month is partial** — data ends 2026-07-13.
+- **Structural zeros are not missing data.** 107–212 cells (vessel presence) and roughly 1,100–1,900 cells (apparent fishing effort) are exact zeros because the monthly mean divides by the full stage length.
+
+## Reproducing the source data
+
+The CSVs this document reads are gitignored. To regenerate them, run `r/scripts/rmd/gfw_vp_afe_dataPull_090126.Rmd` with a valid `GFW_TOKEN`. Two things to know before you do:
+
+1. The script writes to `data/interim/gfw`, but the analysis now reads `data/processed/gfw`.
+2. The `rmOrsted` filter matches on `Vessel Name`, which cannot reliably remove a vessel — one hull emits several name strings. Rebuild it on MMSI. The supplementary removals in `cfg.RM_CHARTER_MMSI` compensate for this in Python, but the root cause is in the R script.

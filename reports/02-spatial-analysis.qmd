@@ -1,0 +1,217 @@
+---
+title: "Spatial Analysis and Stage-to-Stage Change"
+subtitle: "Hotspot structure of fishing activity across three phases of offshore wind development"
+---
+
+## Question
+
+Does the spatial structure of fishing activity change across the three development stages, and does it change differently for mobile and fixed gear?
+
+The analysis runs entirely on open-source tools — `geopandas`, `libpysal`, `esda` — replacing an ArcGIS chain that could not be reproduced without a Pro licence. Every input is committed to the repository.
+
+```{python}
+#| label: setup
+import warnings, logging
+warnings.filterwarnings("ignore")
+logging.basicConfig(level=logging.ERROR)
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from gfw_fishing_osw_ais import (
+    aggregate, config as cfg, io, spatial_stats as ss, transitions as tr, viz, weights as wts
+)
+
+grid = io.load_grid()
+owf = io.load_owf()
+aoi = io.load_aoi()
+pd.set_option("display.width", 200)
+```
+
+## Methods
+
+### Spatial support
+
+The analysis grid is 3,375 cells at 0.01°, projected to UTM 19N (EPSG:32619), covering the Ørsted AOI. Records are joined to cells with `geopandas.sjoin` and rolled up per cell per stage:
+
+$$\text{MonthMean}_i = \frac{\sum_j h_{ij}}{M_s}$$
+
+where $h_{ij}$ are hours in cell $i$ and $M_s$ is the number of months in stage $s$ (44 / 43 / 40). The denominator is the *stage* length, not the number of months that cell was active, so zero-inflation is structural.
+
+Statistics run on $\sqrt{\text{MonthMean}}$, chosen on the evidence in `01-data-exploration.qmd`.
+
+### Spatial weights
+
+::: {.callout-warning}
+## Geometric contiguity is unusable on this grid
+The grid was built by drawing an independent 0.01° square around each GFW point and reprojecting with `PRESERVE_SHAPE`, so adjacent cells do not share exact vertices. `Queen.from_dataframe` returns **1.96 mean neighbours across 74 disconnected components**, which would render every local statistic meaningless.
+:::
+
+Contiguity is instead derived analytically from the lattice indices the shapefile already carries. Two cells are Queen neighbours iff their integer indices differ by at most one on each axis — no geometry predicate, no tolerance.
+
+```{python}
+#| label: tbl-weights
+#| tbl-cap: "Neighbour-count distribution of the lattice-derived Queen weights"
+w = wts.lattice_queen(grid)
+w_star = wts.gi_star_weights(grid)
+wts.validate_weights(w)
+wts.neighbor_summary(w)
+```
+
+```{python}
+#| label: weights-summary
+print(f"n = {w.n}, mean neighbours = {w.mean_neighbors:.2f}, "
+      f"components = {w.n_components}, islands = {len(w.islands)}")
+```
+
+Validated three ways: `validate_weights` rejects the geometric construction it guards against; all 26,312 neighbour pairs lie within one cell diagonal (max 1,395 m against a legal 1,424 m), so no false links are created; and the relation is perfectly symmetric.
+
+### Statistics
+
+| Purpose | Method | Inference |
+|---|---|---|
+| Global clustering | `esda.Moran` | analytic |
+| Global high/low | `esda.G` | analytic |
+| Local hotspots (Gi\*) | `esda.G_Local`, **binary weights** | analytic, BH-FDR |
+| Local clusters/outliers | `esda.Moran_Local`, 999 permutations, seeded | conditional randomisation, BH-FDR |
+
+Two points of care, both documented in `00b-plan-revisions.qmd`:
+
+**Gi\* requires binary weights.** Its variance depends on the weight sum $W_i$; row standardisation forces $W_i = 1$ and compresses every z-score. On these data that is the difference between max |z| of 10.78 and 3.96 — between 832 significant cells and none. `esda.G_Local` defaults to `transform="R"` and re-standardises in place, so the call site passes `transform="B"`.
+
+**Permutations are seeded** (`cfg.RANDOM_SEED = 42`). The archived workflow set no seed and its Local Moran's results were therefore not reproducible.
+
+```{python}
+#| label: run-analysis
+cells_afe, glob_afe = ss.run_all("afe")
+cells_vp, glob_vp = ss.run_all("vp")
+trans_afe = tr.run_transitions("afe", cells_afe, grid)
+trans_vp = tr.run_transitions("vp", cells_vp, grid)
+```
+
+## Global spatial autocorrelation
+
+```{python}
+#| label: tbl-global
+#| tbl-cap: "Global Moran's I on the sqrt surfaces, all gear"
+g = pd.concat([glob_vp, glob_afe]).query("gear_class == 'ALL'")
+g[["dataset", "stage", "n_active", "morans_i", "morans_z", "morans_p",
+   "general_g_z", "n_hot", "n_cold"]]
+```
+
+Vessel presence is strongly clustered and near-constant across stages. **Apparent fishing effort clusters progressively more strongly** — 0.347 → 0.418 → 0.498 — meaning fishing effort concentrates spatially as development proceeds, even as total mobile-gear effort returns to baseline.
+
+```{python}
+#| label: fig-moran
+#| fig-cap: "Global Moran's I by stage. Fishing effort concentrates; vessel presence does not."
+fig, ax = plt.subplots(figsize=(7, 4))
+for ds, glob, color in (("vp", glob_vp, "#2166ac"), ("afe", glob_afe, "#b2182b")):
+    sub = glob.query("gear_class == 'ALL'").sort_values("stage")
+    ax.plot([cfg.STAGES[s].label for s in sub.stage], sub.morans_i,
+            "o-", color=color, linewidth=2, markersize=8, label=cfg.DATASETS[ds].label)
+ax.set_ylabel("Global Moran's I")
+ax.set_ylim(0, 0.8)
+ax.legend(frameon=False)
+ax.spines[["top", "right"]].set_visible(False)
+plt.tight_layout()
+```
+
+## Hotspot structure by stage
+
+```{python}
+#| label: fig-gi-afe
+#| fig-cap: "Getis-Ord Gi* hotspots, apparent fishing effort, by development stage. Ørsted lease areas outlined."
+fig = viz.reference_strip("afe", cells_afe, grid, owf, aoi)
+plt.show()
+```
+
+## Stage-to-stage change
+
+Three maps read side by side ask a viewer to hold one in working memory while scanning the next. The change maps do that differencing explicitly.
+
+```{python}
+#| label: fig-hero-afe
+#| fig-cap: "Change in apparent-fishing-effort hotspot structure across both stage transitions."
+fig = viz.hero_figure("afe", trans_afe, grid, owf, aoi)
+plt.show()
+```
+
+```{python}
+#| label: tbl-change-afe
+#| tbl-cap: "Stage 2 to Stage 3 change in hotspot classification, all gear"
+trans_afe[(2, 3, None)]["summary"]
+```
+
+```{python}
+#| label: tbl-matrix
+#| tbl-cap: "Condensed Gi* transition matrix, Stage 2 to Stage 3, apparent fishing effort"
+trans_afe[(2, 3, None)]["matrix_condensed"]
+```
+
+::: {.callout-note}
+## What these tables do and do not say
+Each surface is FDR-corrected within its own stage, and the transition tables describe how those classifications moved. There is **no statistical test of the difference between two Gi\* surfaces**. Read them as description, not as a significance test of change.
+:::
+
+## The gear comparison
+
+```{python}
+#| label: fig-gear-afe
+#| fig-cap: "Stage 2 to Stage 3 change by gear class. Mobile contracts slightly; fixed expands substantially."
+fig = viz.gear_small_multiples("afe", trans_afe, grid, owf, aoi)
+plt.show()
+```
+
+```{python}
+#| label: tbl-gear-change
+#| tbl-cap: "Net hotspot area change, Stage 2 to Stage 3, by gear class"
+rows = []
+for gc in (None,) + cfg.ANALYSIS_GEAR_CLASSES:
+    key = (2, 3, gc)
+    if key not in trans_afe:
+        continue
+    s = trans_afe[key]["summary"].set_index("change")
+    rows.append({
+        "gear_class": gc or "ALL",
+        "gained hot km2": s.loc["gained hot", "area_km2"],
+        "lost hot km2": s.loc["lost hot", "area_km2"],
+        "net km2": round(s.loc["gained hot", "area_km2"] - s.loc["lost hot", "area_km2"], 1),
+    })
+pd.DataFrame(rows)
+```
+
+```{python}
+#| label: tbl-gear-rates
+#| tbl-cap: "Effort intensity by gear class and stage"
+tr.stage_rates("afe").query("gear_class in ['MOBILE', 'FIXED', 'POLE_AND_LINE']")
+```
+
+### Result
+
+**Mobile-gear hotspot area is flat to slightly contracting; fixed-gear hotspot area expands substantially.** Mobile effort rises into Stage 2 then returns to within 1% of its Stage 1 baseline (107.3 → 137.1 → 106.8 hours per month), while fixed gear climbs 4.8× (10.3 → 14.9 → 49.3) on both a larger fleet and higher per-vessel intensity.
+
+Spatially, mobile-gear hotspots sit on the western margin of the AOI, largely outside the lease areas. Fixed-gear hotspots expand around and into the lease perimeter.
+
+## Caveats on the interpretation
+
+**The unresolved class expands most of all** (+191 km² net), and it is not interpretable as a gear signal — it reflects GFW registry coverage. Some genuine mobile and fixed activity sits in that panel. It is shown rather than hidden for exactly that reason.
+
+**Thirteen offshore-wind charter and research vessels were removed** beyond the original 34, after they were found driving an apparent fishing-effort increase inside the Revolution Wind lease. Eleven were identified by a behavioural screen rather than confirmed by registry evidence. Before that correction the analysis showed mobile effort flat and a 448 km² cold-spot region that does not exist. Full detail in `00b-plan-revisions.qmd`.
+
+**AIS coverage grows across the study period**, so absolute hours are not comparable between stages without the per-vessel normalisation reported above.
+
+**Local Moran's `LL` counts are unreliable for sparse gear classes**, where they are dominated by the structural zero field rather than by meaningful low-activity clusters. Gi\* is the more trustworthy statistic on those surfaces — it reports no cold spots there, correctly, since a cell cannot sit significantly below a floor of zero.
+
+## Reproducibility
+
+```{python}
+#| label: provenance
+import esda, geopandas, libpysal, scipy
+print(f"geopandas {geopandas.__version__}   libpysal {libpysal.__version__}")
+print(f"esda {esda.__version__}        scipy {scipy.__version__}")
+print(f"seed {cfg.RANDOM_SEED}   permutations {cfg.N_PERMUTATIONS}   FDR alpha {cfg.FDR_ALPHA}")
+print(f"month denominator: {cfg.MONTH_DENOMINATOR}")
+```
+
+Exact package versions are pinned in `uv.lock`. Re-running this document reproduces every figure and table bit-for-bit; the Local Moran's permutations are seeded.

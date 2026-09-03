@@ -1,0 +1,161 @@
+---
+title: "Plan Revisions"
+subtitle: "What changed between the approved work plan and the delivered analysis"
+author: "Malachy McCaffrey"
+date: 2026-09-02
+date-format: "D MMMM YYYY"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    toc-location: left
+    number-sections: true
+    theme: cosmo
+    code-tools: true
+    embed-resources: true
+execute:
+  echo: true
+  eval: false
+  warning: false
+---
+
+## Purpose
+
+`00-work-plan.qmd` is preserved exactly as approved on 2026-09-02, before implementation began. This document records what changed during execution, why, and what evidence forced each change. Read the two together: the plan states the intent, this states the delivery.
+
+Revisions fall into three kinds — **defects found** (things the plan or a naive reading of it would have got wrong), **sequencing changes** (same work, different order), and **scope added** (work the plan explicitly deferred, which the data forced back in).
+
+::: {.callout-important}
+## The one that matters most
+Thirteen offshore-wind charter and research vessels were removed that the original R filter missed. Before that correction, the analysis would have reported **increased fishing effort inside Revolution Wind during construction** and a **448 km² cold-spot region**, both of which were artifacts. See @sec-charter.
+:::
+
+## Defects found
+
+### Gi\* was computed on the wrong weights {#sec-gistar}
+
+**Plan said:** `HotSpots` (Gi\*, `APPLY_FDR`) → `esda.G_Local(y, w, star=True)` + BH-FDR.
+
+**What went wrong:** implemented that way, Gi\* found **zero** FDR-significant hotspots on a surface with Moran's I = 0.73 and 1,365 significant Local Moran clusters. Two wrong diagnoses were pursued first — that FDR over 3,375 tests lacked power, and that the Queen neighbourhood was too small. Both were refuted; enlarging the neighbourhood made it *worse* (max |z| fell from 3.96 at Queen to 1.78 at an 8 km band).
+
+**Actual cause:** Gi\*'s variance term depends on the weight sum $W_i$. Row standardisation forces $W_i = 1$ for every cell, collapsing that term and compressing every z-score. `esda.G_Local` defaults to `transform="R"` and re-standardises the matrix *in place*, so passing binary weights alone is not enough — the call site must also pass `transform="B"`.
+
+| transform | max z | min z | FDR hot | FDR cold |
+|---|---:|---:|---:|---:|
+| `R` (row-standardised) | 3.96 | −1.58 | 0 | 0 |
+| **`B` (binary)** | **10.78** | **−4.59** | **514** | **318** |
+
+**Resolution:** `weights.gi_star_weights` returns binary self-inclusive weights; `spatial_stats` passes `transform="B"`. Moran's I and Local Moran's keep row-standardised weights, which is correct for them. The two statistics genuinely require different weighting — which is what made this easy to miss.
+
+**Credit where due:** this was caught because the zero-hotspot result was challenged against a prior ArcGIS run that *had* found hotspots, not by the code review.
+
+### Gi\* p-values were one-tailed
+
+`esda` reports a one-tailed `p_norm` for `G_Local`; ArcGIS `GiPValue` is two-tailed. Doubled, and clipped at 1.0.
+
+### Polygon contiguity would have silently broken the weights
+
+Anticipated in the plan (§ Why Queen contiguity fails) and confirmed on implementation: `Queen.from_dataframe` yields **1.96 mean neighbours across 74 disconnected components**. The lattice construction gives 7.80 / 1 / 0. `validate_weights` now fails loudly on any regression, and was itself tested against the broken construction.
+
+## Sequencing changes
+
+### `aggregate.py` moved from Phase 2 into Phase 1
+
+The Phase 1 distribution diagnostics operate on per-cell monthly means, which do not exist until records are rolled up onto the grid. Writing a throwaway aggregation inside `explore.py` would have risked diverging from the real one. Phase 2 therefore delivered only `weights.py`.
+
+### Regression targets reconciled
+
+The plan pinned matched-cell counts to the arcpy figures 3,164 / 3,218 / 3,269. Delivered values are **3,163 / 3,218 / 3,268**, both deltas explained rather than tolerated:
+
+| Stage | arcpy | now | Reason |
+|---|---:|---:|---|
+| 1 | 3,164 | 3,163 | Eight rows labelled `GEAR` — AIS-transmitting fishing gear, not vessels — uniquely occupied one cell. Correctly excluded. |
+| 2 | 3,218 | 3,218 | Exact match. |
+| 3 | 3,269 | 3,268 | The arcpy run (2026-07-21) predates the 2026-09-01 re-pull. Stage 3's window is still open. Verified not a join artifact: `within` and `intersects` agree, zero unmatched points. |
+
+Stage 1 `MonthMeanVesselHrs` reproduces arcpy to four decimals (mean 0.1624, median 0.0909, sd 0.1967, max 2.2045), so the aggregation itself is confirmed correct.
+
+**Recommendation:** re-verify against arcpy for Stages 1–2 only. Stage 3 drifts with every re-pull and should not be pinned to a historical figure.
+
+### Month denominator made explicit
+
+The plan said "normalise by stage length (44 / 43 / 40)". The archived arcpy code divided by *observed* distinct months. These agree everywhere except AFE Stage 1 (41 observed of 44 nominal). `cfg.MONTH_DENOMINATOR` selects between them, defaulting to `"nominal"` per the plan. Moran's I and Gi\* are invariant to this uniform rescaling; only descriptive cross-stage hour comparisons change.
+
+### Data directory moved
+
+The cleaned per-stage CSVs moved from `data/interim/gfw` to `data/processed/gfw` mid-implementation. `cfg.INTERIM_GFW_DIR` points at the new location. **The R pipeline still writes to the old path** (`Rmd:645-665`), so a re-pull needs that script updated or the outputs moved again.
+
+### Generated figures gitignored
+
+`reports/figures/` is excluded, on the same reasoning as the rendered Quarto HTML: 2.7 MB per full run and reproducible from the analysis modules.
+
+## Scope added: charter-vessel contamination {#sec-charter}
+
+The plan deferred **all** vessel-identity work to the thesis. That held until the unresolved-gear class was inspected, at which point the data forced it back in.
+
+### What was found
+
+Three vessels — AMELIA JOYCE, JACK M, LILY M — accounted for **91% of unresolved fishing hours inside the Revolution Wind lease** in Stage 3, with zero prior history. Their behaviour did not read as fishing:
+
+| | AMELIA JOYCE | JACK M | LILY M | Rest of fleet |
+|---|---:|---:|---:|---:|
+| % hours inside leases | 57.0 | 38.0 | 59.9 | **18.9** |
+| Prior history (S1+S2) | 0 h | 0 h | 0 h | — |
+| Hours per active day | 16.7 | 17.3 | 16.2 | 13.9 |
+
+All three appear in **October 2024** — the month after Revolution Wind installed its first turbine — work inside the lease at three times the fleet rate, then stop by spring 2025. A 5–7 month burst, not a fishing season.
+
+**The anchor case** is the *Virginia Wave*, a fishing vessel confirmed chartered by Revolution Wind (it grounded off Beavertail State Park while working for the project), which carries 1,029 hours of "apparent fishing effort" in Stage 3 and appears nowhere on the R pipeline's removal list.
+
+### Why the original filter leaked
+
+`rmOrsted` (`Rmd:494-516`) matched on `Vessel Name` with exact string equality. That cannot reliably remove a vessel, because one hull emits several name strings:
+
+| Name in data | MMSI | Removed by R filter? |
+|---|---|---|
+| CAILYN & MAREN | 338389953 | yes — exact match |
+| **CAILYN MAREN** | **338389953** | **no — same hull, variant spelling** |
+| F/V HARVESTER | 367336020 | yes — exact match |
+| **HARVESTER** | **367336020** | **no — same hull, variant spelling** |
+
+This is the same identity fragmentation that gives MMSI `367052470` five Vessel IDs (`SEVEN B 5` / `SEVEN B S V` / null name). It also cuts the other way: `TRADITION` spans **six MMSIs across two vessel types**, only one of which is a charter, so a name-based rule would have deleted five innocent vessels.
+
+**All supplementary removals are therefore keyed on MMSI.**
+
+### What was removed
+
+Thirteen vessels, in `cfg.RM_CHARTER_MMSI` and `cfg.RM_ALL_STAGES_MMSI`:
+
+- **Stage-conditional (2–3 removed, Stage 1 kept)** — 12 charter vessels, all genuine fishing hulls whose pre-construction records are real activity. Mirrors the treatment of the original 34.
+- **All stages** — NOAA GLORIA MICHELLE, a NOAA Fisheries research vessel that GFW classes as `FISHING`/`TRAWLERS`, so it was inflating the mobile gear class.
+
+**Investigated and deliberately retained:** KATHY MARIE (366758680) is a different hull from the listed KATHRYN MARIE (367387310), with its own decade of history and a normal 4.8 h/active day — removing it on name similarity would repeat the error being fixed. BENTHIC HARVESTER has a suggestive name and a `FIXED_GEAR` label but contributes zero hours to Stage 3 fixed effort.
+
+### Effect on results
+
+::: {.callout-warning}
+## Findings that did not survive the correction
+The pre-correction analysis showed **mobile-gear effort flat** into Stage 3 and a **448 km² "gained cold" region** across the southeast, including inside Sunrise Wind. The cold region was an artifact: charter vessels inflated the surface mean enough to make ordinary areas read as significantly cold. It disappears entirely. Mobile effort is not flat — it rises then returns to baseline.
+:::
+
+| AFE hours/month | Stage 1 | Stage 2 | Stage 3 (pre) | Stage 3 (final) |
+|---|---:|---:|---:|---:|
+| All gear | 147.5 | 188.1 | ~~359.2~~ | **235.4** |
+| Mobile | 107.3 | 137.1 | ~~136.2~~ | **106.8** |
+| Fixed | 10.3 | 14.9 | ~~54.5~~ | **49.3** |
+
+Stage 2 → 3 hotspot area, net change: **mobile −9 km², fixed +161 km²**. The gear separation the poster asks about is sharper after correction, not weaker.
+
+### Caveat to carry into the write-up
+
+Eleven of the thirteen were identified by a **behavioural screen**; only *Virginia Wave* is confirmed by outside evidence. The pattern is convergent — lease concentration, onset timing, burst duration, operating intensity — but MarineTraffic lists all of them as "Fishing," because chartering a commercial fishing hull is exactly what these projects do. State this as a behavioural screen pending vessel-identity confirmation, not as established fact.
+
+The screen also has a structural blind spot: it detects vessels whose behaviour *changed*, so an established fishing vessel that took a charter is hard to distinguish from one that shifted grounds. *Virginia Wave* escaped the first screen for precisely this reason.
+
+## Unchanged from the plan
+
+For the record, these survived implementation intact: Queen contiguity on the existing UTM 19N grid; the four-class gear scheme with `POLE_AND_LINE` separate and `UNRESOLVED` carried as a reported result; MMSI as the vessel counting unit; stage-to-stage change as the analytical emphasis; no arcpy anywhere; and the exclusion of Vineyard Wind and the `*_Buffer` layers from every figure.
+
+## Still deferred to the thesis
+
+The MMSI→gear crosswalk and resolved-only sensitivity analysis (13–20 h); ISA distance-band peak search; space-time cube and emerging hotspots; and **rebuilding the R `rmOrsted` filter on MMSI rather than vessel name**, which is a 15-minute change but requires re-running the R pull.

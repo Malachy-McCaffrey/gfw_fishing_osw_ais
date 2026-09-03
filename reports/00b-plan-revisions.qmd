@@ -167,11 +167,13 @@ The pre-correction analysis showed **mobile-gear effort flat** into Stage 3 and 
 
 | AFE hours/month | Stage 1 | Stage 2 | Stage 3 (pre) | Stage 3 (final) |
 |---|---:|---:|---:|---:|
-| All gear | 147.5 | 188.1 | ~~359.2~~ | **235.4** |
+| All gear | 147.5 | 186.2 | ~~359.2~~ | **230.4** |
 | Mobile | 107.3 | 137.1 | ~~136.2~~ | **106.8** |
-| Fixed | 10.3 | 14.9 | ~~54.5~~ | **49.3** |
+| Fixed | 10.3 | 13.0 | ~~54.5~~ | **44.4** |
 
-Stage 2 → 3 hotspot area, net change: **mobile −9 km², fixed +161 km²**. The gear separation the poster asks about is sharper after correction, not weaker.
+Stage 2 → 3 hotspot area, net change: **mobile −9 km², fixed +141 km²**. The gear separation the poster asks about is sharper after correction, not weaker.
+
+Figures above are computed against the full 46-vessel removal list in `references/vessel_removals.csv`. They differ slightly from earlier drafts, which removed only the thirteen supplementary MMSIs: the fuller list also catches Ørsted-listed hulls that the old name-based R filter leaked into the extracts, and those are almost entirely fixed-gear.
 
 ### Caveat to carry into the write-up
 

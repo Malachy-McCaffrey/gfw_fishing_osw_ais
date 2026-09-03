@@ -100,7 +100,7 @@ g[["dataset", "stage", "n_active", "morans_i", "morans_z", "morans_p",
    "general_g_z", "n_hot", "n_cold"]]
 ```
 
-Vessel presence is strongly clustered and near-constant across stages. **Apparent fishing effort clusters progressively more strongly** — 0.347 → 0.418 → 0.498 — meaning fishing effort concentrates spatially as development proceeds, even as total mobile-gear effort returns to baseline.
+Vessel presence is strongly clustered and near-constant across stages. **Apparent fishing effort clusters progressively more strongly** — 0.347 → 0.416 → 0.495 — meaning fishing effort concentrates spatially as development proceeds, even as total mobile-gear effort returns to baseline.
 
 ```{python}
 #| label: fig-moran
@@ -189,7 +189,7 @@ tr.stage_rates("afe").query("gear_class in ['MOBILE', 'FIXED', 'POLE_AND_LINE']"
 
 ### Result
 
-**Mobile-gear hotspot area is flat to slightly contracting; fixed-gear hotspot area expands substantially.** Mobile effort rises into Stage 2 then returns to within 1% of its Stage 1 baseline (107.3 → 137.1 → 106.8 hours per month), while fixed gear climbs 4.8× (10.3 → 14.9 → 49.3) on both a larger fleet and higher per-vessel intensity.
+**Mobile-gear hotspot area is flat to slightly contracting; fixed-gear hotspot area expands substantially.** Mobile effort rises into Stage 2 then returns to within 1% of its Stage 1 baseline (107.3 → 137.1 → 106.8 hours per month), while fixed gear climbs 4.3× (10.3 → 13.0 → 44.4) on both a larger fleet and higher per-vessel intensity.
 
 Spatially, mobile-gear hotspots sit on the western margin of the AOI, largely outside the lease areas. Fixed-gear hotspots expand around and into the lease perimeter.
 
@@ -229,7 +229,7 @@ plt.tight_layout()
 
 ### The aggregate increase is mostly not real
 
-Apparent fishing effort rises 147.5 → 188.1 → 235.4 hours per month across stages. But the tracked fleet grows 152 → 179 → 220 vessels, and **effort per vessel-month is essentially flat at 0.97 → 1.05 → 1.07**. Nearly all of the headline increase is AIS coverage expanding, not fishing intensifying. Vessel presence behaves the same way (0.82 → 0.89 → 0.95).
+Apparent fishing effort rises 147.5 → 186.2 → 230.4 hours per month across stages. But the tracked fleet grows 152 → 178 → 216 vessels, and **effort per vessel-month is essentially flat at 0.97 → 1.05 → 1.07**. Nearly all of the headline increase is AIS coverage expanding, not fishing intensifying. Vessel presence behaves the same way (0.82 → 0.88 → 0.94).
 
 This is the most important framing constraint in the analysis. Any statement of the form "fishing effort increased during construction" is, on these data, largely a statement about AIS adoption.
 
@@ -237,22 +237,22 @@ This is the most important framing constraint in the analysis. Any statement of 
 
 | hours per vessel-month | Stage 1 | Stage 2 | Stage 3 |
 |---|---:|---:|---:|
-| Mobile — effort | 1.28 | 1.56 | **1.19** |
-| Fixed — effort | 1.03 | 0.93 | **1.76** |
-| Mobile — presence | 1.05 | 1.12 | **1.01** |
-| Fixed — presence | 0.92 | 1.26 | **2.20** |
+| Mobile — effort | 1.28 | 1.56 | **1.20** |
+| Fixed — effort | 1.03 | 0.87 | **1.78** |
+| Mobile — presence | 1.05 | 1.12 | **1.02** |
+| Fixed — presence | 0.92 | 1.19 | **2.18** |
 
-Fixed gear intensifies per vessel in **both independent measures** while mobile returns to baseline in both. Fixed-gear effort grows 4.8× in absolute terms on a fleet that only grew from 10 to 28 vessels. Coverage growth would lift both gear types equally, so this is a behavioural difference rather than a sampling artifact.
+Fixed gear intensifies per vessel in **both independent measures** while mobile returns to baseline in both. Fixed-gear effort grows 4.3× in absolute terms on a fleet that only grew from 10 to 25 vessels. Coverage growth would lift both gear types equally, so this is a behavioural difference rather than a sampling artifact.
 
 ### The fishery grew around the leases, not inside them
 
-Effort inside the lease footprints is **flat in absolute terms** — 39.5 → 36.8 → 36.3 hours per month — while effort elsewhere in the AOI nearly doubles, 108.0 → 151.3 → 199.0. The in-lease share therefore falls from 26.8% to 15.4%.
+Effort inside the lease footprints is **flat in absolute terms** — 39.5 → 35.7 → 33.6 hours per month — while effort elsewhere in the AOI nearly doubles, 108.0 → 150.6 → 196.8. The in-lease share therefore falls from 26.8% to 14.6%.
 
 That distinction matters: this is relative displacement, not absolute abandonment. Mobile gear shows the clearest withdrawal, its in-lease share falling 28.7% → 18.9% → 16.5%.
 
 Vessel presence does the opposite. Presence inside the leases *rises* (96.5 → 102.9 → 128.0 hours per month) on a roughly constant share. **Vessels increasingly move through the lease areas without fishing in them.**
 
-Structurally, Global Moran's I for effort climbs 0.347 → 0.418 → 0.498 — activity concentrates into a consolidated band along the western AOI margin. Net hotspot area change from Stage 2 to Stage 3 is −9 km² for mobile against +161 km² for fixed.
+Structurally, Global Moran's I for effort climbs 0.347 → 0.416 → 0.495 — activity concentrates into a consolidated band along the western AOI margin. Net hotspot area change from Stage 2 to Stage 3 is −9 km² for mobile against +141 km² for fixed.
 
 ## Caveats on the interpretation
 
@@ -260,7 +260,7 @@ Structurally, Global Moran's I for effort climbs 0.347 → 0.418 → 0.498 — a
 
 **Apparent fishing effort is a model output**, not observed fishing. GFW infers it from vessel behaviour, and the inference itself may perform differently around construction activity.
 
-**The unresolved class expands most of all** (+258 km² net) and is not interpretable as a gear signal — it reflects GFW registry coverage. Some genuine mobile and fixed activity sits in that panel. It is shown rather than hidden for exactly that reason.
+**The unresolved class expands most of all** (+191 km² net, 258 gained against 67 lost) and is not interpretable as a gear signal — it reflects GFW registry coverage. Some genuine mobile and fixed activity sits in that panel. It is shown rather than hidden for exactly that reason.
 
 **Eleven offshore-wind charter and research vessels were removed** beyond the 35 on Ørsted's own list, after they were found driving an apparent fishing-effort increase inside the Revolution Wind lease. Eight were identified by a behavioural screen rather than confirmed by registry evidence. Before that correction the analysis showed mobile effort flat and a 448 km² cold-spot region that does not exist. The screen also cannot detect an established fishing vessel that takes a charter — the *Virginia Wave* escaped the first pass for exactly that reason. Full detail in `00b-plan-revisions.qmd`.
 

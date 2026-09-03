@@ -162,7 +162,7 @@ rates.query("gear_class in ['ALL', 'MOBILE', 'FIXED']")
 
 Absolute hours are not comparable across stages on their own. Reporting hours per month alongside hours per vessel-month separates the two explanations: if hours per month rises while hours per vessel-month is flat, the increase is fleet coverage rather than intensified activity.
 
-For mobile gear, hours per vessel-month is 1.28 → 1.56 → 1.19 — it rises then returns below baseline. For fixed gear it is 1.03 → 0.93 → 1.76, a genuine intensification on top of a growing fleet.
+For mobile gear, hours per vessel-month is 1.28 → 1.56 → 1.20 — it rises then returns below baseline. For fixed gear it is 1.03 → 0.87 → 1.78, a genuine intensification on top of a growing fleet.
 
 ### Other caveats
 

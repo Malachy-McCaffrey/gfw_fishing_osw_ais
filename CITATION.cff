@@ -23,7 +23,7 @@ keywords:
   - spatial statistics
   - Global Fishing Watch
   - hotspot analysis
-# license: add once a LICENSE file is chosen (see README)
+license: MIT
 date-released: '2026-09-02'
 references:
   - type: database

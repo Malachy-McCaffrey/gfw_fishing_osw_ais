@@ -85,6 +85,29 @@ The plan said "normalise by stage length (44 / 43 / 40)". The archived arcpy cod
 
 The cleaned per-stage CSVs moved from `data/interim/gfw` to `data/processed/gfw` mid-implementation. `cfg.INTERIM_GFW_DIR` points at the new location. **The R pipeline still writes to the old path** (`Rmd:645-665`), so a re-pull needs that script updated or the outputs moved again.
 
+### Package relocated to `python/src/`
+
+The plan placed the package at `src/gfw_fishing_osw_ais/`, the `uv_build`
+default. It now lives at `python/src/gfw_fishing_osw_ais/`, matching the
+`python/` and `r/` split established in `.claude/CLAUDE.md`.
+
+Three things had to change together, and two of them fail silently:
+
+1. **`pyproject.toml` needs `[tool.uv.build-backend] module-root = "python/src"`.**
+   A `[tool.hatch.build.targets.wheel]` block does nothing here — the backend is
+   `uv_build`, not hatchling, so the hatch configuration is inert.
+2. **The modules need a package directory.** Nine `.py` files sitting directly
+   in `python/src/` import as `src`, not `gfw_fishing_osw_ais`.
+3. **`config.REPO_ROOT` was a fixed `parents[2]` index.** Moving one level
+   deeper made it resolve to `<repo>/python`, so every data path pointed one
+   directory too shallow — `GRID_PATH.exists()` returned `False` and the whole
+   pipeline failed at the first `read_file`. It now walks up to the directory
+   containing `pyproject.toml`, which survives the next relocation.
+
+**Note for anyone reading the original plan:** `00-work-plan.qmd` still refers
+to `src/gfw_fishing_osw_ais/`. That document is preserved as approved and is
+not updated; this section is the correction.
+
 ### Generated figures gitignored
 
 `reports/figures/` is excluded, on the same reasoning as the rendered Quarto HTML: 2.7 MB per full run and reproducible from the analysis modules.

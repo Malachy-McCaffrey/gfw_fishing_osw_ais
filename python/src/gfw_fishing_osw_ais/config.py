@@ -20,8 +20,25 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-# config.py lives at <repo>/src/gfw_fishing_osw_ais/config.py
-REPO_ROOT = Path(__file__).resolve().parents[2]
+def _find_repo_root(start: Path) -> Path:
+    """Walk up from this file until the directory holding pyproject.toml.
+
+    Deliberately not a fixed ``parents[n]`` index. The package has already been
+    relocated once -- from ``src/gfw_fishing_osw_ais`` to
+    ``python/src/gfw_fishing_osw_ais`` -- which silently changed its depth and
+    made every data path resolve one directory too shallow. Anchoring on a
+    marker file survives the next move.
+    """
+    for candidate in (start, *start.parents):
+        if (candidate / "pyproject.toml").is_file():
+            return candidate
+    raise RuntimeError(
+        f"Could not locate pyproject.toml above {start}; "
+        "REPO_ROOT is undeterminable"
+    )
+
+
+REPO_ROOT = _find_repo_root(Path(__file__).resolve().parent)
 
 DATA_DIR = REPO_ROOT / "data"
 EXTERNAL_GFW_DIR = DATA_DIR / "external" / "gfw"

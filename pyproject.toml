@@ -43,5 +43,8 @@ gfw-fishing-osw-ais = "gfw_fishing_osw_ais:main"
 requires = ["uv_build>=0.12.9,<0.13.0"]
 build-backend = "uv_build"
 
-[tool.hatch.build.targets.wheel]
-packages = ["python/src/"]
+# The package lives at python/src/gfw_fishing_osw_ais, not the uv_build
+# default of src/. Note the backend is uv_build, so a [tool.hatch.*] block
+# would be inert here.
+[tool.uv.build-backend]
+module-root = "python/src"

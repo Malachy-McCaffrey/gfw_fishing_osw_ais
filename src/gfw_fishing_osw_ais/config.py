@@ -297,6 +297,7 @@ VESSEL_COUNT_SENSITIVITY_COLUMN = "Vessel ID"
 # grounded off Beavertail State Park while working for Revolution Wind, yet it
 # carries 1,029 hours of "apparent fishing effort" in Stage 3.
 RM_CHARTER_MMSI = {
+    # --- Identified by the behavioural screen -----------------------------
     "368080240": "AMELIA JOYCE",
     "368250590": "JACK M",
     "368231710": "LILY M",
@@ -304,6 +305,25 @@ RM_CHARTER_MMSI = {
     "368361590": "TRADITION",       # this MMSI only; the name spans six hulls
     "367723210": "SAINTS ANGELS",
     "367696380": "VIRGINIA WAVE",
+    # --- Name-variant leaks past the R filter -----------------------------
+    # Same hulls as entries the R pipeline already removed. Their records
+    # survived only because the self-reported name string differed, the same
+    # identity fragmentation that gives one MMSI several Vessel IDs. Adding
+    # the MMSI removes every spelling at once.
+    "338389953": "CAILYN & MAREN / CAILYN MAREN",     # rmOrsted: "CAILYN & MAREN"
+    "367336020": "F/V HARVESTER / HARVESTER",         # rmOrsted: "F/V HARVESTER"
+    # --- Probable charters, weaker evidence -------------------------------
+    # CAILYN AND MAREN: distinct MMSI, but 80% of its hours fall inside the
+    # lease areas and it begins 2025-12, just after 338389953 stops in
+    # 2025-09 -- consistent with the same hull re-registered.
+    "338538875": "CAILYN AND MAREN",
+    # ARGO and GULF STREAM: two-day bursts at 17-19 hours per day against a
+    # fishing norm nearer 4-5, with 54-73% of hours inside the leases. ARGO's
+    # earlier activity was 0% in-lease, so this is a behavioural change rather
+    # than a vessel that always worked there. Small volumes, so the effect on
+    # results is marginal either way.
+    "338350046": "ARGO",
+    "368128790": "GULF STREAM",
 }
 
 # Charter vessels are genuine fishing hulls, so their pre-construction records

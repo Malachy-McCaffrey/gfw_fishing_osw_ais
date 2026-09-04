@@ -387,24 +387,44 @@ def save(
     fig: plt.Figure,
     name: str,
     dpi: int = 300,
-    formats: tuple[str, ...] = ("png", "pdf"),
+    formats: tuple[str, ...] = ("png", "pdf", "svg"),
 ) -> list[str]:
-    """Write a figure to ``reports/figures``, by default as both PNG and PDF.
+    """Write a figure to ``reports/figures`` as PNG, PDF and SVG.
 
-    The PDF is the print master. These are polygon maps with text, so a raster
-    has to carry every cell edge as pixels: spanning the 76 cm live width of a
-    portrait A0 at 300 dpi would need roughly 9,000 px, and the PNGs written
-    here land at about 115 dpi at that size. A vector PDF has no such ceiling
-    and is the smaller file besides.
+    All three are rendered from the same figure rather than converted from one
+    another: tracing a raster map back into vectors would turn crisp cell edges
+    into approximated outlines, and the text into paths.
 
-    The PNG is kept because the Quarto reports embed it and browsers render it
-    without a plugin.
+    * **SVG** is the poster master. Its ground is transparent, so it sits on the
+      poster's panel colour like ``methods_flowchart.svg``, and its text stays
+      live and editable in Illustrator.
+    * **PDF** is the print master for anything that wants a self-contained
+      vector file.
+    * **PNG** is kept because the Quarto reports embed it and browsers render it
+      without a plugin. It keeps a white ground, since the reports composite it
+      onto a white page.
+
+    Vector matters here: these are polygon maps with text, so a raster carries
+    every cell edge as pixels. Spanning the 76 cm live width of a portrait A0 at
+    300 dpi would need roughly 9,000 px, and the PNGs land at about 115 dpi at
+    that size.
     """
     cfg.FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     written = []
     for fmt in formats:
         path = cfg.FIGURES_DIR / f"{name}.{fmt}"
-        fig.savefig(path, dpi=dpi, bbox_inches="tight", facecolor="white")
+        transparent = fmt == "svg"
+        # svg.fonttype "none" keeps labels as <text> instead of converting them
+        # to outlines, which is what makes the SVG editable in Illustrator. The
+        # cost is that the viewing machine must have the font; matplotlib's
+        # default here is "path", which bakes the glyphs in and cannot be typed
+        # over.
+        with mpl.rc_context({"svg.fonttype": "none"}):
+            fig.savefig(
+                path, dpi=dpi, bbox_inches="tight",
+                facecolor="none" if transparent else "white",
+                transparent=transparent,
+            )
         written.append(str(path))
     plt.close(fig)
     log.info("Wrote %s", ", ".join(written))

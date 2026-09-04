@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Methods pipeline for the ICES poster. Three phases, three steps each.
+
+  Type: Aptos at 36 inside the cards and 48 in the column headers. The geometry
+  is scaled to suit those sizes rather than the reverse, so the canvas is 2060
+  units wide. Glyphs keep their original coordinates and are scaled in place
+  with a transform, which scales their stroke weights with them.
+
+  Each body line is its own <text> with an absolute y. A single <text> with
+  tspan lines would keep the body as one object, but tspan dy offsets are
+  relative, so editing one line shifts every line under it; separate elements
+  can be retyped or nudged independently.
+
+  Styling is inline rather than in a <style> block on purpose: CSS classes in
+  SVG are dropped by MuPDF and unreliable in PowerPoint, which renders the cards
+  unfilled and the text invisible. Arrowheads are polygons for the same reason -
+  marker support is patchy outside browsers and Illustrator.
+
+  Canvas is transparent; the cards carry their own near-white fill so the figure
+  reads on the poster's steel-blue panel or on white.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2060 946" width="2060" height="946"
+     font-family="Aptos, Segoe UI, Calibri, Helvetica Neue, Arial, sans-serif"
+     role="img" aria-labelledby="ttl dsc">
+  <title id="ttl">Data acquisition, processing and analysis pipeline</title>
+  <desc id="dsc">Three phases of three steps, flowing left to right. Acquisition: query the
+    Global Fishing Watch 4Wings API through gfwr v3.0; take two measures, vessel presence hours
+    and apparent fishing effort hours; over January 2016 to July 2026 at 0.01 degrees, grouped
+    by Vessel ID. Processing: keep fishing vessels only and remove 46 chartered hulls matched on
+    MMSI rather than name; assign three development stages of 44, 43 and 40 months; aggregate to
+    3,375 grid cells in UTM 19N with hours divided by months in stage. Analysis: build Queen
+    contiguity weights with the focal cell inside its own neighbourhood; detect hotspots with
+    Getis-Ord Gi star and Benjamini-Hochberg FDR at 90, 95 and 99 percent; and classify hotspot
+    change as cells gained, lost or stable hot, reported in square kilometres.</desc>
+
+  <!-- ========================= phase headers ========================= -->
+  <g font-size="48" font-weight="700" fill="#000000">
+    <text x="18"   y="52">1</text>
+    <text x="62"   y="52" letter-spacing="2">ACQUISITION</text>
+    <rect x="18"   y="66" width="636" height="5" fill="#000000"/>
+
+    <text x="712"  y="52">2</text>
+    <text x="756"  y="52" letter-spacing="2">PROCESSING</text>
+    <rect x="712"  y="66" width="636" height="5" fill="#000000"/>
+
+    <text x="1406" y="52">3</text>
+    <text x="1450" y="52" letter-spacing="2">ANALYSIS</text>
+    <rect x="1406" y="66" width="636" height="5" fill="#000000"/>
+  </g>
+
+  <!-- ===================== column 1 : acquisition ===================== -->
+  <!-- A1. query -->
+  <rect x="18" y="84" width="636" height="244" rx="5" fill="#f7f7f2" stroke="#a8bcd0" stroke-width="2.4"/>
+  <g transform="translate(114,206) scale(2.06)" fill="none" stroke="#16232e" stroke-width="2.4"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M-20,12 L20,12 L13,23 L-13,23 Z" fill="#16232e" stroke="none"/>
+    <line x1="0" y1="12" x2="0" y2="2"/>
+    <path d="M-13,-5 A 18 18 0 0 1 13,-5" stroke="#5b6f80" stroke-width="2"/>
+    <path d="M-21,-16 A 29 29 0 0 1 21,-16" stroke="#5b6f80" stroke-width="2"/>
+    <circle cx="0" cy="0" r="3" fill="#2f6fb0" stroke="none"/>
+  </g>
+  <text x="194" y="148" font-size="36" font-weight="600" fill="#16232e">Query the record</text>
+  <text x="194" y="200" font-size="36" fill="#4a5c6b">Global Fishing Watch</text>
+  <text x="194" y="246" font-size="36" fill="#4a5c6b">4Wings API, via the</text>
+  <text x="194" y="292" font-size="36" fill="#4a5c6b">gfwr v3.0 R client</text>
+
+  <line x1="336" y1="328" x2="336" y2="368" stroke="#5b6f80" stroke-width="4"/>
+  <polygon points="326,368 346,368 336,384" fill="#5b6f80"/>
+
+  <!-- A2. two measures -->
+  <rect x="18" y="384" width="636" height="244" rx="5" fill="#f7f7f2" stroke="#a8bcd0" stroke-width="2.4"/>
+  <g transform="translate(114,506) scale(2.06)">
+    <rect x="-22" y="-6"  width="17" height="30" rx="2" fill="#2f6fb0"/>
+    <rect x="3"   y="-22" width="17" height="46" rx="2" fill="#9fc0e0"/>
+    <line x1="-27" y1="26" x2="26" y2="26" stroke="#5b6f80" stroke-width="2" stroke-linecap="round"/>
+  </g>
+  <text x="194" y="448" font-size="36" font-weight="600" fill="#16232e">Two measures</text>
+  <text x="194" y="500" font-size="36" fill="#4a5c6b">Vessel presence hours</text>
+  <text x="194" y="546" font-size="36" fill="#4a5c6b">and apparent fishing</text>
+  <text x="194" y="592" font-size="36" fill="#4a5c6b">effort hours</text>
+
+  <line x1="336" y1="628" x2="336" y2="668" stroke="#5b6f80" stroke-width="4"/>
+  <polygon points="326,668 346,668 336,684" fill="#5b6f80"/>
+
+  <!-- A3. extent -->
+  <rect x="18" y="684" width="636" height="244" rx="5" fill="#f7f7f2" stroke="#a8bcd0" stroke-width="2.4"/>
+  <g transform="translate(114,806) scale(2.06)">
+    <rect x="-23" y="-20" width="46" height="42" rx="3" fill="none" stroke="#16232e" stroke-width="2.2"/>
+    <line x1="-23" y1="-9" x2="23" y2="-9" stroke="#16232e" stroke-width="2.2"/>
+    <line x1="-12" y1="-20" x2="-12" y2="-27" stroke="#5b6f80" stroke-width="2" stroke-linecap="round"/>
+    <line x1="12"  y1="-20" x2="12"  y2="-27" stroke="#5b6f80" stroke-width="2" stroke-linecap="round"/>
+    <rect x="-17" y="-3" width="9" height="9" fill="#2f6fb0"/>
+    <rect x="-4"  y="-3" width="9" height="9" fill="#9fc0e0"/>
+    <rect x="9"   y="-3" width="9" height="9" fill="#9fc0e0"/>
+    <rect x="-17" y="9"  width="9" height="9" fill="#9fc0e0"/>
+    <rect x="-4"  y="9"  width="9" height="9" fill="#2f6fb0"/>
+  </g>
+  <text x="194" y="748" font-size="36" font-weight="600" fill="#16232e">Extent</text>
+  <text x="194" y="800" font-size="36" fill="#4a5c6b">Jan 2016 – Jul 2026,</text>
+  <text x="194" y="846" font-size="36" fill="#4a5c6b">daily, 0.01° cells,</text>
+  <text x="194" y="892" font-size="36" fill="#4a5c6b">grouped by Vessel ID</text>
+
+  <!-- phase 1 to 2 -->
+  <line x1="658" y1="506" x2="692" y2="506" stroke="#16232e" stroke-width="5"/>
+  <polygon points="692,494 692,518 710,506" fill="#16232e"/>
+
+  <!-- ===================== column 2 : processing ====================== -->
+  <!-- B1. clean the fleet -->
+  <rect x="712" y="84" width="636" height="244" rx="5" fill="#f7f7f2" stroke="#a8bcd0" stroke-width="2.4"/>
+  <g transform="translate(808,206) scale(2.06)">
+    <path d="M-22,-16 L22,-16 L7,2 L7,20 L-7,13 L-7,2 Z" fill="none" stroke="#16232e"
+          stroke-width="2.2" stroke-linejoin="round"/>
+    <circle cx="15" cy="15" r="12" fill="#f7f7f2" stroke="#c8352b" stroke-width="2.6"/>
+    <line x1="7" y1="23" x2="23" y2="7" stroke="#c8352b" stroke-width="2.6" stroke-linecap="round"/>
+  </g>
+  <text x="888" y="148" font-size="36" font-weight="600" fill="#16232e">Clean the fleet</text>
+  <text x="888" y="200" font-size="36" fill="#4a5c6b">Fishing vessels only.</text>
+  <text x="888" y="246" font-size="36" fill="#4a5c6b">46 charter hulls cut</text>
+  <text x="888" y="292" font-size="36" fill="#4a5c6b">on MMSI, not on name</text>
+
+  <line x1="1030" y1="328" x2="1030" y2="368" stroke="#5b6f80" stroke-width="4"/>
+  <polygon points="1020,368 1040,368 1030,384" fill="#5b6f80"/>
+
+  <!-- B2. stages -->
+  <rect x="712" y="384" width="636" height="244" rx="5" fill="#f7f7f2" stroke="#a8bcd0" stroke-width="2.4"/>
+  <g transform="translate(808,506) scale(2.06)">
+    <rect x="-27" y="-10" width="17" height="18" rx="2" fill="#c3d2e3"/>
+    <rect x="-8"  y="-10" width="17" height="18" rx="2" fill="#8fa9c4"/>
+    <rect x="11"  y="-10" width="17" height="18" rx="2" fill="#4d6377"/>
+    <line x1="-27" y1="16" x2="28" y2="16" stroke="#5b6f80" stroke-width="2" stroke-linecap="round"/>
+    <line x1="-27" y1="16" x2="-27" y2="22" stroke="#5b6f80" stroke-width="2" stroke-linecap="round"/>
+    <line x1="28"  y1="16" x2="28"  y2="22" stroke="#5b6f80" stroke-width="2" stroke-linecap="round"/>
+  </g>
+  <text x="888" y="448" font-size="36" font-weight="600" fill="#16232e">Assign stages</text>
+  <text x="888" y="500" font-size="36" fill="#4a5c6b">44 / 43 / 40 months —</text>
+  <text x="888" y="546" font-size="36" fill="#4a5c6b">baseline, survey, and</text>
+  <text x="888" y="592" font-size="36" fill="#4a5c6b">seabed preparation</text>
+
+  <line x1="1030" y1="628" x2="1030" y2="668" stroke="#5b6f80" stroke-width="4"/>
+  <polygon points="1020,668 1040,668 1030,684" fill="#5b6f80"/>
+
+  <!-- B3. grid and normalise -->
+  <rect x="712" y="684" width="636" height="244" rx="5" fill="#f7f7f2" stroke="#a8bcd0" stroke-width="2.4"/>
+  <g transform="translate(808,806) scale(2.06)">
+    <g stroke="#5b6f80" stroke-width="1.5" fill="none">
+      <rect x="-23" y="-23" width="46" height="46"/>
+      <line x1="-23" y1="-8" x2="23" y2="-8"/><line x1="-23" y1="8" x2="23" y2="8"/>
+      <line x1="-8" y1="-23" x2="-8" y2="23"/><line x1="8" y1="-23" x2="8" y2="23"/>
+    </g>
+    <rect x="-8" y="-8" width="16" height="16" fill="#4d6377"/>
+  </g>
+  <text x="888" y="748" font-size="36" font-weight="600" fill="#16232e">Grid and normalise</text>
+  <text x="888" y="800" font-size="36" fill="#4a5c6b">3,375 cells at 0.01°,</text>
+  <text x="888" y="846" font-size="36" fill="#4a5c6b">UTM 19N. Hours ÷</text>
+  <text x="888" y="892" font-size="36" fill="#4a5c6b">months in stage</text>
+
+  <!-- phase 2 to 3 -->
+  <line x1="1352" y1="506" x2="1386" y2="506" stroke="#16232e" stroke-width="5"/>
+  <polygon points="1386,494 1386,518 1404,506" fill="#16232e"/>
+
+  <!-- ====================== column 3 : analysis ======================= -->
+  <!-- C1. spatial weights -->
+  <rect x="1406" y="84" width="636" height="244" rx="5" fill="#f7f7f2" stroke="#a8bcd0" stroke-width="2.4"/>
+  <g transform="translate(1502,206) scale(2.06)">
+    <g fill="#c3d2e3" stroke="#5b6f80" stroke-width="1.4">
+      <rect x="-27" y="-27" width="17" height="17"/><rect x="-8" y="-27" width="17" height="17"/><rect x="11" y="-27" width="17" height="17"/>
+      <rect x="-27" y="-8"  width="17" height="17"/>                                              <rect x="11" y="-8"  width="17" height="17"/>
+      <rect x="-27" y="11"  width="17" height="17"/><rect x="-8" y="11"  width="17" height="17"/><rect x="11" y="11"  width="17" height="17"/>
+    </g>
+    <rect x="-8" y="-8" width="17" height="17" fill="#16232e"/>
+  </g>
+  <text x="1582" y="148" font-size="36" font-weight="600" fill="#16232e">Spatial weights</text>
+  <text x="1582" y="200" font-size="36" fill="#4a5c6b">Queen contiguity,</text>
+  <text x="1582" y="246" font-size="36" fill="#4a5c6b">with the focal cell in</text>
+  <text x="1582" y="292" font-size="36" fill="#4a5c6b">its own neighbourhood</text>
+
+  <line x1="1724" y1="328" x2="1724" y2="368" stroke="#5b6f80" stroke-width="4"/>
+  <polygon points="1714,368 1734,368 1724,384" fill="#5b6f80"/>
+
+  <!-- C2. hotspot detection -->
+  <rect x="1406" y="384" width="636" height="244" rx="5" fill="#f7f7f2" stroke="#a8bcd0" stroke-width="2.4"/>
+  <g transform="translate(1502,506) scale(2.06)" stroke="#a8bcd0" stroke-width="1.2">
+    <rect x="-25" y="-25" width="17" height="17" fill="#f7f7f2"/>
+    <rect x="-8"  y="-25" width="17" height="17" fill="#fab984"/>
+    <rect x="9"   y="-25" width="17" height="17" fill="#f7f7f2"/>
+    <rect x="-25" y="-8"  width="17" height="17" fill="#fab984"/>
+    <rect x="-8"  y="-8"  width="17" height="17" fill="#d62f27"/>
+    <rect x="9"   y="-8"  width="17" height="17" fill="#ed7551"/>
+    <rect x="-25" y="9"   width="17" height="17" fill="#f7f7f2"/>
+    <rect x="-8"  y="9"   width="17" height="17" fill="#ed7551"/>
+    <rect x="9"   y="9"   width="17" height="17" fill="#f7f7f2"/>
+  </g>
+  <text x="1582" y="448" font-size="36" font-weight="600" fill="#16232e">Hotspot detection</text>
+  <text x="1582" y="500" font-size="36" fill="#4a5c6b">Getis-Ord Gi* with</text>
+  <text x="1582" y="546" font-size="36" fill="#4a5c6b">Benjamini-Hochberg</text>
+  <text x="1582" y="592" font-size="36" fill="#4a5c6b">FDR at 90 / 95 / 99%</text>
+
+  <line x1="1724" y1="628" x2="1724" y2="668" stroke="#5b6f80" stroke-width="4"/>
+  <polygon points="1714,668 1734,668 1724,684" fill="#5b6f80"/>
+
+  <!-- C3. hotspot change -->
+  <rect x="1406" y="684" width="636" height="244" rx="5" fill="#f7f7f2" stroke="#a8bcd0" stroke-width="2.4"/>
+  <g transform="translate(1502,806) scale(2.06)">
+    <g stroke="#a8bcd0" stroke-width="1.2">
+      <rect x="-31" y="-12" width="11" height="11" fill="#f7f7f2"/>
+      <rect x="-20" y="-12" width="11" height="11" fill="#d62f27"/>
+      <rect x="-31" y="-1"  width="11" height="11" fill="#f7f7f2"/>
+      <rect x="-20" y="-1"  width="11" height="11" fill="#f7f7f2"/>
+    </g>
+    <line x1="-6" y1="4" x2="-1" y2="4" stroke="#16232e" stroke-width="2.2"/>
+    <polygon points="-1,0 -1,8 5,4" fill="#16232e"/>
+    <g stroke="#a8bcd0" stroke-width="1.2">
+      <rect x="7"  y="-12" width="11" height="11" fill="#d62f27"/>
+      <rect x="18" y="-12" width="11" height="11" fill="#d62f27"/>
+      <rect x="7"  y="-1"  width="11" height="11" fill="#ed7551"/>
+      <rect x="18" y="-1"  width="11" height="11" fill="#f7f7f2"/>
+    </g>
+  </g>
+  <text x="1582" y="748" font-size="36" font-weight="600" fill="#16232e">Hotspot change</text>
+  <text x="1582" y="800" font-size="36" fill="#4a5c6b">Cells gained, lost or</text>
+  <text x="1582" y="846" font-size="36" fill="#4a5c6b">stable hot, reported</text>
+  <text x="1582" y="892" font-size="36" fill="#4a5c6b">as km² reclassified</text>
+</svg>

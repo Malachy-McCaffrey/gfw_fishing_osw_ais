@@ -228,6 +228,14 @@ trans_afe[(2, 3, None)]["matrix_condensed"]
 ::: {.callout-note}
 ## What these tables do and do not say
 Each surface is FDR-corrected within its own stage, and the transition tables describe how those classifications moved. There is **no statistical test of the difference between two Gi\* surfaces**. Read them as description, not as a significance test of change.
+
+Three consequences worth carrying into any sentence written from these numbers:
+
+- **The classes are a cross-tabulation, not a test.** `transitions.change_classes` joins two already-classified surfaces on `cell_id` and names the pair. No null hypothesis about the change is posed and no p-value is produced. Each stage controls its own false-discovery rate; the comparison controls neither jointly.
+- **Confidence tiers are collapsed.** `hot_status` flattens `Gi_Bin` ±1 / ±2 / ±3 to simply hot or cold, so a cell that strengthens from 90% to 99% confidence is labelled *stable hot* — the change maps show movement between classes, never intensification within one. The same flattening means a cell sitting near a threshold can flip on noise alone: z = 1.66 in one stage and z = 1.63 in the next reads as *lost hot* with nothing meaningful having happened.
+- **The areas are category membership, not effect size.** A figure such as +141 km² is the area whose classification changed. It carries no confidence interval, and belongs in prose as "km² that changed classification", never as "a significant increase of 141 km²".
+
+These tables and the change maps rest on Gi\* alone. Local Moran's I is FDR-corrected and reported separately (`cotype_transitions`); it contributes nothing to the classes above.
 :::
 
 ## The gear comparison
@@ -256,6 +264,11 @@ for gc in (None,) + cfg.ANALYSIS_GEAR_CLASSES:
     })
 pd.DataFrame(rows)
 ```
+
+::: {.callout-note appearance="simple"}
+The net areas above are km² that **changed classification** between two independently corrected
+surfaces, not tested differences — see *What these tables do and do not say*, above.
+:::
 
 ```{python}
 #| label: tbl-gear-rates

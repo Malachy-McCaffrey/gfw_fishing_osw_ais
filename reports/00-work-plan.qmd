@@ -262,7 +262,7 @@ Normalise by stage length (44 / 43 / 40 months) wherever absolute hours are comp
 Do not plot `VW1.shp`, `VW1_Buffer.shp`, `SRW_Buffer.shp`, or unfiltered `SNE_OWFs.shp`. Vineyard Wind 1 is not an Ørsted project and lies outside the study AOI, which is the dissolved union of the SFW + RWF + SRW 10 km buffers only (`gfw_aoi_creation.py:63-68`). The `*_Buffer` layers are AOI-construction intermediates, not features to display.
 :::
 
-Draw SFW / RWF / SRW as unfilled polygons with a heavy outline over every hotspot and change map, labelled, with the AOI boundary (`Orsted_AOI.shp`) as a light outer frame. This is what lets a viewer read hotspot movement *relative to the lease areas* rather than in empty space — the single highest-value addition to the figures.
+Draw SFW / RWF / SRW as unfilled polygons with an outline over every hotspot and change map, labelled. This is what lets a viewer read hotspot movement *relative to the lease areas* rather than in empty space.
 
 #### Poster figure strategy: change map vs three maps
 

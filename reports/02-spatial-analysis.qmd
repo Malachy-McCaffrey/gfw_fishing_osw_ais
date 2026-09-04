@@ -60,7 +60,7 @@ NAVTEQ, and Esri*.
 The grid was built by drawing an independent 0.01° square around each GFW point and reprojecting with `PRESERVE_SHAPE`, so adjacent cells do not share exact vertices. `Queen.from_dataframe` returns **1.96 mean neighbours across 74 disconnected components**, which would render every local statistic meaningless.
 :::
 
-Contiguity is instead derived analytically from the lattice indices the shapefile already carries. Two cells are Queen neighbours iff their integer indices differ by at most one on each axis — no geometry predicate, no tolerance.
+Contiguity is instead derived analytically from the lattice indices the shapefile already carries. Two cells are Queen neighbours if their integer indices differ by at most one on each axis — no geometry predicate, no tolerance.
 
 ```{python}
 #| label: tbl-weights

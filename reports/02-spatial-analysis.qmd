@@ -335,11 +335,13 @@ Fixed gear intensifies per vessel in **both independent measures** while mobile 
 
 ### The fishery grew around the leases, not inside them
 
-Effort inside the lease footprints is **flat in absolute terms** — `{python} in_lease(1)` → `{python} in_lease(2)` → `{python} in_lease(3)` hours per month — while effort elsewhere in the AOI nearly doubles, `{python} outside_lease(1)` → `{python} outside_lease(2)` → `{python} outside_lease(3)`. The in-lease share therefore falls from `{python} lease_pct(1)`% to `{python} lease_pct(3)`%.
+Effort inside the lease footprints **declines slightly** — `{python} in_lease(1)` → `{python} in_lease(2)` → `{python} in_lease(3)` hours per month — while effort elsewhere in the AOI rises, `{python} outside_lease(1)` → `{python} outside_lease(2)` → `{python} outside_lease(3)`.
+
+Read those outside figures with care. `lease_share` normalises by stage length but **not** by vessel count, so they carry the AIS-coverage growth described above and are not a measured increase in fishing. What survives that caveat is the **ratio**, which is computed within the same records and is therefore unaffected by a uniform expansion in who carries a transponder: the in-lease share falls from `{python} lease_pct(1)`% to `{python} lease_pct(3)`%.
 
 That distinction matters: this is relative displacement, not absolute abandonment. Mobile gear shows the clearest withdrawal, its in-lease share falling `{python} lease_pct(1, "MOBILE")`% → `{python} lease_pct(2, "MOBILE")`% → `{python} lease_pct(3, "MOBILE")`%.
 
-Vessel presence does the opposite. Presence inside the leases *rises* (96.5 → 102.9 → 128.0 hours per month) on a roughly constant share. **Vessels increasingly move through the lease areas without fishing in them.**
+Vessel presence does the opposite. Presence inside the leases *rises* — `{python} in_lease(1, ds="vp")` → `{python} in_lease(2, ds="vp")` → `{python} in_lease(3, ds="vp")` hours per month — while its in-lease share barely moves, `{python} lease_pct(1, ds="vp")`% → `{python} lease_pct(3, ds="vp")`%. **Vessels increasingly move through the lease areas without fishing in them.**
 
 Structurally, Global Moran's I for effort climbs `{python} moran(1)` → `{python} moran(2)` → `{python} moran(3)` — activity concentrates into a consolidated band along the western AOI margin. Net hotspot area change from Stage 2 to Stage 3 is `{python} hot_net("MOBILE")` km² for mobile against `{python} hot_net("FIXED")` km² for fixed.
 

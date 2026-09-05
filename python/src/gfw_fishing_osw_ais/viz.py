@@ -36,6 +36,7 @@ log = logging.getLogger(__name__)
 
 __all__ = [
     "change_map",
+    "gear_rate_divergence",
     "gear_small_multiples",
     "gi_map",
     "hero_figure",
@@ -65,6 +66,13 @@ GI_BIN_LABELS = {
     2: "Hot 95%",
     3: "Hot 99%",
 }
+
+# Series colours for the per-vessel rate figure. Cool for mobile, warm for
+# fixed, echoing the map ramps without reusing their exact steps. Checked
+# against the data-viz colour rules: OKLab Delta E is 20.3 under simulated
+# protanopia and 24.2 under deuteranopia, both well clear of the 8.0 target,
+# and 30.7 unsimulated.
+GEAR_SERIES = {"MOBILE": "#2f6fb0", "FIXED": "#d62f27"}
 
 OWF_EDGE = "#111111"
 
@@ -329,6 +337,7 @@ def gear_small_multiples(
     from_stage: int = 2,
     to_stage: int = 3,
     ncols: int | None = None,
+    gear_classes: tuple[str, ...] | None = None,
 ) -> plt.Figure:
     """One change map per gear class, for the transition that matters most.
 
@@ -337,14 +346,22 @@ def gear_small_multiples(
     across stages is a finding in its own right -- it reflects GFW registry
     coverage rather than fleet behaviour.
 
+    ``gear_classes`` defaults to every analysis class present in
+    ``transitions_out``. Pass a subset to drop a panel -- vessel presence omits
+    pole-and-line here, which keeps it directly comparable with the
+    apparent-fishing-effort figure beside it on the poster.
+
     ``ncols`` defaults to one wide row, which is right on a landscape screen.
     On a portrait poster it is not: vessel presence has four gear classes, and
     a 1x4 row is 3.2:1, so spanning a narrow column leaves each map too small
     to read. Passing ``ncols=2`` stacks them 2x2 at roughly 1.6:1 instead.
     """
     spec = cfg.DATASETS[dataset]
+    # gear_classes narrows the panel set without touching the dataset spec, so
+    # dropping a panel from one figure does not remove that class from every
+    # other vessel-presence result.
     classes = [
-        g for g in cfg.ANALYSIS_GEAR_CLASSES
+        g for g in (gear_classes or cfg.ANALYSIS_GEAR_CLASSES)
         if (from_stage, to_stage, g) in transitions_out
     ]
     ncols = ncols or len(classes)
@@ -380,6 +397,87 @@ def gear_small_multiples(
     # The legend band is a fixed height, so it needs a smaller share of a
     # taller multi-row figure.
     fig.tight_layout(rect=(0, 0.14 if nrows == 1 else 0.08, 1, 0.94))
+    return fig
+
+
+def gear_rate_divergence(
+    stage_rates_by_dataset: dict,
+    gear_classes: tuple[str, ...] = ("MOBILE", "FIXED"),
+) -> plt.Figure:
+    """Hours per vessel-month by gear class, one panel per measure.
+
+    The poster's replication panel. Dividing hours by months *and* by distinct
+    MMSIs takes fleet growth out of the comparison, which is what turns an
+    apparent 56% rise in effort into a flat per-vessel line -- and leaves the
+    gear divergence as the only thing still moving.
+
+    Both panels share a y axis on purpose. The two measures are independent, so
+    the argument rests on the *shape* being the same in each; a second scale
+    would let the eye match curves that do not actually agree. That is also why
+    this is two panels rather than one chart with two y axes.
+
+    ``stage_rates_by_dataset`` maps a dataset key to a ``transitions.stage_rates``
+    frame, so the numbers come from the pipeline rather than being typed in.
+    """
+    keys = list(stage_rates_by_dataset)
+    fig, axes = plt.subplots(
+        1, len(keys), figsize=(4.9 * len(keys), 4.5), sharey=True
+    )
+    axes = [axes] if len(keys) == 1 else list(axes)
+
+    stages = list(cfg.STAGE_NUMBERS)
+    for ax, key in zip(axes, keys):
+        frame = stage_rates_by_dataset[key].set_index(["gear_class", "stage"])
+        for gear in gear_classes:
+            y = [frame.loc[(gear, s), "hours_per_vessel_month"] for s in stages]
+            colour = GEAR_SERIES[gear]
+            ax.plot(stages, y, color=colour, linewidth=2, zorder=3,
+                    marker="o", markersize=7, markerfacecolor=colour,
+                    markeredgecolor="white", markeredgewidth=1.6)
+            # Direct-label the endpoint as well as the legend, so identity never
+            # rests on colour alone.
+            ax.annotate(f"{y[-1]:.2f}", xy=(stages[-1], y[-1]),
+                        xytext=(8, 0), textcoords="offset points",
+                        color=colour, fontsize=10, fontweight="bold",
+                        va="center", zorder=4)
+
+        ax.set_title(cfg.DATASETS[key].label, fontsize=11, pad=10)
+        ax.set_xticks(stages)
+        ax.set_xticklabels([cfg.STAGES[s].label for s in stages], fontsize=9.5)
+        ax.set_xlim(stages[0] - 0.28, stages[-1] + 0.46)
+        ax.grid(axis="y", color="#e6ebef", linewidth=1, zorder=0)
+        ax.set_axisbelow(True)
+        ax.tick_params(axis="y", labelsize=9.5, length=0)
+        ax.tick_params(axis="x", length=0)
+        for side in ("top", "right", "left"):
+            ax.spines[side].set_visible(False)
+        ax.spines["bottom"].set_color("#c8d2da")
+
+    axes[0].set_ylabel("hours per vessel-month", fontsize=10)
+
+    handles = [
+        mpl.lines.Line2D([], [], color=GEAR_SERIES[g], linewidth=2, marker="o",
+                         markersize=7, markerfacecolor=GEAR_SERIES[g],
+                         markeredgecolor="white", markeredgewidth=1.6,
+                         label=g.replace("_", " ").title())
+        for g in gear_classes
+    ]
+    fig.legend(handles=handles, loc="upper right", ncol=len(gear_classes),
+               frameon=False, fontsize=10, bbox_to_anchor=(0.99, 0.99))
+
+    fig.suptitle("The real signal is gear divergence \u2014 and it replicates",
+                 fontsize=13.5, x=0.012, ha="left", y=0.985)
+
+    caption = (
+        "Fixed gear intensifies per vessel in both measures while mobile returns to its "
+        "baseline in both. The two panels share a scale.\nCoverage growth would lift both "
+        "gear types equally, so a divergence this consistent is a behavioural difference "
+        "rather than a sampling artefact."
+    )
+    fig.text(0.012, 0.015, caption, fontsize=9, color="#4a5c6b",
+             ha="left", va="bottom", linespacing=1.5)
+
+    fig.tight_layout(rect=(0, 0.11, 1, 0.90))
     return fig
 
 

@@ -34,6 +34,7 @@ from . import io
 log = logging.getLogger(__name__)
 
 __all__ = [
+    "behavioural_screen",
     "distribution_diagnostics",
     "gear_composition",
     "limitations",
@@ -124,6 +125,106 @@ def transform_comparison(
             )
 
     return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------
+# Charter-vessel behavioural screen
+# ---------------------------------------------------------------------------
+def behavioural_screen(
+    dataset: str = "afe", stage: int = 3, min_hours: float = 20.0
+) -> pd.DataFrame:
+    """Score every vessel active in ``stage`` on the charter-vessel signature.
+
+    This reproduces, as a function, the investigation that found the eleven
+    offshore-wind charter and research vessels the original name-based R
+    filter missed (``00b-plan-revisions.qmd``, "Scope added: charter-vessel
+    contamination"). Three signals, read together:
+
+    * ``pct_hours_inside_lease`` -- share of this stage's hours worked inside
+      an Orsted lease footprint, against ``fleet_pct_inside_lease`` (the
+      clean fleet, i.e. vessels not on the removal list).
+    * ``prior_hours`` -- hours in the stages before ``stage``. Zero means no
+      activity before construction began.
+    * ``hours_per_active_day`` -- hours worked per distinct day with any
+      record, against the same figure for the clean fleet.
+
+    Runs on ``io.load_raw``, not ``io.load_stage``: the cleaned per-stage CSVs
+    already have every removal-list vessel filtered out, so scoring them would
+    always come back empty. ``already_removed`` marks rows also present in
+    ``references/vessel_removals.csv``, so a result can be read against the
+    current list rather than only used to grow it.
+
+    This is a screen, not a verdict -- it ranks candidates for investigation,
+    it does not confirm them. It also has a structural blind spot: it detects
+    vessels whose behaviour *changed*, so an established fishing vessel that
+    took a charter (the Virginia Wave case) will not score high on
+    ``prior_hours`` and can escape it for exactly that reason.
+    """
+    spec = cfg.DATASETS[dataset]
+    stage_spec = cfg.STAGES[stage]
+    mmsi_col = cfg.VESSEL_COUNT_COLUMN
+    hours_col = spec.hours_column
+    owf = io.load_owf()
+    leases = owf.geometry.union_all()
+
+    raw = io.load_raw(dataset)
+
+    target = raw.loc[raw["Development Stage"] == stage_spec.label].copy()
+    target["gear_class"] = io.classify_gear(target["Gear Type"])
+    target = target[target["gear_class"] != cfg.EXCLUDED]
+
+    pts = io.to_points(target)
+    pts["in_lease"] = pts.geometry.within(leases)
+
+    prior_hours = pd.Series(dtype=float)
+    for earlier in cfg.STAGE_NUMBERS:
+        if earlier >= stage:
+            continue
+        prior = raw.loc[raw["Development Stage"] == cfg.STAGES[earlier].label]
+        prior_hours = prior_hours.add(
+            prior.groupby(mmsi_col)[hours_col].sum(), fill_value=0.0
+        )
+
+    clean_pts = io.to_points(io.load_stage(dataset, stage))
+    clean_pts["in_lease"] = clean_pts.geometry.within(leases)
+    fleet_total = float(clean_pts[hours_col].sum())
+    fleet_inside = float(clean_pts.loc[clean_pts["in_lease"], hours_col].sum())
+    fleet_pct_inside_lease = round(100 * fleet_inside / fleet_total, 1) if fleet_total else np.nan
+    fleet_active_days = clean_pts.groupby(mmsi_col, observed=True)["Time Range"].nunique()
+    fleet_hpad = (clean_pts.groupby(mmsi_col, observed=True)[hours_col].sum() / fleet_active_days)
+    fleet_hours_per_active_day = round(float(fleet_hpad.median()), 1) if len(fleet_hpad) else np.nan
+
+    removed = set(io.load_removal_list()["MMSI"])
+    names = target.drop_duplicates(mmsi_col).set_index(mmsi_col)["Vessel Name"]
+
+    rows = []
+    for mmsi, sub in pts.groupby(mmsi_col, observed=True):
+        hours = float(sub[hours_col].sum())
+        if hours < min_hours:
+            continue
+        inside = float(sub.loc[sub["in_lease"], hours_col].sum())
+        active_days = int(sub["Time Range"].nunique())
+        rows.append(
+            {
+                "dataset": dataset,
+                "stage": stage,
+                "MMSI": mmsi,
+                "Vessel_Name": names.get(mmsi, "?"),
+                "hours": round(hours, 1),
+                "pct_hours_inside_lease": round(100 * inside / hours, 1),
+                "fleet_pct_inside_lease": fleet_pct_inside_lease,
+                "prior_hours": round(float(prior_hours.get(mmsi, 0.0)), 1),
+                "active_days": active_days,
+                "hours_per_active_day": round(hours / active_days, 1) if active_days else np.nan,
+                "fleet_hours_per_active_day": fleet_hours_per_active_day,
+                "already_removed": mmsi in removed,
+            }
+        )
+
+    screen = pd.DataFrame(rows)
+    if screen.empty:
+        return screen
+    return screen.sort_values("pct_hours_inside_lease", ascending=False).reset_index(drop=True)
 
 
 # ---------------------------------------------------------------------------

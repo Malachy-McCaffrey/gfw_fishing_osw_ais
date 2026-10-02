@@ -432,15 +432,15 @@ gfw_afe_id <- gfw_afe_id |>
     `Development Stage` = case_when(
       between(`Year Month`,
               as.Date("2016-01-01"),
-              as.Date("2019-08-01")) ~ "Stage 1", # 31 months of pre-monitoring
+              as.Date("2019-08-01")) ~ "Stage 1", # 44 months of pre-monitoring
 
       between(`Year Month`,
               as.Date("2019-09-01"),
-              as.Date("2023-03-01")) ~ "Stage 2", # protected species surveys began in 9/19. 42 months of pre-construction monitoring 
+              as.Date("2023-03-01")) ~ "Stage 2", # protected species surveys began in 9/19. 43 months of pre-construction monitoring 
 
       between(`Year Month`,
               as.Date("2023-04-01"),
-              as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 37 months of construction & operation across SFW, RWF, and SRW
+              as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 40 months of construction & operation across SFW, RWF, and SRW
     )
   )
 ```
@@ -522,7 +522,7 @@ rmVessels <- read_csv(rmPath, col_types = cols(.default = col_character()))
 stopifnot(
   "removal list is missing required columns" =
     all(c("Vessel_Name", "MMSI", "Scope", "Identified_By",
-          "Confidence", "Date_Added") %in% names(rmVessels))
+          "Confidence") %in% names(rmVessels))
 )
 
 rmProblems <- c(

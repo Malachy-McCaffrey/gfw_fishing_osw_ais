@@ -56,7 +56,7 @@ Revisions fall into three kinds — **defects found** (things the plan or a naiv
 
 ::: {.callout-important}
 ## The one that matters most
-Eleven offshore-wind charter and research vessels were removed that the original R filter missed, along with two already-listed hulls whose variant name strings had leaked past it. Before that correction, the analysis would have reported **increased fishing effort inside Revolution Wind during construction** and a **448 km² cold-spot region**, both of which were artifacts. See @sec-charter.
+Fifteen offshore-wind charter and research vessels have been removed that the original R filter missed, along with two already-listed hulls whose variant name strings had leaked past it. Before the first correction, the analysis would have reported **increased fishing effort inside Revolution Wind during construction** and a **448 km² cold-spot region**, both of which were artifacts. See @sec-charter.
 :::
 
 ## Defects found
@@ -178,14 +178,27 @@ This is the same identity fragmentation that gives MMSI `367052470` five Vessel 
 
 Thirteen MMSIs were added to the filter, of which two — `338389953` and `367336020` — are hulls already on Ørsted's list whose variant name strings had leaked past the name-based match. The net addition is therefore **eleven vessels**, bringing the list to 46.
 
+**Update, 2026-10-02 — three more Ørsted-confirmed hulls and one more behavioural flag.** A follow-up check against Ørsted's own vessel spreadsheet found two more name collisions of exactly the kind this correction exists to fix — a different hull sharing a name with one already on the list, now distinguished by MMSI rather than name:
+
+| Name in data | MMSI | Already listed under |
+|---|---|---|
+| MADISON KATE | **368068580** | `367044720` (same name, different hull) |
+| ITALIAN PRINCESS | **367371160** | `367347070` (same name, different hull) |
+
+The same spreadsheet also confirmed **KATHY MARIE** (`366758680`), overturning the "investigated and deliberately retained" call below: that call was reasoned correctly — it *is* a different hull from KATHRYN MARIE — but concluded the wrong thing from it, since a genuinely separate hull can still be a charter. One further vessel, **ESS PRIDE** (`367411950`), was added at `possible` confidence from the behavioural screen alone: 100% of its hours sit inside a lease, but on only 2 active days and 22.1 hours, against real Stage 1–2 history, so the figure is thin evidence rather than a clean burst.
+
+The list is now **50** vessels (38 `orsted_list`, 9 `behavioural_screen`, plus the three singletons — `marinetraffic`, `known_research_vessel`, `name_variant`).
+
 Every removal now lives in `references/vessel_removals.csv`, read by both the R pull script and Python, with the stage treatment carried in a `Scope` column rather than in code:
 
-- **`stages_2_3`** (Stages 2–3 removed, Stage 1 kept) — 45 charter vessels, all genuine fishing hulls whose pre-construction records are real activity. Mirrors the treatment already applied to Ørsted's own list.
+- **`stages_2_3`** (Stages 2–3 removed, Stage 1 kept) — 49 charter vessels, all genuine fishing hulls whose pre-construction records are real activity. Mirrors the treatment already applied to Ørsted's own list.
 - **`all_stages`** — NOAA GLORIA MICHELLE, a NOAA Fisheries research vessel that GFW classes as `FISHING`/`TRAWLERS`, so it was inflating the mobile gear class.
 
 The same file records `Identified_By` and `Confidence` for each vessel, so the strength of the evidence travels with the list rather than sitting in a code comment.
 
-**Investigated and deliberately retained:** KATHY MARIE (366758680) is a different hull from the listed KATHRYN MARIE (367387310), with its own decade of history and a normal 4.8 h/active day — removing it on name similarity would repeat the error being fixed. BENTHIC HARVESTER has a suggestive name and a `FIXED_GEAR` label but contributes zero hours to Stage 3 fixed effort.
+**Investigated and deliberately retained:** BENTHIC HARVESTER has a suggestive name and a `FIXED_GEAR` label but contributes zero hours to Stage 3 fixed effort.
+
+~~KATHY MARIE (366758680) is a different hull from the listed KATHRYN MARIE (367387310), with its own decade of history and a normal 4.8 h/active day — removing it on name similarity would repeat the error being fixed.~~ **Superseded above: confirmed by Ørsted as a charter and removed.** The reasoning wasn't wrong about the hull's identity, only about what that identity implied.
 
 ### Effect on results
 
@@ -206,7 +219,7 @@ Every figure above except the struck-through *Stage 3 (pre)* column is computed 
 
 ### Caveat to carry into the write-up
 
-Eight of the eleven rest on a **behavioural screen** (`Identified_By == "behavioural_screen"`, `Confidence` of `probable` or `possible`); a ninth, *Cailyn and Maren*, on a name-and-timing match to an already-listed hull. Only *Virginia Wave* and NOAA *Gloria Michelle* are confirmed by outside evidence. The pattern is convergent — lease concentration, onset timing, burst duration, operating intensity — but MarineTraffic lists all of them as "Fishing," because chartering a commercial fishing hull is exactly what these projects do. State this as a behavioural screen pending vessel-identity confirmation, not as established fact.
+Nine of the fifteen rest on a **behavioural screen** (`Identified_By == "behavioural_screen"`, `Confidence` of `probable` or `possible`); a tenth, *Cailyn and Maren*, on a name-and-timing match to an already-listed hull. The remaining five — *Virginia Wave*, NOAA *Gloria Michelle*, *Madison Kate* (368068580), *Italian Princess* (367371160), and *Kathy Marie* (366758680) — are confirmed by outside evidence; the latter three came from Ørsted's own spreadsheet on a later pass, after name collisions with already-listed hulls had kept them off the first one. The pattern among the unconfirmed nine is convergent — lease concentration, onset timing, burst duration, operating intensity — but MarineTraffic lists all of them as "Fishing," because chartering a commercial fishing hull is exactly what these projects do. State those nine as a behavioural screen pending vessel-identity confirmation, not as established fact.
 
 The screen also has a structural blind spot: it detects vessels whose behaviour *changed*, so an established fishing vessel that took a charter is hard to distinguish from one that shifted grounds. *Virginia Wave* escaped the first screen for precisely this reason.
 
@@ -259,7 +272,7 @@ beside it. Re-derive these again after any change to figure geometry —
 
 The reference strip (`afe_stage_gi`, 31.6 cm at full width) does not fit and is cut. That follows the plan's own cut order, amended for a single-dataset lead: transition matrices → reference strip → unresolved panel → vessel-presence replication last, because with one dataset leading it is the replication that carries the credibility.
 
-Two things the poster must state in text rather than leave to the figures: apparent fishing effort is a **model output**, not observed fishing; and the absence of cold spots on every effort panel is a **result**, not an omission — a cell cannot sit significantly below a floor of zero.
+Three things the poster must state in text rather than leave to the figures: apparent fishing effort is a **model output**, not observed fishing; the absence of cold spots on every effort panel is a **result**, not an omission — a cell cannot sit significantly below a floor of zero; and vessel presence's own pole-and-line panel finds **zero FDR-significant cold cells at either stage**, for a different reason than the effort panels — not a floor of zero, but FDR correction: the strongest cold candidate (z = −2.31, uncorrected p = 0.021) never approaches the Benjamini-Hochberg threshold that 200+ far stronger hot cells (z up to 9.9) already clear. The hotspots on that panel are real; the blank where cold should be is not a gap in the analysis.
 
 ## Unchanged from the plan
 

@@ -82,6 +82,12 @@ def test_missing_column_is_named(removals_at, valid_frame):
         io.load_removal_list()
 
 
+def test_date_added_is_optional(removals_at, valid_frame):
+    """The shipped list has no Date_Added column at all -- this must not raise."""
+    removals_at(valid_frame.drop(columns=["Date_Added"]))
+    assert len(io.load_removal_list()) == 2
+
+
 @pytest.mark.parametrize(
     "column, bad_value, expected",
     [

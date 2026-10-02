@@ -346,10 +346,31 @@ def gear_small_multiples(
     across stages is a finding in its own right -- it reflects GFW registry
     coverage rather than fleet behaviour.
 
+    ``POLE_AND_LINE`` is included for every dataset, including apparent fishing
+    effort, where it occupies only 2.4-6.2 percent of grid cells
+    (``cfg.DATASETS["afe"].gi_star_gear_classes`` omits it from the validated
+    Gi* run for exactly that reason). Shown rather than hidden, on the same
+    "a finding in its own right" reasoning as ``UNRESOLVED`` above, but a panel
+    computed outside the dataset's own ``gi_star_gear_classes`` is marked with
+    an asterisk and a figure-level caveat rather than presented as a confirmed
+    hotspot -- ``transitions_out`` must then include that key, which
+    ``spatial_stats.run_all`` only does if called with an explicit
+    ``gear_classes`` override.
+
+    A second marker, a dagger, flags a panel with zero FDR-significant cold
+    cells at either stage *when some other panel in the same figure has them*
+    -- vessel presence's pole-and-line class is the current example: its
+    weakest cold candidate (z = -2.31) never clears the Benjamini-Hochberg
+    threshold that 200+ far stronger hot cells already do, while mobile,
+    fixed, and unresolved in the same figure all carry real cold spots. Every
+    apparent-fishing-effort panel has zero cold cells too, but for a different,
+    dataset-wide reason (the sqrt-transformed surface is structurally
+    zero-floored), already stated once in prose rather than repeated per
+    panel -- so the dagger does not fire when *no* panel in the figure has
+    cold cells, only when the absence is specific to one class.
+
     ``gear_classes`` defaults to every analysis class present in
-    ``transitions_out``. Pass a subset to drop a panel -- vessel presence omits
-    pole-and-line here, which keeps it directly comparable with the
-    apparent-fishing-effort figure beside it on the poster.
+    ``transitions_out``. Pass a subset to drop a panel.
 
     ``ncols`` defaults to one wide row, which is right on a landscape screen.
     On a portrait poster it is not: vessel presence has four gear classes, and
@@ -373,12 +394,32 @@ def gear_small_multiples(
     for spare in axes[len(classes):]:          # a 2x2 holding 3 maps
         spare.set_axis_off()
 
+    # A class has "cold present" if either endpoint stage classified any cell
+    # cold, independent of how that cell's status moved -- this only asks
+    # whether the class ever finds a cold cell here, not how it changed.
+    cold_present = {}
+    for gear_class in classes:
+        status = transitions_out[(from_stage, to_stage, gear_class)]["classes"]
+        cold_present[gear_class] = bool(
+            status["status_from"].eq("cold").any() or status["status_to"].eq("cold").any()
+        )
+    any_cold = any(cold_present.values())
+
+    thin = False
+    no_cold = False
     for ax, gear_class in zip(axes, classes):
         result = transitions_out[(from_stage, to_stage, gear_class)]
         summary = result["summary"].set_index("change")
+        title = gear_class.replace("_", " ").title()
+        if gear_class not in spec.gi_star_gear_classes:
+            title += "*"
+            thin = True
+        elif any_cold and not cold_present[gear_class]:
+            title += "†"
+            no_cold = True
         change_map(
             ax, result["classes"], grid, owf, aoi,
-            title=gear_class.replace("_", " ").title(), label_projects=False,
+            title=title, label_projects=False,
         )
         ax.annotate(
             f"+{summary.loc['gained hot', 'area_km2']:,.0f} / "
@@ -389,6 +430,21 @@ def gear_small_multiples(
 
     _legend(fig, tr.CHANGE_COLORS, ncol=5)
     _attribution(fig)
+    footnote_y = 0.004
+    if thin:
+        fig.text(
+            0.005, footnote_y,
+            "* sparse grid coverage -- Gi* on this class is descriptive, not a confirmed hotspot",
+            ha="left", va="bottom", fontsize=6.5, color="#666666",
+        )
+        footnote_y += 0.016
+    if no_cold:
+        fig.text(
+            0.005, footnote_y,
+            "† no FDR-significant cold cells at either stage -- hotspots are real; "
+            "correction removes the weaker cold candidates",
+            ha="left", va="bottom", fontsize=6.5, color="#666666",
+        )
     fig.suptitle(
         f"{spec.label} — {cfg.STAGES[from_stage].label} → "
         f"{cfg.STAGES[to_stage].label} by gear class",

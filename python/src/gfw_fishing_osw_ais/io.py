@@ -39,6 +39,7 @@ __all__ = [
     "load_grid",
     "load_removal_list",
     "load_owf",
+    "load_raw",
     "load_stage",
     "month_denominator",
     "to_points",
@@ -197,10 +198,11 @@ def load_removal_list() -> pd.DataFrame:
         if unknown:
             problems.append(f"unknown {column} value(s): {', '.join(unknown)}")
 
-    dated = removals.loc[removals["Date_Added"].str.strip() != "", "Date_Added"]
-    bad_dates = dated[~dated.str.fullmatch(r"\d{4}-\d{2}-\d{2}", na=False)]
-    if len(bad_dates):
-        problems.append(f"Date_Added not ISO yyyy-mm-dd: {', '.join(bad_dates)}")
+    if "Date_Added" in removals.columns:
+        dated = removals.loc[removals["Date_Added"].str.strip() != "", "Date_Added"]
+        bad_dates = dated[~dated.str.fullmatch(r"\d{4}-\d{2}-\d{2}", na=False)]
+        if len(bad_dates):
+            problems.append(f"Date_Added not ISO yyyy-mm-dd: {', '.join(bad_dates)}")
 
     if problems:
         raise ValueError(
@@ -287,6 +289,31 @@ def load_stage(dataset: str, stage: int) -> pd.DataFrame:
         df[spec.hours_column].sum(),
     )
     return df
+
+
+def load_raw(dataset: str) -> pd.DataFrame:
+    """Load the unfiltered GFW extract for ``dataset``, all three stages mixed.
+
+    Unlike ``load_stage``, this applies none of the R pipeline's cleaning: no
+    Orsted or supplementary vessel removal, no AFE hour threshold, no
+    non-fishing exclusion. ``load_stage`` is not usable for finding charter
+    vessels because it has already removed every vessel the removal list
+    names (``_apply_supplementary_removals``) -- scoring that output would
+    always come back empty. This is the one place that reads before any of
+    that filtering, which is what a behavioural screen needs to score.
+
+    Gitignored like the per-stage files; see ``load_stage``.
+    """
+    spec = _dataset_spec(dataset)
+    path = cfg.EXTERNAL_GFW_DIR / spec.raw_file
+    if not path.exists():
+        raise FileNotFoundError(f"Raw GFW extract not found: {path}")
+
+    return pd.read_csv(
+        path,
+        parse_dates=["Year Month", "Time Range"],
+        dtype={"MMSI": "string", "Vessel ID": "string"},
+    )
 
 
 def to_points(df: pd.DataFrame) -> gpd.GeoDataFrame:

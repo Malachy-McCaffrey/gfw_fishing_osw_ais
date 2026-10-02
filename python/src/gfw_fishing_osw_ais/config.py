@@ -238,6 +238,7 @@ class DatasetSpec:
     label: str
     hours_column: str      # column name in the per-stage CSVs
     stage_file: str        # format template, {stage} -> 1/2/3
+    raw_file: str          # unfiltered extract under EXTERNAL_GFW_DIR, all stages mixed
     sum_field: str
     month_mean_field: str
     sqrt_field: str
@@ -250,6 +251,7 @@ DATASETS = {
         label="Vessel presence",
         hours_column="Vessel Presence Hours",
         stage_file="gfw_vp{stage}_fv_sub.csv",
+        raw_file="gfw_vp_id.csv",
         sum_field="SumVesselHrs",
         month_mean_field="MonthMeanVesselHrs",
         sqrt_field="MMVH_sqrt",
@@ -262,6 +264,7 @@ DATASETS = {
         label="Apparent fishing effort",
         hours_column="Apparent Fishing Hours",
         stage_file="gfw_afe{stage}_id_sub.csv",
+        raw_file="gfw_afe_id.csv",
         sum_field="SumFishingHrs",
         month_mean_field="MonthMeanFishingHrs",
         sqrt_field="MMFH_sqrt",
@@ -310,7 +313,7 @@ VESSEL_COUNT_SENSITIVITY_COLUMN = "Vessel ID"
 # ---------------------------------------------------------------------------
 # Supplementary vessel removals
 # ---------------------------------------------------------------------------
-# The R pipeline removed 34 named Orsted survey and safety vessels for Stages
+# The R pipeline removed 35 named Orsted survey and safety vessels for Stages
 # 2-3 (Rmd:494-516). That filter matched on `Vessel Name` and leaked: several
 # charter vessels active during Revolution Wind construction were not on the
 # list. The removals below are applied on top of the per-stage CSVs.
@@ -344,12 +347,10 @@ REMOVAL_SCOPES = ("stages_2_3", "all_stages")
 #   possible  -- behavioural signature on small volume
 CONFIDENCE_LEVELS = ("confirmed", "probable", "possible")
 
-# Date_Added is validated for format whenever it is non-blank, so the column
-# has to be present for that check to run at all. Requiring it here turns a
-# missing column into the collected "missing columns" error rather than a
-# KeyError raised mid-validation.
+# Date_Added is optional -- validated for ISO yyyy-mm-dd format when present,
+# but not every row carries one, so it is not required here.
 REMOVAL_REQUIRED_COLUMNS = (
-    "Vessel_Name", "MMSI", "Scope", "Identified_By", "Confidence", "Date_Added",
+    "Vessel_Name", "MMSI", "Scope", "Identified_By", "Confidence",
 )
 
 # Stages from which a "stages_2_3" vessel is removed.

@@ -2,7 +2,7 @@
 """Global and local spatial statistics.
 
 Open-source replacement for the ``arcpy.stats`` chain in
-``python/scripts/arcpy/gfw_vp_fv_spatial_stats_workflow.py`` and its AFE twin:
+``archive/python/scripts/arcpy/gfw_vp_fv_spatial_stats_workflow.py`` and its AFE twin:
 
 =========================================  =========================================
 arcpy tool                                 Replacement

@@ -3,7 +3,7 @@
 
 Run this only to (re)create the cache::
 
-    uv run python python/scripts/fetch_basemap.py
+    uv run python archive/python/scripts/fetch_basemap.py
 
 The figures read the committed rasters, never the network. That keeps figure
 regeneration offline, deterministic, and reproducible after the tile service

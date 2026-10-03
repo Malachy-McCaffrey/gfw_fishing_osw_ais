@@ -40,14 +40,15 @@ dependencies = [
 requires = ["uv_build>=0.12.9,<0.13.0"]
 build-backend = "uv_build"
 
-# The package lives at python/src/gfw_fishing_osw_ais, not the uv_build
-# default of src/. Note the backend is uv_build, so a [tool.hatch.*] block
-# would be inert here.
+# The package is archived at archive/python/src/gfw_fishing_osw_ais, not the
+# uv_build default of src/ -- the Python implementation is frozen, superseded
+# by the R workflow in r/, but still fully reproducible via uv from here. Note
+# the backend is uv_build, so a [tool.hatch.*] block would be inert here.
 [tool.pytest.ini_options]
-testpaths = ["python/tests"]
+testpaths = ["archive/python/tests"]
 
 [tool.uv.build-backend]
-module-root = "python/src"
+module-root = "archive/python/src"
 
 [dependency-groups]
 dev = [

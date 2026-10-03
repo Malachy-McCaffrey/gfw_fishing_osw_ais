@@ -14,7 +14,7 @@ spatial statistic on them. Two questions drive this module.
    rather than adjectives.
 
 The statistical tests are ported from
-``python/scripts/arcpy/gfw_vp_monthmeanhrs_distribution_diagnostics.py:75-114``,
+``archive/python/scripts/arcpy/gfw_vp_monthmeanhrs_distribution_diagnostics.py:75-114``,
 which was already pure scipy/matplotlib. Only the input changed: it read
 ArcGIS feature classes, this reads the aggregation in ``aggregate.py``.
 """

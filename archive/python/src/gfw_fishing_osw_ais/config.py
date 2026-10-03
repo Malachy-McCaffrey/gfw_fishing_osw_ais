@@ -6,7 +6,8 @@ reads data or has side effects, so it is safe to import from anywhere.
 
 All paths derive from the repository root rather than being hard-coded, so the
 workflow runs on any machine without editing -- unlike the archived arcpy
-scripts under ``python/scripts/arcpy/``, which embed absolute geodatabase paths.
+scripts under ``archive/python/scripts/arcpy/``, which embed absolute
+geodatabase paths.
 
 **No arcpy.** This package deliberately uses only open-source geospatial tools
 so the analysis is reproducible without an ArcGIS Pro licence.
@@ -24,10 +25,11 @@ def _find_repo_root(start: Path) -> Path:
     """Walk up from this file until the directory holding pyproject.toml.
 
     Deliberately not a fixed ``parents[n]`` index. The package has already been
-    relocated once -- from ``src/gfw_fishing_osw_ais`` to
-    ``python/src/gfw_fishing_osw_ais`` -- which silently changed its depth and
-    made every data path resolve one directory too shallow. Anchoring on a
-    marker file survives the next move.
+    relocated twice -- from ``src/gfw_fishing_osw_ais`` to
+    ``python/src/gfw_fishing_osw_ais``, then archived to
+    ``archive/python/src/gfw_fishing_osw_ais`` -- each time silently changing
+    its depth and risking every data path resolving one directory too
+    shallow. Anchoring on a marker file survives the next move too.
     """
     for candidate in (start, *start.parents):
         if (candidate / "pyproject.toml").is_file():
@@ -52,14 +54,15 @@ PROCESSED_GFW_DIR = PROCESSED_DIR / "gfw"
 SHP_AOI_DIR = DATA_DIR / "shp" / "aoi"
 SHP_OWF_DIR = DATA_DIR / "shp" / "owf"
 
-REPORTS_DIR = REPO_ROOT / "reports"
+# reports/ was archived alongside this package -- see archive/README.md.
+REPORTS_DIR = REPO_ROOT / "archive" / "reports"
 FIGURES_DIR = REPORTS_DIR / "figures"
 REFERENCES_DIR = REPO_ROOT / "references"
 
 # Cached Esri Ocean Basemap tiles, already warped to the analysis CRS. Fetched
-# once by python/scripts/fetch_basemap.py and committed, so that regenerating a
-# figure needs no network and returns the same pixels years from now -- a live
-# tile fetch would make the figures quietly irreproducible.
+# once by archive/python/scripts/fetch_basemap.py and committed, so that
+# regenerating a figure needs no network and returns the same pixels years
+# from now -- a live tile fetch would make the figures quietly irreproducible.
 BASEMAP_DIR = REFERENCES_DIR / "basemap"
 BASEMAP_AOI_PATH = BASEMAP_DIR / "aoi_ocean_utm19n.tif"
 BASEMAP_REGION_PATH = BASEMAP_DIR / "region_gray_utm19n.tif"

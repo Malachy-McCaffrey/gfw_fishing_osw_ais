@@ -2,7 +2,7 @@
 """Aggregate GFW point records onto the analysis grid.
 
 Open-source replacement for the arcpy spatial-join + pandas rollup in
-``python/scripts/arcpy/gfw_vp_stage_grid_summary.py`` and its AFE twin. The
+``archive/python/scripts/arcpy/gfw_vp_stage_grid_summary.py`` and its AFE twin. The
 rollup logic there was already plain pandas; only the join needed replacing,
 ``arcpy.analysis.SpatialJoin`` becoming ``geopandas.sjoin``.
 

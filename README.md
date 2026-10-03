@@ -2,34 +2,37 @@
 
 Geospatial analysis and statistical modeling workflows to quantify AIS vessel presence and apparent fishing effort proximal to three Orsted offshore wind projects in Southern New England. Pre-processed AIS vessel presence and apparent fishing effort data accessed from Global Fishing Watch 4Wings API via gfwr package. This research is in fulfillment of my master's thesis.
 
+**Status:** the analysis was developed in Python through the thesis write-up and poster. Active development has since moved to a simpler, R-only workflow in `r/`. The completed Python analysis is archived, not deleted — still fully reproducible, see `archive/README.md`.
+
 ---
 
 ## What is here
 
 | Path | Role |
 |---|---|
-| `r/scripts/rmd/gfw_vp_afe_dataPull_090126.Rmd` | The data pull. Queries the GFW 4Wings API, filters, assigns development stages, writes the analysis CSVs. |
-| `python/src/gfw_fishing_osw_ais/` | The analysis package: loaders, aggregation, spatial weights, spatial statistics, plots. |
-| `reports/*.qmd` | The written analysis. Renders to self-contained HTML. |
-| `references/` | Data dictionary and the vessel removal list. |
-| `python/tests/` | Test suite. Runs on a bare clone; tests needing the GFW extracts skip. |
+| `r/scripts/rmd/gfw_vp_afe_dataPull_090126.Rmd` | The data pull. Queries the GFW 4Wings API, filters, assigns development stages, writes the analysis CSVs. Active. |
+| `r/` | Future home of the R-only analysis workflow, beyond the data pull above. |
+| `references/` | Data dictionary and the vessel removal list — shared by the R pull and the archived Python analysis. |
 | `data/shp/` | Committed spatial inputs — analysis grid, AOI, wind-project footprints. |
-| `python/notebooks/`, `python/scripts/arcpy/` | **Archived, not part of the reproducible path.** Exploratory notebooks and the original ArcGIS chain, superseded by `python/src/`. The arcpy scripts embed absolute geodatabase paths and require an ArcGIS Pro licence. |
+| `archive/` | **The complete, frozen Python implementation and its written output** — analysis package, tests, scripts, notebooks, and the rendered Quarto reports. Superseded, not deleted; see `archive/README.md`. |
 
 ## What ships with the clone, and what does not
 
-**Committed:** the spatial layers under `data/shp/` (analysis grid of 3,375 cells at 0.01° in EPSG:32619, the study-area boundary, five offshore-wind layers), the vessel removal list, and the poster figures under `reports/figures/`.
+**Committed:** the spatial layers under `data/shp/` (analysis grid of 3,375 cells at 0.01° in EPSG:32619, the study-area boundary, five offshore-wind layers), the vessel removal list, and the poster figures under `archive/reports/figures/`.
 
 **Not committed:** the Global Fishing Watch extracts under `data/external/gfw/` and `data/processed/gfw/`. These are the files the analysis reads, and regenerating them requires a GFW API token and a run of the R pull. You only need them to *change* the analysis — the frozen render cache lets you rebuild the reports as they stand without either. Rendered HTML is untracked, being reproducible from the `.qmd` sources.
 
 ## Requirements
 
-- **Python 3.12** and [uv](https://docs.astral.sh/uv/). The lockfile pins every version.
-- **R 4.5** with [renv](https://rstudio.github.io/renv/). `renv.lock` pins all 129 packages, including `gfwr` 3.0 from the Global Fishing Watch r-universe.
-- **Quarto** (developed against 1.10) to render the reports.
+- **R 4.5** with [renv](https://rstudio.github.io/renv/). `renv.lock` pins all 129 packages, including `gfwr` 3.0 from the Global Fishing Watch r-universe. Needed for the active workflow — the data pull, and whatever R analysis follows it.
 - **A Global Fishing Watch API token.** Request one from the GFW API portal at <https://globalfishingwatch.org/our-apis>.
+- **Python 3.12** and [uv](https://docs.astral.sh/uv/), plus **Quarto** (developed against 1.10). Only needed to reproduce the archived analysis under `archive/` — not required for the R workflow above. The lockfile pins every version.
 
 ## Reproducing the analysis
+
+Steps 1–3 are the active, core workflow. Steps 4–5 regenerate the archived Python
+analysis and are optional — skip them unless you specifically need to re-render
+`archive/reports/` or re-run something under `archive/python/`.
 
 **1. Store your GFW API token.** It is read from the environment as `GFW_TOKEN`. Put it in a project-level `.Renviron`, which is gitignored:
 
@@ -49,20 +52,20 @@ renv::restore()
 
 **3. Run the data pull.** Knit `r/scripts/rmd/gfw_vp_afe_dataPull_090126.Rmd` **with the repository root as the working directory** — every path in it is repo-relative. It queries the API in eleven calendar-year calls per dataset, creates its own output directories, and writes the analysis CSVs into `data/processed/gfw/`.
 
-**4. Install the Python environment.**
+**4. Install the archived Python environment.**
 
 ```sh
 uv sync --locked
 ```
 
-**5. Render the reports.**
+**5. Render the archived reports.**
 
 ```sh
-cd reports
+cd archive/reports
 uv run quarto render
 ```
 
-Run Quarto through `uv run` so it resolves the project interpreter rather than a system Python.
+Run Quarto through `uv run` so it resolves the project interpreter rather than a system Python. `uv` finds the repository root the same way regardless of which directory you run it from, so this works unchanged even though `reports/` now lives under `archive/`.
 
 ## Tests
 
@@ -70,20 +73,20 @@ Run Quarto through `uv run` so it resolves the project interpreter rather than a
 uv run python -m pytest
 ```
 
-The suite covers the input validators, the gear lookup, the spatial-weights
-construction, and the vessel removals. It runs on a bare clone: everything
-resting on the committed spatial layers and the removal list executes, and the
-tests that need the GFW extracts skip rather than fail. CI runs the same command
-on every push.
+Validates the archived Python package: the input validators, the gear lookup,
+the spatial-weights construction, and the vessel removals. It runs on a bare
+clone: everything resting on the committed spatial layers and the removal list
+executes, and the tests that need the GFW extracts skip rather than fail. CI
+runs the same command on every push.
 
 ## Notes on reproducibility
 
-- **Paths resolve from the repository root**, located by walking up to `pyproject.toml`. Nothing needs editing to run on another machine, and there are no absolute paths in `python/src`, `r/scripts` or `reports`.
+- **Paths resolve from the repository root**, located by walking up to `pyproject.toml`. Nothing needs editing to run on another machine, and there are no absolute paths in `archive/python/src`, `r/scripts` or `archive/reports`.
 - **Permutation-based statistics are seeded** (`config.RANDOM_SEED`), so Local Moran's I results are stable across runs. Gi\* uses analytic p-values and is deterministic by construction. The archived arcpy workflow set no seed and could not be reproduced.
-- **The vessel removal list is a single tracked file**, `references/vessel_removals.csv`, read by both the R pull and Python and schema-validated on load in each. Adding or reclassifying a vessel is a one-row edit; nothing vessel-specific is hard-coded in either language.
+- **The vessel removal list is a single tracked file**, `references/vessel_removals.csv`, read by both the R pull and the archived Python analysis and schema-validated on load in each. Adding or reclassifying a vessel is a one-row edit; nothing vessel-specific is hard-coded in either language.
 - **No arcpy.** The analysis runs entirely on open-source geospatial tooling, so it reproduces without an ArcGIS licence.
-- **Both environments are locked**, `uv.lock` for Python and `renv.lock` for R, so the analysis runs against the versions it was written against rather than whatever is current.
-- **Quarto renders are frozen** (`freeze: auto`) and the cache under `reports/_freeze/` is committed, so `quarto render` rebuilds every report from a bare clone **without a GFW token or the extracts**. Editing a `.qmd` re-executes that document, which does need the data; refresh the cache in the same commit.
+- **Both environments are locked**, `uv.lock` for the archived Python analysis and `renv.lock` for R, so each runs against the versions it was written against rather than whatever is current.
+- **Quarto renders are frozen** (`freeze: auto`) and the cache under `archive/reports/_freeze/` is committed, so `quarto render` rebuilds every report from a bare clone **without a GFW token or the extracts**. Editing a `.qmd` re-executes that document, which does need the data; refresh the cache in the same commit.
 
 ## Citation
 

@@ -3,7 +3,7 @@
 
 Run this to (re)write ``reports/figures/{afe,vp}_gear_change_s2s3.{png,pdf,svg}``::
 
-    uv run python python/scripts/build_gear_change_figures.py
+    uv run python archive/python/scripts/build_gear_change_figures.py
 
 Both figures include a ``POLE_AND_LINE`` panel. For vessel presence that class
 is already in ``cfg.DATASETS["vp"].gi_star_gear_classes``, so it comes free

@@ -20,7 +20,7 @@ Geospatial analysis and statistical modeling workflows to quantify AIS vessel pr
 
 **Committed:** the spatial layers under `data/shp/` (analysis grid of 3,375 cells at 0.01° in EPSG:32619, the study-area boundary, five offshore-wind layers), the vessel removal list, and the poster figures under `archive/reports/figures/`.
 
-**Not committed:** the Global Fishing Watch extracts under `data/external/gfw/` and `data/processed/gfw/`. These are the files the analysis reads, and regenerating them requires a GFW API token and a run of the R pull. You only need them to *change* the analysis — the frozen render cache lets you rebuild the reports as they stand without either. Rendered HTML is untracked, being reproducible from the `.qmd` sources.
+**Not committed:** the Global Fishing Watch extracts under `data/raw/gfw/` and `data/processed/gfw/`. These are the files the analysis reads, and regenerating them requires a GFW API token and a run of the R pull. You only need them to *change* the analysis — the frozen render cache lets you rebuild the reports as they stand without either. Rendered HTML is untracked, being reproducible from the `.qmd` sources.
 
 ## Requirements
 

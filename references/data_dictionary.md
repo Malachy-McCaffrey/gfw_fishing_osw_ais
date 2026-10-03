@@ -7,7 +7,7 @@ Every field the analysis reads or produces. Source data is gitignored; see
 
 ## Source data
 
-### `data/external/gfw/gfw_{vp,afe}_id.csv`
+### `data/raw/gfw/gfw_{vp,afe}_id.csv`
 
 Unfiltered API output, 18 columns. One row = one vessel × one 0.01° cell × one day.
 

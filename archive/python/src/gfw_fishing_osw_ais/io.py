@@ -305,7 +305,7 @@ def load_raw(dataset: str) -> pd.DataFrame:
     Gitignored like the per-stage files; see ``load_stage``.
     """
     spec = _dataset_spec(dataset)
-    path = cfg.EXTERNAL_GFW_DIR / spec.raw_file
+    path = cfg.RAW_GFW_DIR / spec.raw_file
     if not path.exists():
         raise FileNotFoundError(f"Raw GFW extract not found: {path}")
 

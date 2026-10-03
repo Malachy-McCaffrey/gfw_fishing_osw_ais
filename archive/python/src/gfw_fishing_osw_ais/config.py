@@ -43,7 +43,8 @@ def _find_repo_root(start: Path) -> Path:
 REPO_ROOT = _find_repo_root(Path(__file__).resolve().parent)
 
 DATA_DIR = REPO_ROOT / "data"
-EXTERNAL_GFW_DIR = DATA_DIR / "external" / "gfw"
+# Renamed from data/external to data/raw for consistency with PROCESSED_GFW_DIR.
+RAW_GFW_DIR = DATA_DIR / "raw" / "gfw"
 PROCESSED_DIR = DATA_DIR / "processed"
 
 # The cleaned per-stage CSVs the analysis reads. An early version of the R
@@ -241,7 +242,7 @@ class DatasetSpec:
     label: str
     hours_column: str      # column name in the per-stage CSVs
     stage_file: str        # format template, {stage} -> 1/2/3
-    raw_file: str          # unfiltered extract under EXTERNAL_GFW_DIR, all stages mixed
+    raw_file: str          # unfiltered extract under RAW_GFW_DIR, all stages mixed
     sum_field: str
     month_mean_field: str
     sqrt_field: str

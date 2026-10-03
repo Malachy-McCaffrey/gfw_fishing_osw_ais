@@ -80,12 +80,10 @@ renv/staging/
 # ==========================================
 # Bulk and derived data live on disk, not in git. Keep the directories
 # themselves so scripts that write into them work on a fresh clone.
-data/external/*
-data/processed/*
 data/raw/*
-!data/external/.gitkeep
-!data/processed/.gitkeep
+data/processed/*
 !data/raw/.gitkeep
+!data/processed/.gitkeep
 # Data-shaped json anywhere under data/ (config json elsewhere stays tracked)
 data/**/*.json
 # Runtime artifacts, repo-wide

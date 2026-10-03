@@ -153,7 +153,7 @@ comments are correct; the 31/42/37 set elsewhere in the file is stale.
 | 2 | 2019-09-01 → 2023-03-01 | 43 |
 | 3 | 2023-04-01 → 2026-07-01 | 40 |
 
-**Raw external files** (unfiltered — `data/external/gfw/`)
+**Raw external files** (unfiltered — `data/raw/gfw/`)
 
 | | VP | AFE |
 |---|---|---|

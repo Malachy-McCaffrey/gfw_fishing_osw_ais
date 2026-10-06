@@ -3,7 +3,7 @@
 library(usethis)
 
 
-edit_r_environ(scope = "project")
+edit_r_environ()
 
 Sys.getenv("GFW_TOKEN")
 

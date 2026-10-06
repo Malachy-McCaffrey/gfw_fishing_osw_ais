@@ -20,6 +20,7 @@ library(gfwr)
 library(tidyverse)
 library(sf)
 library(lubridate)
+library(spdep)
 ```
 
 ## Define key, date ranges, and spatial extent for data querying

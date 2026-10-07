@@ -92,7 +92,7 @@ vp_id_16 <- gfw_ais_presence(spatial_resolution = "HIGH", # 0.01 degree ~ 1 km
                                start_date = start_16, # date range must be 366 days or less
                                end_date = end_16,
                                region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
+                               region = orsted_aoi) # 13138 obs
 
 # 2017
 
@@ -102,7 +102,7 @@ vp_id_17 <- gfw_ais_presence(spatial_resolution = "HIGH",
                                start_date = start_17, 
                                end_date = end_17,
                                region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
+                               region = orsted_aoi) # 18379 obs
 
 
 # 2018
@@ -113,7 +113,7 @@ vp_id_18 <- gfw_ais_presence(spatial_resolution = "HIGH",
                                start_date = start_18, 
                                end_date = end_18,
                                region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
+                               region = orsted_aoi) # 21803 obs
 
 # 2019
 
@@ -123,7 +123,7 @@ vp_id_19 <- gfw_ais_presence(spatial_resolution = "HIGH",
                                start_date = start_19,
                                end_date = end_19,
                                region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
+                               region = orsted_aoi) # 29652 obs
 
 # 2020
 
@@ -133,7 +133,7 @@ vp_id_20 <- gfw_ais_presence(spatial_resolution = "HIGH",
                                start_date = start_20, 
                                end_date = end_20,
                                region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
+                               region = orsted_aoi) # 29334 obs
 
 # 2021
 
@@ -143,7 +143,7 @@ vp_id_21 <- gfw_ais_presence(spatial_resolution = "HIGH",
                                start_date = start_21, 
                                end_date = end_21,
                                region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
+                               region = orsted_aoi) # 23319 obs
 
 # 2022
 
@@ -153,7 +153,7 @@ vp_id_22 <- gfw_ais_presence(spatial_resolution = "HIGH",
                                start_date = start_22, 
                                end_date = end_22,
                                region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
+                               region = orsted_aoi) # 25927 obs
 
 # 2023
 
@@ -163,7 +163,7 @@ vp_id_23 <- gfw_ais_presence(spatial_resolution = "HIGH",
                                start_date = start_23, 
                                end_date = end_23,
                                region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
+                               region = orsted_aoi) # 34505 obs
 
 # 2024
 
@@ -173,7 +173,7 @@ vp_id_24 <- gfw_ais_presence(spatial_resolution = "HIGH",
                                start_date = start_24, 
                                end_date = end_24,
                                region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
+                               region = orsted_aoi) # 72271 obs
 
 # 2025
 
@@ -183,7 +183,7 @@ vp_id_25 <- gfw_ais_presence(spatial_resolution = "HIGH",
                                start_date = start_25, 
                                end_date = end_25,
                                region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
+                               region = orsted_aoi) # 94193 obs
 
 # 2026
 
@@ -193,7 +193,146 @@ vp_id_26 <- gfw_ais_presence(spatial_resolution = "HIGH",
                                start_date = start_26, 
                                end_date = end_26,
                                region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
+                               region = orsted_aoi) # 84125 obs
+```
+
+## Retrieve apparent fishing effort data within aoi and date ranges grouped by vessel_id
+
+```{r}
+# 2016
+
+afe_id_16 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_16, 
+                               end_date = end_16,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi) # 758 obs
+
+# 2017
+
+afe_id_17 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH",
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_17, 
+                               end_date = end_17,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi) # 851 obs
+
+
+# 2018
+
+afe_id_18 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH",
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_18, 
+                               end_date = end_18,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi) # 1107 obs
+
+# 2019
+
+afe_id_19 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_19,
+                               end_date = end_19,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi) # 1088 obs
+
+# 2020
+
+afe_id_20 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH",
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_20,
+                               end_date = end_20,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi) # 3946 obs
+
+# 2021
+
+afe_id_21 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_21,
+                               end_date = end_21,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi) # 2282 obs
+
+# 2022
+
+afe_id_22 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_22,
+                               end_date = end_22,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi) # 3140 obs
+
+# 2023
+
+afe_id_23 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID", 
+                               start_date = start_23, 
+                               end_date = end_23,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi) # 5833 obs
+
+# 2024
+
+afe_id_24 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID",
+                               start_date = start_24, 
+                               end_date = end_24,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi) # 16008
+
+# 2025
+
+afe_id_25 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH",
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID",
+                               start_date = start_25, 
+                               end_date = end_25,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi) # 17084 obs
+
+# 2026
+
+afe_id_26 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH",
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID",
+                               start_date = start_26,
+                               end_date = end_26,
+                               region_source = "USER_SHAPEFILE",
+                               region = orsted_aoi) # 16088 obs
+```
+
+## Combine datasets
+
+```{r}
+# append rows
+gfw_vp_id <- rbind(vp_id_16, vp_id_17, vp_id_18, vp_id_19, vp_id_20, vp_id_21, vp_id_22, vp_id_23, vp_id_24, vp_id_25, vp_id_26)
+
+gfw_afe_id <- rbind(afe_id_16, afe_id_17, afe_id_18, afe_id_19, afe_id_20, afe_id_21, afe_id_22, afe_id_23, afe_id_24, afe_id_25, afe_id_26)
+```
+
+## Export raw datasets
+
+```{r}
+# create subdirectory for end users
+# dir.create("data/raw/gfw",  recursive = TRUE, showWarnings = FALSE)
+
+# vp_id
+
+write_csv(gfw_vp_id, "data/raw/gfw/gfw_vp_id.csv")
+
+# afe_id
+
+write_csv(gfw_afe_id, "data/raw/gfw/gfw_afe_id.csv")
 ```
 
 ## Subset VP datasets to fishing vessel type
@@ -253,132 +392,6 @@ vp_fv_25 <- vp_id_25 |>
 
 vp_fv_26 <- vp_id_26 |> 
   filter(`Vessel Type` == "FISHING")
-```
-
-## Retrieve apparent fishing effort data within aoi and date ranges grouped by vessel_id
-
-```{r}
-# 2016
-
-afe_id_16 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
-                               temporal_resolution = "DAILY",
-                               group_by = "VESSEL_ID", 
-                               start_date = start_16, 
-                               end_date = end_16,
-                               region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
-
-# 2017
-
-afe_id_17 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH",
-                               temporal_resolution = "DAILY",
-                               group_by = "VESSEL_ID", 
-                               start_date = start_17, 
-                               end_date = end_17,
-                               region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
-
-
-# 2018
-
-afe_id_18 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH",
-                               temporal_resolution = "DAILY",
-                               group_by = "VESSEL_ID", 
-                               start_date = start_18, 
-                               end_date = end_18,
-                               region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
-
-# 2019
-
-afe_id_19 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
-                               temporal_resolution = "DAILY",
-                               group_by = "VESSEL_ID", 
-                               start_date = start_19,
-                               end_date = end_19,
-                               region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
-
-# 2020
-
-afe_id_20 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH",
-                               temporal_resolution = "DAILY",
-                               group_by = "VESSEL_ID", 
-                               start_date = start_20,
-                               end_date = end_20,
-                               region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
-
-# 2021
-
-afe_id_21 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
-                               temporal_resolution = "DAILY",
-                               group_by = "VESSEL_ID", 
-                               start_date = start_21,
-                               end_date = end_21,
-                               region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
-
-# 2022
-
-afe_id_22 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
-                               temporal_resolution = "DAILY",
-                               group_by = "VESSEL_ID", 
-                               start_date = start_22,
-                               end_date = end_22,
-                               region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
-
-# 2023
-
-afe_id_23 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
-                               temporal_resolution = "DAILY",
-                               group_by = "VESSEL_ID", 
-                               start_date = start_23, 
-                               end_date = end_23,
-                               region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
-
-# 2024
-
-afe_id_24 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH", 
-                               temporal_resolution = "DAILY",
-                               group_by = "VESSEL_ID",
-                               start_date = start_24, 
-                               end_date = end_24,
-                               region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
-
-# 2025
-
-afe_id_25 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH",
-                               temporal_resolution = "DAILY",
-                               group_by = "VESSEL_ID",
-                               start_date = start_25, 
-                               end_date = end_25,
-                               region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
-
-# 2026
-
-afe_id_26 <- gfw_ais_fishing_hours(spatial_resolution = "HIGH",
-                               temporal_resolution = "DAILY",
-                               group_by = "VESSEL_ID",
-                               start_date = start_26,
-                               end_date = end_26,
-                               region_source = "USER_SHAPEFILE",
-                               region = orsted_aoi)
-```
-
-## Combine datasets
-
-```{r}
-# append rows
-gfw_vp_id <- rbind(vp_id_16, vp_id_17, vp_id_18, vp_id_19, vp_id_20, vp_id_21, vp_id_22, vp_id_23, vp_id_24, vp_id_25, vp_id_26)
-
-gfw_vp_fv <- rbind(vp_fv_16, vp_fv_17, vp_fv_18, vp_fv_19, vp_fv_20, vp_fv_21, vp_fv_22, vp_fv_23, vp_fv_24, vp_fv_25, vp_fv_26)
-
-gfw_afe_id <- rbind(afe_id_16, afe_id_17, afe_id_18, afe_id_19, afe_id_20, afe_id_21, afe_id_22, afe_id_23, afe_id_24, afe_id_25, afe_id_26)
 ```
 
 ## create yyyy-mm column
@@ -731,12 +744,7 @@ IDs_perDev |>
 # so on a fresh clone these do not exist and write_csv() would fail on the first
 # export. Create them here rather than making the reader do it by hand.
 
-dir.create("data/raw/gfw",  recursive = TRUE, showWarnings = FALSE)
 dir.create("data/processed/gfw", recursive = TRUE, showWarnings = FALSE)
-
-# all vp
-
-write_csv(gfw_vp_id, "data/raw/gfw/gfw_vp_id.csv")
 
 # orsted vessels 
 
@@ -749,12 +757,4 @@ write_csv(gfw_vp_fv_sub, "data/processed/gfw/gfw_vp_fv_sub.csv")
 write_csv(gfw_vp1_fv_sub, "data/processed/gfw/gfw_vp1_fv_sub.csv")
 write_csv(gfw_vp2_fv_sub, "data/processed/gfw/gfw_vp2_fv_sub.csv")
 write_csv(gfw_vp3_fv_sub, "data/processed/gfw/gfw_vp3_fv_sub.csv")
-
-# afe_id
-
-write_csv(gfw_afe_id, "data/raw/gfw/gfw_afe_id.csv")
-write_csv(gfw_afe_id_sub, "data/processed/gfw/gfw_afe_id_sub.csv")
-write_csv(gfw_afe1_id_sub, "data/processed/gfw/gfw_afe1_id_sub.csv")
-write_csv(gfw_afe2_id_sub, "data/processed/gfw/gfw_afe2_id_sub.csv")
-write_csv(gfw_afe3_id_sub, "data/processed/gfw/gfw_afe3_id_sub.csv")
 ```

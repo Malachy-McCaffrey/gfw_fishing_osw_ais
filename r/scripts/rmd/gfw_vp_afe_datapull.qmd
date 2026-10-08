@@ -73,7 +73,7 @@ end_26 <- '2026-10-01' # as of 10/06/2026
 ```{r}
 # define sf object to pass to `region` argument
 
-orsted_aoi <- st_read("data/shp/aoi/Orsted_AOI.shp") |> 
+orsted_aoi <- st_read("data/sf/aoi/Orsted_AOI.shp") |> 
   select(geometry)
 
 # map aoi to make sure it was created correctly

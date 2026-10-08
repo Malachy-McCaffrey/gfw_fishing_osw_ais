@@ -161,7 +161,7 @@ grid_wgs <- st_sf(cells,
 ## Reproject and add cell attributes
 
 ```{r}
-aoi_utm <- st_read("data/shp/aoi/Orsted_AOI.shp", quiet = TRUE) |>
+aoi_utm <- st_read("data/sf/aoi/Orsted_AOI.shp", quiet = TRUE) |>
   st_union() |>
   st_transform(crs_utm)
 
@@ -336,14 +336,14 @@ stopifnot("grid has cells with no neighbours" = all(card(nb) > 0))
 ## Export
 
 ```{r}
-# grid (supersedes data/shp/aoi/Orsted_sqGrid_utm19n.shp, which was built
+# grid (supersedes archive/fishnet/Orsted_sqGrid_utm19n.shp, which was built
 # treating Lat/Lon as centroids)
-st_write(grid_utm, "data/shp/fishnet/gfw_grid_utm19n.gpkg", delete_dsn = TRUE)
+st_write(grid_utm, "data/sf/fishnet/gfw_grid_utm19n.gpkg", delete_dsn = TRUE)
 
 # raw-data aggregates (all vessel types); file names keep the raw "_id" suffix
 # so they are not mistaken for fishing-vessel totals
-write_csv(vp_cell_stage,  "data/shp/fishnet/gfw_vp_id_cell_stage.csv")
-write_csv(afe_cell_stage, "data/shp/fishnet/gfw_afe_id_cell_stage.csv")
-write_csv(vp_cell_month,  "data/shp/fishnet/gfw_vp_id_cell_month.csv")
-write_csv(afe_cell_month, "data/shp/fishnet/gfw_afe_id_cell_month.csv")
+write_csv(vp_cell_stage,  "data/interim/gfw/gfw_vp_id_cell_stage.csv")
+write_csv(afe_cell_stage, "data/interim/gfw/gfw_afe_id_cell_stage.csv")
+write_csv(vp_cell_month,  "data/interim/gfw/gfw_vp_id_cell_month.csv")
+write_csv(afe_cell_month, "data/interim/gfw/gfw_afe_id_cell_month.csv")
 ```

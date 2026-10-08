@@ -46,9 +46,9 @@ Filtering already applied by the R pipeline (`gfw_vp_afe_dataPull_090126.Rmd:494
 
 | File | CRS | Description |
 |---|---|---|
-| `data/shp/aoi/Orsted_AOI.shp` | EPSG:4326 | Study boundary — dissolved union of the SFW + RWF + SRW 10 km buffers |
-| `data/shp/owf/{SFW,RWF,SRW}.shp` | EPSG:3857 | Ørsted lease areas. **Reproject before use.** |
-| `data/shp/owf/{VW1,VW1_Buffer,SRW_Buffer}.shp`, `SNE_OWFs.shp` | EPSG:3857 | **Not used.** Vineyard Wind is not an Ørsted project and lies outside the AOI; `*_Buffer` are AOI-construction intermediates. |
+| `data/sf/aoi/Orsted_AOI.shp` | EPSG:4326 | Study boundary — dissolved union of the SFW + RWF + SRW 10 km buffers |
+| `data/sf/owf/{SFW,RWF,SRW}.shp` | EPSG:3857 | Ørsted lease areas. **Reproject before use.** |
+| `data/sf/owf/{VW1,VW1_Buffer,SRW_Buffer}.shp`, `SNE_OWFs.shp` | EPSG:3857 | **Not used.** Vineyard Wind is not an Ørsted project and lies outside the AOI; `*_Buffer` are AOI-construction intermediates. |
 
 ---
 

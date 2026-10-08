@@ -328,11 +328,11 @@ gfw_afe_id <- rbind(afe_id_16, afe_id_17, afe_id_18, afe_id_19, afe_id_20, afe_i
 
 # vp_id
 
-write_csv(gfw_vp_id, "data/raw/gfw/gfw_vp_id.csv")
+write_csv(gfw_vp_id, "data/raw/gfw/gfw_vp_id.csv") # 446646 obs
 
 # afe_id
 
-write_csv(gfw_afe_id, "data/raw/gfw/gfw_afe_id.csv")
+write_csv(gfw_afe_id, "data/raw/gfw/gfw_afe_id.csv") # 68185 obs
 ```
 
 ## Subset VP datasets to fishing vessel type
@@ -420,7 +420,7 @@ gfw_vp_id <- gfw_vp_id |>
 
       between(`Year Month`,
               as.Date("2023-04-01"),
-              as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 40 months of construction & operation across SFW, RWF, and SRW
+              as.Date("2026-09-01")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 42 months (through 09/26) of construction & operation across SFW, RWF, and SRW
     )
   )
 
@@ -437,7 +437,7 @@ gfw_vp_fv <- gfw_vp_fv |>
 
       between(`Year Month`,
               as.Date("2023-04-01"),
-              as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 40 months of construction & operation across SFW, RWF, and SRW
+              as.Date("2026-09-01")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 42 months (through 09/26) of construction & operation across SFW, RWF, and SRW
     )
   )
 
@@ -454,7 +454,7 @@ gfw_afe_id <- gfw_afe_id |>
 
       between(`Year Month`,
               as.Date("2023-04-01"),
-              as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 40 months of construction & operation across SFW, RWF, and SRW
+              as.Date("2026-09-01")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 42 months (through 09/26) of construction & operation across SFW, RWF, and SRW
     )
   )
 ```

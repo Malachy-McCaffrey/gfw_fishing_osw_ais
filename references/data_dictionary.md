@@ -13,7 +13,7 @@ Unfiltered API output, 18 columns. One row = one vessel × one 0.01° cell × on
 
 | Column | Type | Description |
 |---|---|---|
-| `Lat`, `Lon` | float | 0.01° cell centroid, WGS 84 (EPSG:4326) |
+| `Lat`, `Lon` | float | Lower-left corner of the 0.01° cell, WGS 84 (EPSG:4326). The cell spans `Lon`–`Lon + 0.01`, `Lat`–`Lat + 0.01`. Values carry float32 noise (e.g. `-71.209999`); snap with `round(x / 0.01)`, never `floor()`. |
 | `Time Range` | date | The day the record covers |
 | `Vessel ID` | string | GFW identity **segment** UUID. Not a stable hull identifier — one MMSI can carry up to five. Do not use for vessel counts. |
 | `Flag` | string | ISO3 registration |
@@ -46,7 +46,6 @@ Filtering already applied by the R pipeline (`gfw_vp_afe_dataPull_090126.Rmd:494
 
 | File | CRS | Description |
 |---|---|---|
-| `data/shp/aoi/Orsted_sqGrid_utm19n.shp` | EPSG:32619 | 3,375 analysis cells. Carries `Lon_C`, `Lat_C` (0.01° centroids), `Area_m2`, `Area_km2`. |
 | `data/shp/aoi/Orsted_AOI.shp` | EPSG:4326 | Study boundary — dissolved union of the SFW + RWF + SRW 10 km buffers |
 | `data/shp/owf/{SFW,RWF,SRW}.shp` | EPSG:3857 | Ørsted lease areas. **Reproject before use.** |
 | `data/shp/owf/{VW1,VW1_Buffer,SRW_Buffer}.shp`, `SNE_OWFs.shp` | EPSG:3857 | **Not used.** Vineyard Wind is not an Ørsted project and lies outside the AOI; `*_Buffer` are AOI-construction intermediates. |
@@ -72,12 +71,12 @@ attribute, so this is a lookup, not an inference.
 
 | Field | Description |
 |---|---|
-| `cell_id` | Zero-based positional index into the grid; the join key throughout |
+| `cell_id` | `"ix_iy"`, where `ix = round(Lon / 0.01)` and `iy = round(Lat / 0.01)` from GFW's lower-left coordinates (`gfw_fishnet_grid.qmd`); the join key throughout. The archived Python pipeline used a zero-based positional index into the old centroid-based grid instead. |
 | `SumVesselHrs` / `SumFishingHrs` | Total hours in the cell for that stage and gear class |
 | `SumVesselCount` | Distinct **MMSIs** |
 | `SumVesselIdCount` | Distinct Vessel IDs — sensitivity column only |
 | `TotalRecords` | Row count |
-| `MonthMeanVesselHrs` / `MonthMeanFishingHrs` | Sum ÷ **stage length** (44 / 43 / 40). Not per-cell active months, so zeros are structural. |
+| `MonthMeanVesselHrs` / `MonthMeanFishingHrs` | Sum ÷ **stage length** (44 / 43 / 42). Not per-cell active months, so zeros are structural. |
 | `MMVH_sqrt` / `MMFH_sqrt` | Square root of the above. The primary analysis surface. |
 
 ### Spatial statistics (`spatial_stats.run_stage`)
@@ -106,9 +105,9 @@ Mutually exclusive, so counts sum to the grid size: `stable hot`, `gained hot`,
 |---|---|---|---|
 | 1 | 2016-01-01 → 2019-08-01 | 44 | Pre-monitoring baseline |
 | 2 | 2019-09-01 → 2023-03-01 | 43 | Protected-species surveys began 09/2019 |
-| 3 | 2023-04-01 → 2026-07-01 | 40 | Seabed prep for South Fork Wind began 04/2023 |
+| 3 | 2023-04-01 → 2026-09-01 | 42 | Seabed prep for South Fork Wind began 04/2023 |
 
-Stage 3's final month is partial — data ends 2026-07-13.
+Stage 3 runs through the end of the current pull — data ends 2026-09-30.
 
 ---
 

@@ -99,3 +99,6 @@ data/**/*.json
 # Claude Code machine-local settings
 .claude/settings.local.json
 
+
+# Personal scratch work (exploratory scripts and figures) - not tracked
+r/scratchpad/

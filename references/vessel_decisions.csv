@@ -1,1 +1,1 @@
-decision,decided_on,MMSI,valid_from,valid_to,Vessel_Name,hull_class,gear_class,activity_excluded,Operation,Identified_By,Confidence,evidence_ref,gfw_vessel_type,gfw_gear_type,pull_date,Notes
+decision,decided_on,MMSI,valid_from,valid_to,Vessel_Name,hull_class,activity_excluded,Operation,Identified_By,Confidence,evidence_ref,gfw_vessel_type,gfw_gear_type,pull_date,Notes

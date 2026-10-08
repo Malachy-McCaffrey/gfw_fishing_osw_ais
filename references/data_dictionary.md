@@ -168,10 +168,12 @@ Used by `r/scripts/rmd/gfw_vessel_filtering.qmd`.
 
 | File | Tracked | Role |
 |---|---|---|
-| `references/vessel_decisions.csv` | yes | Review decisions, the only file edited by hand. Crosswalk columns plus `decision` (`accept` / `reject`) and `decided_on`. A decision for a removal-list MMSI replaces that vessel's removal-list row. |
-| `references/vessel_crosswalk.csv` | yes | **Generated** every run from `vessel_removals.csv` and the accepted decisions. One row per MMSI per validity window (`valid_from`–`valid_to`), with `hull_class`, `gear_class`, `activity_excluded` and `Confidence`. Do not edit. |
+| `references/vessel_decisions.csv` | yes | Hull and activity decisions, edited by hand. Crosswalk columns plus `decision` (`accept` / `reject`) and `decided_on`. A decision for a removal-list MMSI replaces that vessel's removal-list row. |
+| `references/vessel_gear.csv` | yes | Gear corrections, edited by hand: `MMSI`, optional `valid_from`/`valid_to`, `gear_class` (`MOBILE` / `FIXED` / `POLE_AND_LINE` / `UNRESOLVED`), `basis`, `evidence_ref`, `decision`, `decided_on`. An accepted row overrides GFW's gear for that vessel's records in the window; independent of the crosswalk, so a charter vessel's gear can be fixed without touching its exclusion. |
+| `references/vessel_crosswalk.csv` | yes | **Generated** every run from `vessel_removals.csv` and the accepted decisions. One row per MMSI per validity window (`valid_from`–`valid_to`), with `hull_class`, `activity_excluded` and `Confidence`, and GFW's labels in the current pull. Do not edit. |
 | `references/garfo_permit_codes.csv` | yes | Meaning of each GARFO fishery permit code: permit type, gear hint, open access, NOAA source |
-| `data/processed/vessel_review/vessel_review.csv` | no | **Generated** review sheet: candidates, evidence and a suggested decision per vessel. Rows marked `accept` / `reject` are copied into `vessel_decisions.csv` on the next run. |
+| `data/processed/vessel_review/vessel_review.csv` | no | **Generated** hull/activity review sheet: candidates, evidence and a suggested decision per vessel. Rows marked `accept` / `reject` are copied into `vessel_decisions.csv` on the next run. |
+| `data/processed/vessel_review/gear_review.csv` | no | **Generated** gear review sheet: every removal-list fishing vessel, plus fishing vessels with unresolved GFW gear or GARFO permits that disagree, with a suggested gear class. Marked rows are copied into `vessel_gear.csv` on the next run. |
 | `data/raw/vessel_evidence/` | no | GFW identity API cache (queried IDs with date, status and dataset version) and the GARFO permit lists in `registries/` |
 
 ---

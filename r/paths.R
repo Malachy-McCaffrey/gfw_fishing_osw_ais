@@ -26,6 +26,7 @@ gfw_paths <- list(
   review        = "data/processed/vessel_review",        # generated review sheet
   removals      = "references/vessel_removals.csv",
   decisions     = "references/vessel_decisions.csv",
+  gear          = "references/vessel_gear.csv",          # gear corrections
   crosswalk     = "references/vessel_crosswalk.csv",     # generated from the two above
   permit_codes  = "references/garfo_permit_codes.csv"
 )

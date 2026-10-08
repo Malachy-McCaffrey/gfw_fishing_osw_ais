@@ -1,0 +1,3 @@
+decision,decided_on,MMSI,valid_from,valid_to,Vessel_Name,gear_class,basis,evidence_ref,gfw_gear_type,pull_date,Notes
+accept,2026-10-08,338389953,,,CAILYN & MAREN / CAILYN MAREN,FIXED,analyst knowledge; GARFO lobster trap Area 2 permit,"GARFO hull RI5599X; permit 153035 (CAILYN AND MAREN, 2020-2024)",FISHING,2026-10-06,Lobster trap boat. Removal-list charter vessel; GFW gear unresolved
+accept,2026-10-08,338538875,,,CAILYN AND MAREN,FIXED,analyst knowledge; GARFO lobster trap Area 2 permit,"GARFO hull RI7799XV; permit 155294 (CAILYN AND MAREN II, 2025-2026)",POLE_AND_LINE,2026-10-06,"Lobster trap boat, likely the newer hull CAILYN AND MAREN II (AIS from 2025-11); matched to GARFO by timing, not name. Removal-list charter vessel; GFW gear POLE_AND_LINE"

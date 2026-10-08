@@ -335,71 +335,10 @@ write_csv(gfw_vp_id, "data/raw/gfw/gfw_vp_id.csv") # 446646 obs
 write_csv(gfw_afe_id, "data/raw/gfw/gfw_afe_id.csv") # 68185 obs
 ```
 
-## Subset VP datasets to fishing vessel type
-
-```{r}
-# 2016
-
-vp_fv_16 <- vp_id_16 |> 
-  filter(`Vessel Type` == "FISHING")
-
-# 2017
-
-vp_fv_17 <- vp_id_17 |> 
-  filter(`Vessel Type` == "FISHING")
-
-# 2018
-
-vp_fv_18 <- vp_id_18 |> 
-  filter(`Vessel Type` == "FISHING")
-
-# 2019
-
-vp_fv_19 <- vp_id_19 |> 
-  filter(`Vessel Type` == "FISHING")
-
-# 2020
-
-vp_fv_20 <- vp_id_20 |> 
-  filter(`Vessel Type` == "FISHING")
-
-# 2021
-
-vp_fv_21 <- vp_id_21 |> 
-  filter(`Vessel Type` == "FISHING")
-
-# 2022
-
-vp_fv_22 <- vp_id_22 |> 
-  filter(`Vessel Type` == "FISHING")
-
-# 2023
-
-vp_fv_23 <- vp_id_23 |> 
-  filter(`Vessel Type` == "FISHING")
-
-# 2024
-
-vp_fv_24 <- vp_id_24 |> 
-  filter(`Vessel Type` == "FISHING")
-
-# 2025
-
-vp_fv_25 <- vp_id_25 |> 
-  filter(`Vessel Type` == "FISHING")
-
-# 2026
-
-vp_fv_26 <- vp_id_26 |> 
-  filter(`Vessel Type` == "FISHING")
-```
-
 ## create yyyy-mm column
 
 ```{r}
 gfw_vp_id$'Year Month' <- as.Date(format(gfw_vp_id$`Time Range`, "%Y-%m-01"))
-
-gfw_vp_fv$'Year Month' <- as.Date(format(gfw_vp_fv$`Time Range`, "%Y-%m-01"))
 
 gfw_afe_id$'Year Month' <- as.Date(format(gfw_afe_id$`Time Range`, "%Y-%m-01"))
 ```
@@ -420,24 +359,7 @@ gfw_vp_id <- gfw_vp_id |>
 
       between(`Year Month`,
               as.Date("2023-04-01"),
-              as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 40 months of construction & operation across SFW, RWF, and SRW
-    )
-  )
-
-gfw_vp_fv <- gfw_vp_fv |>
-  mutate(
-    `Development Stage` = case_when(
-      between(`Year Month`,
-              as.Date("2016-01-01"),
-              as.Date("2019-08-01")) ~ "Stage 1", # 44 months of pre-monitoring
-
-      between(`Year Month`,
-              as.Date("2019-09-01"),
-              as.Date("2023-03-01")) ~ "Stage 2", # protected species surveys began in 9/19. 43 months of pre-construction monitoring
-
-      between(`Year Month`,
-              as.Date("2023-04-01"),
-              as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 40 months of construction & operation across SFW, RWF, and SRW
+              as.Date("2026-09-30")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 42 months of construction & operation across SFW, RWF, and SRW
     )
   )
 
@@ -454,7 +376,7 @@ gfw_afe_id <- gfw_afe_id |>
 
       between(`Year Month`,
               as.Date("2023-04-01"),
-              as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 40 months of construction & operation across SFW, RWF, and SRW
+              as.Date("2026-09-30")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 42 months of construction & operation across SFW, RWF, and SRW
     )
   )
 ```
@@ -465,7 +387,6 @@ gfw_afe_id <- gfw_afe_id |>
 # check data
 
 summary(gfw_vp_id)
-summary(gfw_vp_fv)
 summary(gfw_afe_id) 
 ## zeros present in afe data
 ## Other, inconclusive, and passenger vessels in afe: 
@@ -473,8 +394,6 @@ summary(gfw_afe_id)
 # Pasque is fishing vessel out of Falmouth according to Marine Traffic. keep
 # Viking Star and Viking Starship are offshore fishing charters out of Montauk, NY. keep.
 # Off The Grid is a fishing yacht... keep
-
-#### imposing threshold: remove any records where fishing hours are less than .33 hours (20 mins) ####
 ```
 
 ## Remove vessels
@@ -599,13 +518,6 @@ gfw_vp_fv_sub <- gfw_vp_fv_sub |>
 
 gfw_afe_id_sub <- gfw_afe_id_sub |>
   filter(!as.character(MMSI) %in% rmCargo)
-```
-
-## Remove AFE records where fishing hours are less than .33 hours (20 mins)
-
-```{r}
-gfw_afe_id_sub <- gfw_afe_id_sub |> 
-  filter(`Apparent Fishing Hours` > 0.32) # 17311... 1595 obs removed
 ```
 
 ## remove unwanted cols

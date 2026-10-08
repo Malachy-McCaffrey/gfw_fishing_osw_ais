@@ -404,6 +404,33 @@
       "Maintainer": "Kirill Müller <kirill@cynkra.com>",
       "Repository": "CRAN"
     },
+    "boot": {
+      "Package": "boot",
+      "Version": "1.3-32",
+      "Source": "Repository",
+      "Priority": "recommended",
+      "Date": "2025-08-29",
+      "Authors@R": "c(person(\"Angelo\", \"Canty\", role = \"aut\", email = \"cantya@mcmaster.ca\",  comment = \"author of original code for S\"), person(\"Brian\", \"Ripley\", role = c(\"aut\", \"trl\"), email = \"Brian.Ripley@R-project.org\", comment = \"conversion to R, maintainer 1999--2022, author of parallel support\"), person(\"Alessandra R.\", \"Brazzale\", role = c(\"ctb\", \"cre\"), email = \"brazzale@stat.unipd.it\", comment = \"minor bug fixes\"))",
+      "Maintainer": "Alessandra R. Brazzale <brazzale@stat.unipd.it>",
+      "Note": "Maintainers are not available to give advice on using a package they did not author.",
+      "Description": "Functions and datasets for bootstrapping from the book \"Bootstrap Methods and Their Application\" by A. C. Davison and  D. V. Hinkley (1997, CUP), originally written by Angelo Canty for S.",
+      "Title": "Bootstrap Functions",
+      "Depends": [
+        "R (>= 3.0.0)",
+        "graphics",
+        "stats"
+      ],
+      "Suggests": [
+        "MASS",
+        "survival"
+      ],
+      "LazyData": "yes",
+      "ByteCompile": "yes",
+      "License": "Unlimited",
+      "NeedsCompilation": "no",
+      "Author": "Angelo Canty [aut] (author of original code for S), Brian Ripley [aut, trl] (conversion to R, maintainer 1999--2022, author of parallel support), Alessandra R. Brazzale [ctb, cre] (minor bug fixes)",
+      "Repository": "CRAN"
+    },
     "broom": {
       "Package": "broom",
       "Version": "1.0.12",
@@ -1097,6 +1124,31 @@
       "NeedsCompilation": "no",
       "Author": "Hadley Wickham [aut, cre], Maximilian Girlich [aut], Edgar Ruiz [aut], Posit Software, PBC [cph, fnd]",
       "Maintainer": "Hadley Wickham <hadley@posit.co>",
+      "Repository": "CRAN"
+    },
+    "deldir": {
+      "Package": "deldir",
+      "Version": "2.0-4",
+      "Source": "Repository",
+      "Date": "2024-02-27",
+      "Title": "Delaunay Triangulation and Dirichlet (Voronoi) Tessellation",
+      "Author": "Rolf Turner",
+      "Maintainer": "Rolf Turner <rolfturner@posteo.net>",
+      "Depends": [
+        "R (>= 3.5.0)"
+      ],
+      "Suggests": [
+        "polyclip"
+      ],
+      "Imports": [
+        "graphics",
+        "grDevices"
+      ],
+      "Description": "Calculates the Delaunay triangulation and the Dirichlet or Voronoi tessellation (with respect to the entire plane) of a planar point set. Plots triangulations and tessellations in various ways.  Clips tessellations to sub-windows. Calculates perimeters of tessellations.  Summarises information about the tiles of the tessellation.\tCalculates the centroidal Voronoi (Dirichlet) tessellation using Lloyd's algorithm.",
+      "LazyData": "true",
+      "ByteCompile": "true",
+      "License": "GPL (>= 2)",
+      "NeedsCompilation": "yes",
       "Repository": "CRAN"
     },
     "desc": {
@@ -2595,6 +2647,45 @@
       ],
       "Repository": "CRAN"
     },
+    "lattice": {
+      "Package": "lattice",
+      "Version": "0.22-7",
+      "Source": "Repository",
+      "Date": "2025-03-31",
+      "Priority": "recommended",
+      "Title": "Trellis Graphics for R",
+      "Authors@R": "c(person(\"Deepayan\", \"Sarkar\", role = c(\"aut\", \"cre\"), email = \"deepayan.sarkar@r-project.org\", comment = c(ORCID = \"0000-0003-4107-1553\")), person(\"Felix\", \"Andrews\", role = \"ctb\"), person(\"Kevin\", \"Wright\", role = \"ctb\", comment = \"documentation\"), person(\"Neil\", \"Klepeis\", role = \"ctb\"), person(\"Johan\", \"Larsson\", role = \"ctb\", comment = \"miscellaneous improvements\"), person(\"Zhijian (Jason)\", \"Wen\", role = \"cph\", comment = \"filled contour code\"), person(\"Paul\", \"Murrell\", role = \"ctb\", email = \"paul@stat.auckland.ac.nz\"), person(\"Stefan\", \"Eng\", role = \"ctb\", comment = \"violin plot improvements\"), person(\"Achim\", \"Zeileis\", role = \"ctb\", comment = \"modern colors\"), person(\"Alexandre\", \"Courtiol\", role = \"ctb\", comment = \"generics for larrows, lpolygon, lrect and lsegments\") )",
+      "Description": "A powerful and elegant high-level data visualization system inspired by Trellis graphics, with an emphasis on multivariate data. Lattice is sufficient for typical graphics needs, and is also flexible enough to handle most nonstandard requirements. See ?Lattice for an introduction.",
+      "Depends": [
+        "R (>= 4.0.0)"
+      ],
+      "Suggests": [
+        "KernSmooth",
+        "MASS",
+        "latticeExtra",
+        "colorspace"
+      ],
+      "Imports": [
+        "grid",
+        "grDevices",
+        "graphics",
+        "stats",
+        "utils"
+      ],
+      "Enhances": [
+        "chron",
+        "zoo"
+      ],
+      "LazyLoad": "yes",
+      "LazyData": "yes",
+      "License": "GPL (>= 2)",
+      "URL": "https://lattice.r-forge.r-project.org/",
+      "BugReports": "https://github.com/deepayan/lattice/issues",
+      "NeedsCompilation": "yes",
+      "Author": "Deepayan Sarkar [aut, cre] (<https://orcid.org/0000-0003-4107-1553>), Felix Andrews [ctb], Kevin Wright [ctb] (documentation), Neil Klepeis [ctb], Johan Larsson [ctb] (miscellaneous improvements), Zhijian (Jason) Wen [cph] (filled contour code), Paul Murrell [ctb], Stefan Eng [ctb] (violin plot improvements), Achim Zeileis [ctb] (modern colors), Alexandre Courtiol [ctb] (generics for larrows, lpolygon, lrect and lsegments)",
+      "Maintainer": "Deepayan Sarkar <deepayan.sarkar@r-project.org>",
+      "Repository": "CRAN"
+    },
     "lifecycle": {
       "Package": "lifecycle",
       "Version": "1.0.5",
@@ -3958,6 +4049,139 @@
       "NeedsCompilation": "yes",
       "Author": "David Cooley [aut, cre], Michael Sumner [ctb]",
       "Maintainer": "David Cooley <david.cooley.au@gmail.com>",
+      "Repository": "CRAN"
+    },
+    "sp": {
+      "Package": "sp",
+      "Version": "2.2-3",
+      "Source": "Repository",
+      "Title": "Classes and Methods for Spatial Data",
+      "Authors@R": "c(person(\"Edzer\", \"Pebesma\", role = c(\"aut\", \"cre\"), email = \"edzer.pebesma@uni-muenster.de\"), person(\"Roger\", \"Bivand\", role = \"aut\", email = \"Roger.Bivand@nhh.no\"), person(\"Barry\", \"Rowlingson\", role = \"ctb\"), person(\"Virgilio\", \"Gomez-Rubio\", role = \"ctb\"), person(\"Robert\", \"Hijmans\", role = \"ctb\"), person(\"Michael\", \"Sumner\", role = \"ctb\"), person(\"Don\", \"MacQueen\", role = \"ctb\"), person(\"Jim\", \"Lemon\", role = \"ctb\"), person(\"Finn\", \"Lindgren\", role = \"ctb\"), person(\"Josh\", \"O'Brien\", role = \"ctb\"), person(\"Joseph\", \"O'Rourke\", role = \"ctb\"), person(\"Patrick\", \"Hausmann\", role = \"ctb\"), person(\"Sebastian\", \"Meyer\", role = \"ctb\"))",
+      "Depends": [
+        "R (>= 3.5.0)",
+        "methods"
+      ],
+      "Imports": [
+        "utils",
+        "stats",
+        "graphics",
+        "grDevices",
+        "lattice",
+        "grid"
+      ],
+      "Suggests": [
+        "RColorBrewer",
+        "gstat",
+        "deldir",
+        "knitr",
+        "maps",
+        "mapview",
+        "rmarkdown",
+        "sf",
+        "terra",
+        "raster"
+      ],
+      "Description": "Classes and methods for spatial data; the classes document where the spatial location information resides, for 2D or 3D data. Utility functions are provided, e.g. for plotting data as maps, spatial selection, as well as methods for retrieving coordinates, for subsetting, print, summary, etc. From this version, 'rgdal', 'maptools', and 'rgeos' are no longer used at all, see <https://r-spatial.org/r/2023/05/15/evolution4.html> for details.",
+      "License": "GPL (>= 2)",
+      "URL": "https://github.com/edzer/sp/ https://edzer.github.io/sp/",
+      "BugReports": "https://github.com/edzer/sp/issues",
+      "Collate": "bpy.colors.R AAA.R Class-CRS.R CRS-methods.R Class-Spatial.R Spatial-methods.R projected.R Class-SpatialPoints.R SpatialPoints-methods.R Class-SpatialPointsDataFrame.R SpatialPointsDataFrame-methods.R Class-SpatialMultiPoints.R SpatialMultiPoints-methods.R Class-SpatialMultiPointsDataFrame.R SpatialMultiPointsDataFrame-methods.R Class-GridTopology.R Class-SpatialGrid.R Class-SpatialGridDataFrame.R Class-SpatialLines.R SpatialLines-methods.R Class-SpatialLinesDataFrame.R SpatialLinesDataFrame-methods.R Class-SpatialPolygons.R Class-SpatialPolygonsDataFrame.R SpatialPolygons-methods.R SpatialPolygonsDataFrame-methods.R GridTopology-methods.R SpatialGrid-methods.R SpatialGridDataFrame-methods.R SpatialPolygons-internals.R point.in.polygon.R SpatialPolygons-displayMethods.R zerodist.R image.R stack.R bubble.R mapasp.R select.spatial.R gridded.R asciigrid.R spplot.R over.R spsample.R recenter.R dms.R gridlines.R spdists.R rbind.R flipSGDF.R chfids.R loadmeuse.R compassRose.R surfaceArea.R spOptions.R subset.R disaggregate.R sp_spat1.R merge.R aggregate.R elide.R sp2Mondrian.R",
+      "VignetteBuilder": "knitr",
+      "NeedsCompilation": "yes",
+      "Author": "Edzer Pebesma [aut, cre], Roger Bivand [aut], Barry Rowlingson [ctb], Virgilio Gomez-Rubio [ctb], Robert Hijmans [ctb], Michael Sumner [ctb], Don MacQueen [ctb], Jim Lemon [ctb], Finn Lindgren [ctb], Josh O'Brien [ctb], Joseph O'Rourke [ctb], Patrick Hausmann [ctb], Sebastian Meyer [ctb]",
+      "Maintainer": "Edzer Pebesma <edzer.pebesma@uni-muenster.de>",
+      "Repository": "CRAN"
+    },
+    "spData": {
+      "Package": "spData",
+      "Version": "2.3.5",
+      "Source": "Repository",
+      "Title": "Datasets for Spatial Analysis",
+      "Authors@R": "c(person(\"Roger\", \"Bivand\", role = \"aut\", email=\"Roger.Bivand@nhh.no\", comment = c(ORCID = \"0000-0003-2392-6140\")), person(\"Jakub\", \"Nowosad\", role = c(\"aut\", \"cre\"), email=\"nowosad.jakub@gmail.com\", comment = c(ORCID = \"0000-0002-1057-3721\")), person(\"Robin\", \"Lovelace\", role = \"aut\", comment = c(ORCID = \"0000-0001-5679-6536\")), person(\"Angelos\", \"Mimis\", role = \"ctb\"), person(\"Mark\", \"Monmonier\", role = \"ctb\", comment = \"author of the state.vbm dataset\"),  person(\"Greg\", \"Snow\", role = \"ctb\", comment = \"author of the state.vbm dataset\") )",
+      "Description": "Diverse spatial datasets for demonstrating, benchmarking and teaching spatial data analysis.  It includes R data of class sf (defined by the package 'sf'), Spatial ('sp'), and nb ('spdep'). Unlike other spatial data packages such as 'rnaturalearth' and 'maps',  it also contains data stored in a range of file formats including GeoJSON and GeoPackage, but from version 2.3.4, no longer ESRI Shapefile - use GeoPackage instead.  Some of the datasets are designed to illustrate specific analysis techniques. cycle_hire() and cycle_hire_osm(), for example, is designed to illustrate point pattern analysis techniques.",
+      "Depends": [
+        "R (>= 4.1.0)"
+      ],
+      "Imports": [
+        "sp"
+      ],
+      "Suggests": [
+        "foreign",
+        "sf (>= 0.9-1)",
+        "spDataLarge (>= 0.4.0)",
+        "spdep",
+        "spatialreg"
+      ],
+      "License": "CC0",
+      "RoxygenNote": "7.3.3",
+      "LazyData": "true",
+      "URL": "https://jakubnowosad.com/spData/",
+      "BugReports": "https://github.com/Nowosad/spData/issues",
+      "Additional_repositories": "https://jakubnowosad.com/drat",
+      "Encoding": "UTF-8",
+      "NeedsCompilation": "no",
+      "Author": "Roger Bivand [aut] (ORCID: <https://orcid.org/0000-0003-2392-6140>), Jakub Nowosad [aut, cre] (ORCID: <https://orcid.org/0000-0002-1057-3721>), Robin Lovelace [aut] (ORCID: <https://orcid.org/0000-0001-5679-6536>), Angelos Mimis [ctb], Mark Monmonier [ctb] (author of the state.vbm dataset), Greg Snow [ctb] (author of the state.vbm dataset)",
+      "Maintainer": "Jakub Nowosad <nowosad.jakub@gmail.com>",
+      "Repository": "CRAN"
+    },
+    "spdep": {
+      "Package": "spdep",
+      "Version": "1.4-2",
+      "Source": "Repository",
+      "Date": "2026-02-13",
+      "Title": "Spatial Dependence: Weighting Schemes, Statistics",
+      "Encoding": "UTF-8",
+      "Authors@R": "c(person(\"Roger\", \"Bivand\", role = c(\"cre\", \"aut\"),  email = \"Roger.Bivand@nhh.no\", comment=c(ORCID=\"0000-0003-2392-6140\", ROR=\"04v53s997\")), person(\"Micah\", \"Altman\", role = \"ctb\"), person(\"Luc\", \"Anselin\", role = \"ctb\"), person(\"Renato\", \"Assunção\", role = \"ctb\"), person(\"Anil\", \"Bera\", role = \"ctb\"), person(\"Olaf\", \"Berke\", role = \"ctb\"), person(\"F. Guillaume\", \"Blanchet\", role = \"ctb\"), person(\"Marilia\", \"Carvalho\", role = \"ctb\"), person(\"Bjarke\", \"Christensen\", role = \"ctb\"), person(\"Yongwan\", \"Chun\", role = \"ctb\"), person(\"Carsten\", \"Dormann\", role = \"ctb\"), person(\"Stéphane\", \"Dray\", role = \"ctb\"), person(\"Dewey\", \"Dunnington\", role = c(\"ctb\"), comment = c(ORCID = \"0000-0002-9415-4582\")), person(\"Virgilio\", \"Gómez-Rubio\", role = \"ctb\"), person(\"Malabika\", \"Koley\", role = \"ctb\"), person(\"Tomasz\", \"Kossowski\", role = \"ctb\", comment = c(ORCID = \"0000-0002-9976-4398\")), person(\"Elias\", \"Krainski\", role = \"ctb\"), person(\"Pierre\", \"Legendre\", role = \"ctb\"), person(\"Nicholas\", \"Lewin-Koh\", role = \"ctb\"), person(\"Angela\", \"Li\", role = \"ctb\"), person(\"Giovanni\", \"Millo\", role = \"ctb\"), person(\"Werner\", \"Mueller\", role = \"ctb\"), person(\"Hisaji\", \"Ono\", role = \"ctb\"), person(\"Josiah\", \"Parry\", role = \"ctb\", comment = c(ORCID = \"0000-0001-9910-865X\")), person(\"Pedro\", \"Peres-Neto\", role = \"ctb\"), person(\"Michał\", \"Pietrzak\", role = \"ctb\", comment = c(ORCID = \"0000-0002-9263-4478\")), person(\"Gianfranco\", \"Piras\", role = \"ctb\"), person(\"Markus\", \"Reder\", role = \"ctb\"), person(\"Jeff\", \"Sauer\", role = \"ctb\"), person(\"Michael\", \"Tiefelsdorf\", role = \"ctb\"), person(\"René\", \"Westerholt\", role=\"ctb\"), person(\"Justyna\", \"Wilk\", role = \"ctb\", comment = c(ORCID = \"0000-0003-1495-2910\")), person(\"Levi\", \"Wolf\", role = \"ctb\"), person(\"Danlin\", \"Yu\", role = \"ctb\"))",
+      "Depends": [
+        "R (>= 3.3.0)",
+        "methods",
+        "spData (>= 2.3.1)",
+        "sf"
+      ],
+      "Imports": [
+        "stats",
+        "deldir",
+        "boot (>= 1.3-1)",
+        "graphics",
+        "utils",
+        "grDevices",
+        "units",
+        "s2",
+        "e1071",
+        "sp (>= 1.0)"
+      ],
+      "Suggests": [
+        "spatialreg (>= 1.2-1)",
+        "Matrix",
+        "parallel",
+        "dbscan",
+        "RColorBrewer",
+        "lattice",
+        "xtable",
+        "foreign",
+        "igraph",
+        "RSpectra",
+        "knitr",
+        "classInt",
+        "tmap",
+        "spam",
+        "ggplot2",
+        "rmarkdown",
+        "tinytest",
+        "rgeoda (>= 0.0.11.1)",
+        "mipfp",
+        "Guerry",
+        "codingMatrices"
+      ],
+      "URL": "https://github.com/r-spatial/spdep/, https://r-spatial.github.io/spdep/",
+      "BugReports": "https://github.com/r-spatial/spdep/issues/",
+      "Description": "A collection of functions to create spatial weights matrix objects from polygon 'contiguities', from point patterns by distance and tessellations, for summarizing these objects, and for permitting their use in spatial data analysis, including regional aggregation by minimum spanning tree; a collection of tests for spatial 'autocorrelation', including global 'Morans I' and 'Gearys C' proposed by 'Cliff' and 'Ord' (1973, ISBN: 0850860369) and (1981, ISBN: 0850860814), 'Hubert/Mantel' general cross product statistic, Empirical Bayes estimates and 'Assunção/Reis' (1999) <doi:10.1002/(SICI)1097-0258(19990830)18:16%3C2147::AID-SIM179%3E3.0.CO;2-I> Index, 'Getis/Ord' G ('Getis' and 'Ord' 1992) <doi:10.1111/j.1538-4632.1992.tb00261.x> and multicoloured join count statistics, 'APLE' ('Li et al.' ) <doi:10.1111/j.1538-4632.2007.00708.x>, local 'Moran's I', 'Gearys C'  ('Anselin' 1995) <doi:10.1111/j.1538-4632.1995.tb00338.x> and 'Getis/Ord' G ('Ord' and 'Getis' 1995) <doi:10.1111/j.1538-4632.1995.tb00912.x>, 'saddlepoint' approximations ('Tiefelsdorf' 2002) <doi:10.1111/j.1538-4632.2002.tb01084.x> and exact tests for global and local 'Moran's I' ('Bivand et al.' 2009) <doi:10.1016/j.csda.2008.07.021> and 'LOSH' local indicators of spatial heteroscedasticity ('Ord' and 'Getis') <doi:10.1007/s00168-011-0492-y>. The implementation of most of these measures is described in 'Bivand' and 'Wong' (2018) <doi:10.1007/s11749-018-0599-x>, with further extensions in 'Bivand' (2022) <doi:10.1111/gean.12319>. 'Lagrange' multiplier tests for spatial dependence in linear models are provided ('Anselin et al'. 1996) <doi:10.1016/0166-0462(95)02111-6>, as are 'Rao' score tests for hypothesised spatial 'Durbin' models based on linear models ('Koley' and 'Bera' 2023) <doi:10.1080/17421772.2023.2256810>. Additions in 2024 include Local Indicators for Categorical Data based on 'Carrer et al.' (2021) <doi:10.1016/j.jas.2020.105306> and 'Bivand et al.' (2017) <doi:10.1016/j.spasta.2017.03.003>; also Weighted Multivariate Spatial Autocorrelation Measures ('Bavaud' 2024) <doi:10.1111/gean.12390>. <doi:10.1080/17421772.2023.2256810>. A local indicators for categorical data (LICD) implementation based on 'Carrer et al.' (2021)  <doi:10.1016/j.jas.2020.105306> and 'Bivand et al.' (2017)  <doi:10.1016/j.spasta.2017.03.003> was added in 1.3-7. Multivariate 'spatialdelta' ('Bavaud' 2024) <doi:10.1111/gean.12390> was added in 1.3-13 ('Bivand' 2025 <doi:10.26034/la.cdclsl.2025.8343>). From 'spdep' and 'spatialreg' versions >= 1.2-1, the model fitting functions previously present in this package are defunct in 'spdep' and may be found in 'spatialreg'.",
+      "License": "GPL (>= 2)",
+      "VignetteBuilder": "knitr",
+      "RoxygenNote": "RoxygenNote: 6.1.1",
+      "NeedsCompilation": "yes",
+      "Author": "Roger Bivand [cre, aut] (ORCID: <https://orcid.org/0000-0003-2392-6140>, ROR: <https://ror.org/04v53s997>), Micah Altman [ctb], Luc Anselin [ctb], Renato Assunção [ctb], Anil Bera [ctb], Olaf Berke [ctb], F. Guillaume Blanchet [ctb], Marilia Carvalho [ctb], Bjarke Christensen [ctb], Yongwan Chun [ctb], Carsten Dormann [ctb], Stéphane Dray [ctb], Dewey Dunnington [ctb] (ORCID: <https://orcid.org/0000-0002-9415-4582>), Virgilio Gómez-Rubio [ctb], Malabika Koley [ctb], Tomasz Kossowski [ctb] (ORCID: <https://orcid.org/0000-0002-9976-4398>), Elias Krainski [ctb], Pierre Legendre [ctb], Nicholas Lewin-Koh [ctb], Angela Li [ctb], Giovanni Millo [ctb], Werner Mueller [ctb], Hisaji Ono [ctb], Josiah Parry [ctb] (ORCID: <https://orcid.org/0000-0001-9910-865X>), Pedro Peres-Neto [ctb], Michał Pietrzak [ctb] (ORCID: <https://orcid.org/0000-0002-9263-4478>), Gianfranco Piras [ctb], Markus Reder [ctb], Jeff Sauer [ctb], Michael Tiefelsdorf [ctb], René Westerholt [ctb], Justyna Wilk [ctb] (ORCID: <https://orcid.org/0000-0003-1495-2910>), Levi Wolf [ctb], Danlin Yu [ctb]",
+      "Maintainer": "Roger Bivand <Roger.Bivand@nhh.no>",
       "Repository": "CRAN"
     },
     "stringi": {

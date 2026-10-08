@@ -3,10 +3,24 @@ title: "MM GFW Vessel Classification: False Positives and False Negatives"
 author: "Malachy McCaffrey"
 date: today
 format: html
+params:
+  run_gfw_api: false  # true to look up uncached candidates in the GFW identity API
+  # Path overrides (see r/R/paths.R); leave blank to use the project paths.
+  decisions: ""
+  crosswalk: ""
+  review: ""
+  evidence: ""
+  processed_gfw: ""
+  interim_gfw: ""
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+# run from the repo root (the folder holding renv.lock) so the relative paths
+# in r/R/paths.R resolve whether the qmd is rendered or run chunk by chunk
+root <- getwd()
+while (!file.exists(file.path(root, "renv.lock")) && dirname(root) != root) root <- dirname(root)
+knitr::opts_knit$set(root.dir = root)
 ```
 
 ## Objective
@@ -14,10 +28,11 @@ knitr::opts_chunk$set(echo = TRUE)
 Identify and account for vessels that GFW misclassifies in the raw VP and AFE
 pulls, following the hybrid approach in `r/scratchpad/vessel_filtering_plan.qmd`:
 
-- an **MMSI crosswalk** (`references/vessel_crosswalk.csv`) is the single record
-  of every classification decision
-- a **screen** of the raw data produces ranked review lists
-- the **GFW vessel-identity API** and **external registries** supply evidence
+- a **decisions file** (`references/vessel_decisions.csv`, tracked in git) is
+  the only file edited by hand; together with `references/vessel_removals.csv`
+  it generates the **MMSI crosswalk** that classifies every record
+- a **screen** of the raw data produces review lists
+- the **GFW vessel-identity API** and **NOAA GARFO permit lists** supply evidence
 - **three analysis sets** (Strict / Primary / Inclusive) carry what stays
   uncertain into the results
 
@@ -32,58 +47,84 @@ Two separate problems are handled:
 
 ## How to use this workflow
 
-The workflow is iterative. Each pass:
+Every run rebuilds everything from tracked inputs, so the outputs depend only
+on the raw pull, the GARFO files, the API cache and these files:
 
-1. Render (or run) this qmd. The first run seeds the crosswalk from
-   `references/vessel_removals.csv`.
-2. Open `data/processed/vessel_review/vessel_review.csv`. For each candidate,
-   set `decision` to `accept` or `reject`, editing the `final_*` columns first
-   if the suggestion is wrong (e.g. the charter window dates).
-3. Re-run. Accepted rows are appended to the crosswalk, and the review file
-   keeps every decision so rejected vessels are not asked about again.
-4. Repeat until the unreviewed share of hours in every list is below the
-   review cut-off (Phase 4).
+| File | Role |
+|---|---|
+| `references/vessel_removals.csv` | Ørsted charter and other known removals (input) |
+| `references/vessel_decisions.csv` | Your review decisions (input, edited by hand) |
+| `references/garfo_permit_codes.csv` | GARFO permit code meanings (input) |
+| `references/vessel_crosswalk.csv` | Generated each run from the removals and decisions -- do not edit |
+| `data/processed/vessel_review/vessel_review.csv` | Generated each run: candidates, evidence and a suggested decision |
 
-`run_gfw_api` is `FALSE` by default so a render never makes API calls by
-accident. Set it to `TRUE` for passes that should look up new candidates;
-results are cached, so each Vessel ID is queried once.
+Each pass:
 
-## Libraries
+1. **Run with the API off** (the default). Check the list sizes and screening
+   thresholds.
+2. **Run once with the API on**: render with `-P run_gfw_api:true`, or set
+   `run_gfw_api: true` in the header. Lookups are cached in
+   `data/raw/vessel_evidence/`, so each Vessel ID is queried once; set it back
+   to `false` afterwards.
+3. **Review** `vessel_review.csv`. Its first columns are a suggested decision
+   in the same layout as `vessel_decisions.csv`. For each row you decide on,
+   correct the suggestion if needed and set `decision` to `accept` or
+   `reject`. Leave `decision` blank to skip a row.
+4. **Re-run.** The run first copies every row with a `decision` from the
+   review sheet into `vessel_decisions.csv`, then regenerates the crosswalk and
+   the review sheet, so decided vessels drop off the sheet. You can also edit
+   `vessel_decisions.csv` directly.
+5. **Commit `vessel_decisions.csv`** after each review session; it is the
+   record of every decision.
+
+If you open the review sheet in Excel, import it with every column as Text
+(Data → From Text/CSV) and save as CSV UTF-8. Opened directly, Excel rewrites
+dates (e.g. `2024-04-26` → `4/26/2024`) and long IDs, and the crosswalk
+validation then stops the run.
+
+## Libraries and shared code
 
 ```{r}
 library(tidyverse)
 library(sf)
 library(gfwr)
+
+source("r/R/paths.R")
+source("r/R/gfw_helpers.R")
+
+# Quarto parameters (header); `params` is read-only while rendering, and does
+# not exist when chunks are run interactively
+qparams     <- if (exists("params")) params else list()
+paths       <- gfw_paths_with(qparams)
+run_gfw_api <- isTRUE(qparams$run_gfw_api)
 ```
 
 ## Parameters
 
 ```{r}
-pull_date   <- as.Date("2026-10-06") # date of the raw pull (gfw_vp_afe_datapull.qmd)
-run_gfw_api <- FALSE                 # TRUE to query uncached candidates
-
-paths <- list(
-  vp        = "data/raw/gfw/gfw_vp_id.csv",
-  afe       = "data/raw/gfw/gfw_afe_id.csv",
-  removals  = "references/vessel_removals.csv",
-  crosswalk = "references/vessel_crosswalk.csv",
-  grid      = "data/sf/fishnet/gfw_grid_utm19n.gpkg",
-  leases    = c("data/sf/owf/SFW.shp", "data/sf/owf/RWF.shp", "data/sf/owf/SRW.shp"),
-  evidence  = "data/raw/vessel_evidence",     # API cache and registry extracts
-  review    = "data/processed/vessel_review", # review lists and decisions
-  out_gfw   = "data/processed/gfw",           # classified records
-  out_grid  = "data/interim/gfw"             # cell x stage x set tables
-)
+# Date of the raw pull, recorded by gfw_vp_afe_datapull.qmd in pull_info.csv.
+# Pulls made before that file existed fall back to the raw VP file's
+# modification date, with a warning.
+pull_date <- if (file.exists(paths$pull_info)) {
+  as.Date(read_csv(paths$pull_info, col_types = cols(.default = col_character()))$pull_date[1])
+} else {
+  warning(paths$pull_info, " not found; using the modification date of ", paths$raw_vp,
+          " as the pull date", call. = FALSE)
+  # local date; as.Date() on a time would use UTC and can shift the day
+  as.Date(format(file.mtime(paths$raw_vp), "%Y-%m-%d"))
+}
+pull_date
 
 # screening thresholds -- record any change in the methods
 screen <- list(
-  min_s3_hours    = 50,   # charter screen: minimum Stage 3 VP hours
-  min_lease_share = 0.25, # charter screen: share of hours inside SFW/RWF/SRW
-  max_prior_hours = 0,    # charter screen: Stage 1-2 hours for a "no history" burst
-  min_lease_shift = 0.25, # charter screen: rise in lease share, Stage 1-2 to 3
-  fp_max_days     = 30,   # FP screen: short foreign-flag visit, active days
-  fp_min_h_day    = 12,   # FP screen: hours per active day
-  review_cutoff   = 0.01  # stop reviewing when unreviewed hours < 1% of dataset
+  min_s3_hours     = 50,   # charter screen: minimum Stage 3 VP hours
+  min_lease_share  = 0.25, # charter screen: share of hours inside SFW/RWF/SRW
+  max_prior_hours  = 0,    # charter screen: Stage 1-2 hours for a "no history" burst
+  min_lease_shift  = 0.25, # charter screen: rise in lease share, Stage 1-2 to 3
+  fp_max_days      = 30,   # FP screen: short foreign-flag visit, active days
+  fp_min_h_day     = 12,   # FP screen: hours per active day
+  length_tolerance = 0.15, # GARFO vs GFW registry length agreement (share)
+  oa_bundle_min    = 5     # open-access commercial permits that mark a party-boat bundle
 )
 
 api_batch_size <- 20 # Vessel IDs per API request
@@ -92,32 +133,16 @@ api_batch_size <- 20 # Vessel IDs per API request
 ## Read raw data
 
 ```{r}
-# Stage boundaries mirror gfw_vp_afe_datapull.qmd and gfw_fishnet_grid.qmd --
-# keep all three in sync.
-stage_of <- function(ym) {
-  case_when(
-    between(ym, as.Date("2016-01-01"), as.Date("2019-08-01")) ~ "Stage 1",
-    between(ym, as.Date("2019-09-01"), as.Date("2023-03-01")) ~ "Stage 2",
-    between(ym, as.Date("2023-04-01"), as.Date("2026-09-01")) ~ "Stage 3")
-}
-
-read_gfw <- function(path, hours_col) {
-  read_csv(path, show_col_types = FALSE,
-           col_types = cols(.default = col_character())) |>
-    mutate(hours = as.numeric(.data[[hours_col]]),
-           date  = as.Date(`Time Range`),
-           `Year Month` = floor_date(date, "month"),
-           `Development Stage` = stage_of(`Year Month`),
-           cell_id = sprintf("%d_%d",
-                             as.integer(round(as.numeric(Lon) / 0.01)),
-                             as.integer(round(as.numeric(Lat) / 0.01))))
-}
-
-vp  <- read_gfw(paths$vp,  "Vessel Presence Hours")
-afe <- read_gfw(paths$afe, "Apparent Fishing Hours")
+# read_gfw() (r/R/gfw_helpers.R) types the hours, derives Year Month and
+# Development Stage, and snaps Lat/Lon to the 0.01 degree cell_id
+vp  <- read_gfw(paths$raw_vp)
+afe <- read_gfw(paths$raw_afe)
 
 stopifnot("records with no development stage" =
             !anyNA(vp$`Development Stage`) && !anyNA(afe$`Development Stage`))
+
+total_vp  <- sum(vp$hours)
+total_afe <- sum(afe$hours)
 ```
 
 ```{r}
@@ -129,19 +154,6 @@ gfw_labels <- bind_rows(vp, afe) |>
   slice_max(n, n = 1, with_ties = FALSE) |>
   ungroup() |>
   select(MMSI, gfw_vessel_type = `Vessel Type`, gfw_gear_type = `Gear Type`)
-
-# GFW gear type -> analysis gear class (references/data_dictionary.md)
-gear_class_map <- c(
-  TRAWLERS = "MOBILE", DREDGE_FISHING = "MOBILE", OTHER_PURSE_SEINES = "MOBILE",
-  TUNA_PURSE_SEINES = "MOBILE", PURSE_SEINES = "MOBILE", TROLLERS = "MOBILE",
-  DRIFTING_LONGLINES = "MOBILE",
-  SET_GILLNETS = "FIXED", POTS_AND_TRAPS = "FIXED", SET_LONGLINES = "FIXED",
-  FIXED_GEAR = "FIXED",
-  POLE_AND_LINE = "POLE_AND_LINE")
-
-gear_class_of <- function(g) coalesce(unname(gear_class_map[g]), "UNRESOLVED")
-
-fishing_gear_codes <- c(names(gear_class_map), "FISHING", "INCONCLUSIVE")
 ```
 
 ```{r}
@@ -160,81 +172,102 @@ stopifnot("records outside the fishnet grid" =
             all(c(vp$cell_id, afe$cell_id) %in% cell_lease$cell_id))
 ```
 
-## Phase 1: The MMSI crosswalk
+## Phase 1: Decisions and the crosswalk
 
-One row per MMSI per validity period. A record is matched to the row whose
-`valid_from`–`valid_to` window contains its date (blank = open-ended). Records
-with no matching row keep GFW's label. Windows for one MMSI must not overlap,
-so a fishing hull GFW missed that also took a charter needs two rows: one
-before the charter (`activity_excluded = FALSE`) and one for the charter
-(`TRUE`).
+The crosswalk has one row per MMSI per validity period. A record is matched to
+the row whose `valid_from`–`valid_to` window contains its date (blank =
+open-ended). Records with no matching row keep GFW's label. Windows for one
+MMSI must not overlap, so a fishing hull GFW missed that also took a charter
+needs two rows: one before the charter (`activity_excluded = FALSE`) and one
+for the charter (`TRUE`).
 
 | Column | Values |
 |---|---|
 | `MMSI` | 9 digits (any format for `gear_marker`) |
-| `valid_from`, `valid_to` | ISO dates; blank = open-ended |
+| `valid_from`, `valid_to` | ISO dates (`YYYY-MM-DD`); blank = open-ended |
 | `hull_class` | `fishing` / `non_fishing` / `gear_marker` / `unknown` |
 | `gear_class` | `MOBILE` / `FIXED` / `POLE_AND_LINE` / `UNRESOLVED`; blank = use GFW gear |
 | `activity_excluded` | `TRUE` = records in the window are not fishing (charter work) |
 | `Confidence` | `confirmed` / `probable` / `possible` |
 | `Identified_By`, `evidence_ref`, `Notes` | Where the decision came from |
-| `gfw_vessel_type`, `gfw_gear_type`, `pull_date` | GFW's labels when the row was written |
+| `gfw_vessel_type`, `gfw_gear_type`, `pull_date` | GFW's labels when the decision was made |
 
-### Seed from the removal list
+`vessel_decisions.csv` has the same columns plus `decision` (`accept` /
+`reject`) and `decided_on`. The crosswalk is built as:
 
-Runs only when the crosswalk does not exist yet, so manual edits are never
-overwritten. Charter vessels (`Scope == "stages_2_3"`) become fishing hulls
-with an activity exclusion from the start of Stage 2; replace that date with
-the real charter window wherever Ørsted's records give one. `all_stages`
-vessels become non-fishing hulls. `vessel_removals.csv` itself is not changed.
+- **Removal-list rows.** Charter vessels (`Scope == "stages_2_3"`) become
+  fishing hulls with an activity exclusion from the start of Stage 2;
+  `all_stages` vessels become non-fishing hulls.
+- **Accepted decisions.** Any decision for an MMSI on the removal list
+  replaces that vessel's removal-list rows -- this is how to give a charter
+  vessel its real charter dates. A `reject` for a removal-list MMSI removes
+  it from the crosswalk.
+- **Rejected decisions** add no row: GFW's label stands, and the vessel no
+  longer appears in the review sheet.
 
 ```{r}
 cw_cols <- c("MMSI", "valid_from", "valid_to", "Vessel_Name", "hull_class",
              "gear_class", "activity_excluded", "Operation", "Identified_By",
              "Confidence", "evidence_ref", "gfw_vessel_type", "gfw_gear_type",
              "pull_date", "Notes")
+decision_cols <- c("decision", "decided_on", cw_cols)
 
-if (!file.exists(paths$crosswalk)) {
-  read_csv(paths$removals, col_types = cols(.default = col_character())) |>
-    transmute(MMSI, Vessel_Name,
-              valid_from = if_else(Scope == "stages_2_3", "2019-09-01", NA_character_),
-              valid_to   = NA_character_,
-              hull_class = if_else(Scope == "stages_2_3", "fishing", "non_fishing"),
-              gear_class = NA_character_,
-              activity_excluded = Scope == "stages_2_3",
-              Operation, Identified_By, Confidence,
-              evidence_ref = NA_character_,
-              pull_date = as.character(pull_date),
-              Notes) |>
-    left_join(gfw_labels, by = "MMSI") |>
-    select(all_of(cw_cols)) |>
-    write_csv(paths$crosswalk, na = "")
-
-  message("Seeded ", paths$crosswalk, " from ", paths$removals)
+read_chr <- function(path) {
+  read_csv(path, col_types = cols(.default = col_character()), na = c("", "NA"))
 }
 ```
 
-### Read and validate
+### Collect decisions from the last review sheet
+
+```{r}
+review_path <- file.path(paths$review, "vessel_review.csv")
+
+decisions <- if (file.exists(paths$decisions)) {
+  read_chr(paths$decisions)
+} else {
+  as_tibble(set_names(rep(list(character()), length(decision_cols)), decision_cols))
+}
+
+stopifnot("vessel_decisions.csv is missing columns" =
+            all(decision_cols %in% names(decisions)))
+
+marked <- if (file.exists(review_path)) {
+  read_chr(review_path) |>
+    filter(decision %in% c("accept", "reject")) |>
+    mutate(decided_on = coalesce(decided_on, as.character(Sys.Date()))) |>
+    select(all_of(decision_cols))
+} else {
+  decisions[0, ]
+}
+
+# a vessel already in the decisions file is not added again
+already <- semi_join(marked, decisions, by = "MMSI")
+if (nrow(already) > 0) {
+  warning(nrow(already), " review-sheet rows were skipped because their MMSI is ",
+          "already in ", paths$decisions, "; edit that file to change them",
+          call. = FALSE)
+}
+new_decisions <- anti_join(marked, decisions, by = "MMSI")
+
+if (nrow(new_decisions) > 0) {
+  decisions <- bind_rows(decisions, new_decisions) |> select(all_of(decision_cols))
+  write_csv(decisions, paths$decisions, na = "")
+  message("Added ", nrow(new_decisions), " decisions to ", paths$decisions)
+}
+
+stopifnot("decision must be accept or reject" =
+            all(decisions$decision %in% c("accept", "reject")))
+
+count(decisions, decision)
+```
+
+### Build and validate the crosswalk
 
 ```{r}
 lo_date <- as.Date("1900-01-01") # stand-ins for open-ended windows
 hi_date <- as.Date("2100-12-31")
 
-read_crosswalk <- function(path) {
-  cw <- read_csv(path, col_types = cols(.default = col_character()),
-                 na = c("", "NA"))
-
-  missing_cols <- setdiff(cw_cols, names(cw))
-  if (length(missing_cols) > 0) {
-    stop("crosswalk is missing columns: ", paste(missing_cols, collapse = ", "),
-         call. = FALSE)
-  }
-
-  cw <- cw |>
-    mutate(valid_from = as.Date(valid_from),
-           valid_to   = as.Date(valid_to),
-           activity_excluded = as.logical(activity_excluded))
-
+validate_crosswalk <- function(cw) {
   overlaps <- cw |>
     mutate(f = coalesce(valid_from, lo_date), t = coalesce(valid_to, hi_date)) |>
     arrange(MMSI, f) |>
@@ -262,14 +295,42 @@ read_crosswalk <- function(path) {
   )
 
   if (length(problems) > 0) {
-    stop("Invalid ", path, ":\n  - ", paste(problems, collapse = "\n  - "),
-         call. = FALSE)
+    stop("Invalid crosswalk (check ", paths$decisions, "):\n  - ",
+         paste(problems, collapse = "\n  - "), call. = FALSE)
   }
-
-  cw
+  invisible(cw)
 }
 
-cw <- read_crosswalk(paths$crosswalk)
+stage2_start <- as.character(dev_stages$start[dev_stages$stage == "Stage 2"])
+
+removal_rows <- read_chr(paths$removals) |>
+  filter(!MMSI %in% decisions$MMSI) |>
+  transmute(MMSI, Vessel_Name,
+            valid_from = if_else(Scope == "stages_2_3", stage2_start, NA_character_),
+            valid_to   = NA_character_,
+            hull_class = if_else(Scope == "stages_2_3", "fishing", "non_fishing"),
+            gear_class = NA_character_,
+            activity_excluded = if_else(Scope == "stages_2_3", "TRUE", "FALSE"),
+            Operation, Identified_By, Confidence,
+            evidence_ref = NA_character_,
+            # the pull the crosswalk was built against (pull_info.csv)
+            pull_date = as.character(.env$pull_date),
+            Notes) |>
+  # GFW's labels for these vessels in that pull
+  left_join(gfw_labels, by = "MMSI")
+
+cw_out <- bind_rows(removal_rows,
+                    decisions |> filter(decision == "accept") |> select(all_of(cw_cols))) |>
+  select(all_of(cw_cols)) |>
+  arrange(MMSI, valid_from)
+
+cw <- cw_out |>
+  mutate(valid_from = as.Date(valid_from),
+         valid_to   = as.Date(valid_to),
+         activity_excluded = as.logical(activity_excluded)) |>
+  validate_crosswalk()
+
+write_csv(cw_out, paths$crosswalk, na = "")
 
 count(cw, hull_class, activity_excluded, Confidence)
 ```
@@ -329,12 +390,287 @@ profiles <- profile_mmsi(vp, afe, cell_lease)
 nrow(profiles)
 ```
 
+### GARFO permit matches
+
+The GARFO permit lists (`data/raw/vessel_evidence/registries/`, one file per
+permit year plus the HMS/tuna file) identify vessels only by name, permit
+number and hull ID. Neither permit number nor hull ID appears in AIS, so the
+only link is the vessel name. Names collide (many GARFO names belong to more
+than one hull, and placeholders such as UNNAMED and SKIFF are common), so a
+name match is only a lead:
+
+| `garfo_match` | Meaning |
+|---|---|
+| `unique_years` | One GARFO hull and one US-flag MMSI share the name, and a permit year falls within the MMSI's AIS activity |
+| `unique_no_year_overlap` | Unique, but no permit year overlaps the AIS activity |
+| `ambiguous` | The name belongs to several hulls or several MMSIs |
+| `none` | No match |
+
+Phase 4 adds a length check once GFW registry lengths are available. A name
+match is never suggested as `confirmed`. To confirm one, look up the hull ID in
+the USCG PSIX search on CGMIX (numeric hull IDs are USCG official numbers) and
+check that the vessel's call sign matches the AIS call sign, then record the
+hull ID in `evidence_ref`. State-registered hull IDs (e.g. `MS6930PP`) cannot
+be linked to a call sign this way.
+
+Only vessel fields are read; owner names, telephone numbers and addresses are
+never loaded.
+
+```{r}
+garfo_personal <- c("OWNER NAME", "TELEPHONE", "ADDRESS LINE 1", "ADDRESS LINE 2",
+                    "CITY", "STATE", "ZIP CODE", "HOME PORT CITY",
+                    "PRINCIPAL PORT CITY")
+
+garfo_vessel_cols <- c("PERMIT", "HMS PERMIT", "PERMIT YEAR", "VESSEL NAME",
+                       "HULL ID", "HOME PORT STATE", "PRINCIPAL PORT STATE",
+                       "LENGTH", "GROSS TONS", "HORSEPOWER", "MAX TRAP LIMIT",
+                       "CATEGORY", "CML CHB ENDORSEMENT", "ISSUEDDATE")
+
+placeholder_names <- c("UNNAMED", "NONAME", "NONE", "NA", "SKIFF", "UNKNOWN")
+
+norm_name <- function(x) {
+  x |>
+    toupper() |>
+    str_replace_all("&", " AND ") |>
+    str_remove("^[[:space:]]*(F[[:space:]]*/[[:space:]]*V|F[.]V[.]|FV)[[:space:]]+") |>
+    str_remove_all("[^A-Z0-9]")
+}
+
+col_or_na <- function(d, col) if (col %in% names(d)) d[[col]] else rep(NA_character_, nrow(d))
+
+read_garfo <- function(f) {
+  d <- read_csv(f, col_types = cols(.default = col_character()),
+                col_select = !any_of(garfo_personal),
+                na = c("", " ", "NA", "None"), show_col_types = FALSE)
+  names(d) <- str_remove(names(d), paste0("^", intToUtf8(0xFEFF))) # byte-order mark
+
+  hms <- "HMS PERMIT" %in% names(d)
+
+  permits <- tibble(
+    file        = basename(f),
+    source      = if (hms) "garfo_hms" else "garfo_permits",
+    permit      = coalesce(col_or_na(d, "PERMIT"), col_or_na(d, "HMS PERMIT")),
+    permit_year = suppressWarnings(as.integer(col_or_na(d, "PERMIT YEAR"))),
+    vessel_name = col_or_na(d, "VESSEL NAME"),
+    hull_id     = col_or_na(d, "HULL ID"),
+    home_port_state = col_or_na(d, "HOME PORT STATE"),
+    length_ft   = suppressWarnings(as.numeric(col_or_na(d, "LENGTH"))),
+    trap_limit  = suppressWarnings(as.numeric(col_or_na(d, "MAX TRAP LIMIT"))))
+
+  # one row per permit-year x fishery x code. Annual files hold one column
+  # per fishery with comma-separated codes; the HMS file has a CATEGORY.
+  fishery <- setdiff(names(d), garfo_vessel_cols)
+  codes <- if (hms) {
+    # a charter/headboat permit endorsed for commercial sale is a second,
+    # commercial code for the same permit
+    bind_rows(
+      tibble(permit = permits$permit, permit_year = permits$permit_year,
+             fishery = "HMS", code = col_or_na(d, "CATEGORY")),
+      tibble(permit = permits$permit, permit_year = permits$permit_year,
+             fishery = "HMS",
+             code = if_else(col_or_na(d, "CML CHB ENDORSEMENT") %in% "Y",
+                            "CHB COMMERCIAL SALE ENDORSEMENT", NA_character_)))
+  } else {
+    bind_cols(select(permits, permit, permit_year), d[fishery]) |>
+      pivot_longer(all_of(fishery), names_to = "fishery", values_to = "code",
+                   values_drop_na = TRUE) |>
+      separate_longer_delim(code, ",")
+  }
+  codes <- codes |>
+    mutate(file = basename(f), code = str_trim(code)) |>
+    filter(!is.na(code), code != "")
+
+  list(permits = permits, codes = codes)
+}
+
+garfo_files <- list.files(paths$registries,
+                          pattern = "^garfo.*[.]csv$", full.names = TRUE)
+
+garfo_read  <- map(garfo_files, read_garfo)
+garfo_all   <- map(garfo_read, "permits") |> list_rbind()
+garfo_codes <- map(garfo_read, "codes") |> list_rbind()
+
+# rows broken in the source file (e.g. shifted fields) have no valid year
+malformed <- with(garfo_all, is.na(permit_year) | !between(permit_year, 2000, 2100) |
+                    is.na(hull_id) | is.na(vessel_name))
+message("GARFO rows read: ", nrow(garfo_all), "; malformed rows dropped: ", sum(malformed))
+
+garfo_all   <- garfo_all[!malformed, ]
+garfo_codes <- semi_join(garfo_codes, garfo_all, by = c("file", "permit", "permit_year"))
+```
+
+### GARFO permit codes
+
+Permit codes are fishery-specific. The meanings live in
+`references/garfo_permit_codes.csv`, one row per fishery and code, with
+`permit_type` (`commercial` / `for_hire` / `recreational` / `unknown`), an
+optional `gear_hint` (`FIXED` / `MOBILE`), a `description`, and the `basis`
+and `source` for each mapping (NOAA Fisheries permit pages). Category 2 is
+charter/party in every fishery that has one (bluefish, black sea bass, scup,
+summer flounder, tilefish, lobster, squid/mackerel/butterfish), and tilefish 3
+is the private recreational permit; otherwise codes are fishery-specific (e.g.
+squid/mackerel/butterfish 3 = incidental catch, 4 = Atlantic mackerel open
+access). Codes missing from the table are listed below and treated as
+`unknown`.
+
+For commercial permits, `open_access` marks those anyone can obtain, and
+`oa_directed` separates open-access permits for a directed fishery (e.g.
+spiny dogfish, bluefish, tilefish, Handgear B, HMS General) from incidental
+ones (monkfish E, squid/butterfish incidental, multispecies J). The HMS file's
+`CML CHB ENDORSEMENT = Y` (a charter/headboat permit endorsed for commercial
+sale) is read as an extra open-access commercial code.
+
+```{r}
+permit_codes <- read_csv(paths$permit_codes, col_types = cols(.default = col_character()),
+                         na = "")
+
+unmapped <- garfo_codes |>
+  count(fishery, code, name = "permit_years") |>
+  anti_join(permit_codes, by = c("fishery", "code"))
+
+if (nrow(unmapped) > 0) {
+  warning(nrow(unmapped), " GARFO codes are missing from ", paths$permit_codes,
+          " and are treated as unknown", call. = FALSE)
+}
+unmapped
+
+# permit type and gear hints per permit-year
+permit_flags <- garfo_codes |>
+  left_join(permit_codes, by = c("fishery", "code")) |>
+  mutate(fc = paste0(fishery, ":", code),
+         comm_oa = permit_type %in% "commercial" & open_access %in% "TRUE") |>
+  group_by(file, permit, permit_year) |>
+  summarise(
+    # commercial permits that are not open access (limited access, moratorium)
+    commercial_la = any(permit_type %in% "commercial" & !comm_oa),
+    commercial_oa = any(comm_oa),
+    for_hire      = any(permit_type %in% "for_hire"),
+    recreational  = any(permit_type %in% "recreational"),
+    fixed_hint    = any(gear_hint %in% "FIXED"),
+    mobile_hint   = any(gear_hint %in% "MOBILE"),
+    oa_permits    = paste(fc[comm_oa], collapse = "|"),
+    oa_directed_permits = paste(fc[comm_oa & oa_directed %in% "TRUE"], collapse = "|"),
+    categories    = paste(fc, collapse = "; "),
+    .groups = "drop")
+
+garfo <- garfo_all |>
+  left_join(permit_flags, by = c("file", "permit", "permit_year")) |>
+  mutate(across(c(commercial_la, commercial_oa, for_hire, recreational, fixed_hint, mobile_hint),
+                \(x) coalesce(x, FALSE)),
+         fixed_hint   = fixed_hint | coalesce(trap_limit > 0, FALSE),
+         nkey         = norm_name(vessel_name),
+         hull_is_uscg = str_detect(hull_id, "^[0-9]+$")) |>
+  filter(!nkey %in% placeholder_names, nchar(nkey) >= 3)
+
+garfo |>
+  count(source, commercial_la, commercial_oa, for_hire, recreational)
+```
+
+```{r}
+# AIS names per MMSI; GARFO vessels are US, so match US- or unflagged MMSIs
+ais_names <- bind_rows(vp, afe) |>
+  filter(!is.na(MMSI), !is.na(`Vessel Name`), Flag %in% c("USA", NA)) |>
+  distinct(MMSI, `Vessel Name`) |>
+  mutate(nkey = norm_name(`Vessel Name`)) |>
+  filter(!nkey %in% placeholder_names, nchar(nkey) >= 3) |>
+  distinct(MMSI, nkey)
+
+name_counts <- full_join(
+  garfo |> group_by(nkey) |> summarise(hulls_with_name = n_distinct(hull_id)),
+  ais_names |> group_by(nkey) |> summarise(mmsi_with_name = n_distinct(MMSI)),
+  by = "nkey")
+
+garfo_by_mmsi <- ais_names |>
+  inner_join(garfo, by = "nkey", relationship = "many-to-many") |>
+  left_join(name_counts, by = "nkey") |>
+  left_join(select(profiles, MMSI, first, last), by = "MMSI") |>
+  group_by(MMSI) |>
+  summarise(
+    garfo_hulls = n_distinct(hull_id),
+    garfo_max_hulls_with_name = max(hulls_with_name),
+    garfo_max_mmsi_with_name  = max(mmsi_with_name),
+    year_overlap     = any(permit_year >= year(first) & permit_year <= year(last)),
+    garfo_years      = paste(sort(unique(permit_year)), collapse = ","),
+    garfo_hull_id    = paste(sort(unique(hull_id)), collapse = "|"),
+    hull_is_uscg     = all(hull_is_uscg),
+    garfo_permits    = paste(sort(unique(permit)), collapse = "|"),
+    garfo_sources    = paste(sort(unique(source)), collapse = "|"),
+    garfo_length_ft  = median(length_ft, na.rm = TRUE),
+    garfo_home_port  = paste(sort(unique(na.omit(home_port_state))), collapse = "|"),
+    garfo_categories = str_trunc(paste(unique(na.omit(categories)), collapse = " / "), 300),
+    any_commercial_la = any(commercial_la),
+    any_commercial_oa = any(commercial_oa),
+    any_for_hire      = any(for_hire),
+    any_recreational  = any(recreational),
+    any_fixed         = any(fixed_hint),
+    any_mobile        = any(mobile_hint),
+    garfo_oa_permits  = paste(sort(unique(unlist(str_split(oa_permits, fixed("|"))))) |>
+                               setdiff(""), collapse = "|"),
+    garfo_oa_directed = paste(sort(unique(unlist(str_split(oa_directed_permits, fixed("|"))))) |>
+                               setdiff(""), collapse = "|"),
+    .groups = "drop") |>
+  mutate(garfo_length_ft = if_else(is.nan(garfo_length_ft), NA_real_, garfo_length_ft),
+         garfo_match = case_when(
+           garfo_hulls > 1 | garfo_max_mmsi_with_name > 1 ~ "ambiguous",
+           !year_overlap                                  ~ "unique_no_year_overlap",
+           TRUE                                           ~ "unique_years"),
+         garfo_n_oa = if_else(garfo_oa_permits == "", 0L,
+                              str_count(garfo_oa_permits, fixed("|")) + 1L),
+         # Open-access commercial permits are easy to obtain, so for-hire
+         # vessels often hold them without fishing commercially. Keep that
+         # combination as its own type rather than folding it into either
+         # "for-hire" or "commercial + for-hire".
+         garfo_permit_type = case_when(
+           any_commercial_la & any_for_hire ~ "commercial + for-hire",
+           any_commercial_oa & any_for_hire ~ "for-hire + open-access commercial",
+           any_for_hire                     ~ "for-hire",
+           any_commercial_la | any_commercial_oa ~ "commercial",
+           any_recreational                 ~ "recreational only",
+           TRUE                             ~ "unmapped codes only"),
+         garfo_oa_bundle = garfo_permit_type == "for-hire + open-access commercial" &
+                           garfo_n_oa >= screen$oa_bundle_min,
+         # gear hint only when it is unambiguous; a for-hire vessel with a
+         # small set of open-access commercial permits may fish commercially
+         garfo_gear_hint = case_when(
+           garfo_permit_type == "for-hire"           ~ "POLE_AND_LINE",
+           garfo_oa_bundle                           ~ "POLE_AND_LINE",
+           any_for_hire                              ~ NA_character_,
+           any_fixed & !any_mobile                   ~ "FIXED",
+           any_mobile & !any_fixed                   ~ "MOBILE",
+           TRUE                                      ~ NA_character_)) |>
+  select(-starts_with("any_"))
+
+profiles <- profiles |>
+  left_join(garfo_by_mmsi, by = "MMSI") |>
+  mutate(garfo_match = coalesce(garfo_match, "none"))
+```
+
+How often does a name match succeed for vessels whose fishing status is
+already known? US-flag vessels GFW types FISHING, and the fishing hulls in the
+crosswalk, set the expectation; matches among non-FISHING vessels are the
+leads.
+
+```{r}
+profiles |>
+  filter(flag %in% "USA") |>
+  mutate(group = case_when(
+    MMSI %in% cw$MMSI[cw$hull_class == "fishing"] ~ "crosswalk fishing hull",
+    gfw_vessel_type %in% "FISHING"                ~ "GFW FISHING",
+    TRUE                                          ~ "GFW non-FISHING")) |>
+  count(group, garfo_match) |>
+  group_by(group) |>
+  mutate(share = round(n / sum(n), 3)) |>
+  ungroup()
+```
+
 ### Candidate lists
 
-Each list excludes MMSIs already in the crosswalk.
+Each list excludes vessels already in the crosswalk or in the decisions file.
 
-1. **Missed fishing vessels** -- typed other than FISHING, US-flag, with a call
-   sign (the only vessels US registries can confirm).
+1. **Missed fishing vessels** -- typed other than FISHING, and either US-flag
+   with a call sign or with a unique, year-overlapping GARFO name match. This
+   whole pool is looked up in the GFW API, but only vessels with evidence
+   reach the review sheet (Phase 4).
 2. **Charter activity** -- typed FISHING with a lease-concentrated Stage 3:
    either no Stage 1–2 history (a burst), or a lease share that rose from
    Stages 1–2 to Stage 3 (catches established vessels that took a charter, the
@@ -356,15 +692,17 @@ charter_screen <- function(p) {
            charter_flag = s3 >= screen$min_s3_hours & (burst | shift))
 }
 
-not_listed <- !profiles$MMSI %in% cw$MMSI
+open_profiles <- profiles |> filter(!MMSI %in% c(cw$MMSI, decisions$MMSI))
 
-cand_missed <- profiles[not_listed, ] |>
+cand_missed <- open_profiles |>
   filter(!gfw_vessel_type %in% "FISHING", mmsi_valid,
-         flag %in% "USA", !is.na(call_sign)) |>
+         (flag %in% "USA" & !is.na(call_sign)) | garfo_match == "unique_years") |>
   mutate(list = "1_missed_fishing",
-         reason = "typed non-FISHING; US flag with call sign")
+         reason = if_else(garfo_match == "unique_years",
+                          "typed non-FISHING; unique GARFO name match",
+                          "typed non-FISHING; US flag with call sign"))
 
-cand_charter <- charter_screen(profiles[not_listed, ]) |>
+cand_charter <- charter_screen(open_profiles) |>
   filter(gfw_vessel_type %in% "FISHING", charter_flag) |>
   mutate(list = "2_charter_activity",
          reason = case_when(
@@ -372,7 +710,7 @@ cand_charter <- charter_screen(profiles[not_listed, ]) |>
            burst         ~ "no Stage 1-2 history; lease-concentrated Stage 3",
            TRUE          ~ "lease share rose from Stage 1-2 to Stage 3"))
 
-cand_nonfishing <- profiles[not_listed, ] |>
+cand_nonfishing <- open_profiles |>
   filter(gfw_vessel_type %in% "FISHING") |>
   mutate(research = str_detect(names, "\\bNOAA\\b|^R/V|RESEARCH|SURVEY"),
          visit    = !flag %in% "USA" & days <= screen$fp_max_days &
@@ -384,7 +722,7 @@ cand_nonfishing <- profiles[not_listed, ] |>
                             visit    ~ "short, intense foreign-flag visit",
                             TRUE     ~ "foreign flag with INCONCLUSIVE gear"))
 
-cand_marker <- profiles[not_listed, ] |>
+cand_marker <- open_profiles |>
   filter(!mmsi_valid | battery_call_sign) |>
   mutate(list = "4_gear_marker",
          reason = if_else(battery_call_sign, "call sign holds a battery level",
@@ -394,7 +732,8 @@ candidates <- bind_rows(cand_missed, cand_charter, cand_nonfishing, cand_marker)
   select(list, reason, MMSI, names, flag, call_sign, gfw_vessel_type,
          gfw_gear_type, vp_hours, s1, s2, s3, afe_hours, days, h_day,
          lease_share, lease_share_s12, lease_share_s3, s3_lease_first,
-         s3_lease_last, first, last, any_of(c("burst", "shift"))) |>
+         s3_lease_last, first, last, any_of(c("burst", "shift")),
+         starts_with("garfo_"), hull_is_uscg) |>
   arrange(list, desc(vp_hours))
 
 candidates |>
@@ -404,7 +743,7 @@ candidates |>
 
 ### How well does the charter screen find known charters?
 
-The 42 vessels Ørsted confirmed are the best available ground truth. The share
+The vessels Ørsted confirmed are the best available ground truth. The share
 the screen flags is its recall; vessels it misses show what it cannot see.
 
 ```{r}
@@ -430,11 +769,11 @@ screen_recall |>
 
 Looks up every Vessel ID belonging to a candidate MMSI. Parsed results are
 appended to CSVs in `data/raw/vessel_evidence/`, and every queried ID is
-logged, so each ID is requested once across runs. The registry records
-(`registryInfo`) are the independent evidence: GFW's own label is derived from
-them, so a vessel typed OTHER whose registry lists a fishing gear is a strong
-false-negative candidate, and a vessel with no registry record at all has no
-evidence either way.
+logged with the date and the GFW dataset version, so each ID is requested
+once across runs. The registry records (`registryInfo`) are the independent
+evidence: GFW's own label is derived from them, so a vessel typed OTHER whose
+registry lists a fishing gear is a strong false-negative candidate, and a
+vessel with no registry record at all has no evidence either way.
 
 ```{r}
 evid_dir <- paths$evidence
@@ -451,7 +790,7 @@ append_csv <- function(df, path) {
 
 read_ev <- function(path, cols) {
   if (file.exists(path)) {
-    read_csv(path, col_types = cols(.default = col_character()), na = c("", "NA"))
+    read_chr(path)
   } else {
     as_tibble(set_names(rep(list(character()), length(cols)), cols))
   }
@@ -465,8 +804,9 @@ col_chr <- function(df, col) {
   else as.character(x)
 }
 
+queried_cols  <- c("vessel_id", "queried_on", "status", "dataset")
 registry_cols <- c("MMSI", "source", "reg_mmsi", "reg_shipname", "reg_callsign",
-                   "reg_gear", "reg_from", "reg_to")
+                   "reg_gear", "reg_length_m", "reg_from", "reg_to", "reg_extra")
 combined_cols <- c("MMSI", "vessel_id", "gear", "ship", "year_from", "year_to")
 
 # Each API entry has an index; selfReportedInfo maps it to the MMSI(s) queried.
@@ -483,8 +823,10 @@ parse_identity <- function(r) {
            reg_shipname = col_chr(reg, "shipname"),
            reg_callsign = col_chr(reg, "callsign"),
            reg_gear     = col_chr(reg, "geartypes"),
+           reg_length_m = col_chr(reg, "lengthM"),
            reg_from     = col_chr(reg, "transmissionDateFrom"),
-           reg_to       = col_chr(reg, "transmissionDateTo")) |>
+           reg_to       = col_chr(reg, "transmissionDateTo"),
+           reg_extra    = col_chr(reg, "extraFields")) |>
       inner_join(idx, by = "index", relationship = "many-to-many") |>
       select(all_of(registry_cols)) |>
       distinct()
@@ -507,7 +849,8 @@ parse_identity <- function(r) {
     read_ev("", combined_cols)
   }
 
-  list(registry = registry, combined = combined)
+  list(registry = registry, combined = combined,
+       dataset = paste(unique(col_chr(r$dataset, "dataset")), collapse = "|"))
 }
 ```
 
@@ -516,7 +859,7 @@ id_lookup <- bind_rows(vp, afe) |>
   filter(!is.na(MMSI), !is.na(`Vessel ID`)) |>
   distinct(vessel_id = `Vessel ID`, MMSI)
 
-queried <- read_ev(ev_paths$queried, c("vessel_id", "queried_on", "status"))
+queried <- read_ev(ev_paths$queried, queried_cols)
 
 to_query <- id_lookup |>
   filter(MMSI %in% candidates$MMSI,
@@ -533,16 +876,18 @@ if (run_gfw_api && length(to_query) > 0) {
                       key = Sys.getenv("GFW_TOKEN"), quiet = TRUE),
       error = function(e) e)
 
-    status <- if (inherits(res, "error")) "error" else if (is.null(res)) "not_found" else "ok"
+    status  <- if (inherits(res, "error")) "error" else if (is.null(res)) "not_found" else "ok"
+    dataset <- NA_character_
 
     if (status == "ok") {
       parsed <- parse_identity(res)
       append_csv(parsed$registry, ev_paths$registry)
       append_csv(parsed$combined, ev_paths$combined)
+      dataset <- parsed$dataset
     }
 
     append_csv(tibble(vessel_id = ids, queried_on = as.character(Sys.Date()),
-                      status = status),
+                      status = status, dataset = dataset),
                ev_paths$queried)
     Sys.sleep(0.5)
   }
@@ -551,9 +896,11 @@ if (run_gfw_api && length(to_query) > 0) {
 
 ```{r}
 # summarise identity evidence per MMSI
-queried  <- read_ev(ev_paths$queried, c("vessel_id", "queried_on", "status"))
+queried  <- read_ev(ev_paths$queried, queried_cols)
 registry <- read_ev(ev_paths$registry, registry_cols)
 combined <- read_ev(ev_paths$combined, combined_cols)
+
+count(queried, status, dataset)
 
 queried_mmsi <- id_lookup |>
   filter(vessel_id %in% queried$vessel_id[queried$status %in% c("ok", "not_found")]) |>
@@ -566,9 +913,11 @@ has_fishing_gear <- function(g) {
 gfw_evidence <- queried_mmsi |>
   left_join(registry |>
               group_by(MMSI) |>
-              summarise(reg_records = n(),
-                        reg_sources = paste(sort(unique(source)), collapse = "|"),
-                        reg_gear    = paste(sort(unique(reg_gear)), collapse = "|"),
+              summarise(reg_records  = n(),
+                        reg_sources  = paste(sort(unique(source)), collapse = "|"),
+                        reg_gear     = paste(sort(unique(reg_gear)), collapse = "|"),
+                        reg_length_m = suppressWarnings(
+                          median(as.numeric(reg_length_m), na.rm = TRUE)),
                         .groups = "drop"),
             by = "MMSI") |>
   left_join(combined |>
@@ -578,259 +927,177 @@ gfw_evidence <- queried_mmsi |>
                         .groups = "drop"),
             by = "MMSI") |>
   mutate(reg_records    = coalesce(reg_records, 0L),
+         reg_length_m   = if_else(is.nan(reg_length_m), NA_real_, reg_length_m),
          reg_fishing    = reg_records > 0 & has_fishing_gear(reg_gear),
          reg_nonfishing = reg_records > 0 & !reg_fishing)
 
 count(gfw_evidence, reg_records > 0, reg_fishing)
 ```
 
-### External registries
+## Phase 4: The review sheet
 
-GARFO permit data, USCG vessel documentation and similar sources each come in
-their own format. Convert each download to a CSV in
-`data/raw/vessel_evidence/registries/` with these columns, then re-run:
+### Suggested decisions
 
-| Column | Content |
-|---|---|
-| `source` | e.g. `GARFO_permits_2024`, `USCG_documentation` |
-| `mmsi` | MMSI if the source has it, else blank |
-| `call_sign` | Call sign |
-| `vessel_name` | Name (shown for review only; never matched on) |
-| `is_fishing` | `TRUE` if the source records a fishing permit or fishing service |
-| `detail` | Permit category, service type or gear |
-
-Matches use MMSI where the source has it, otherwise the call sign. Names are
-never used to match, for the reasons in `00b-plan-revisions.qmd`.
-
-```{r}
-norm_call_sign <- function(x) str_remove_all(toupper(coalesce(x, "")), "[^A-Z0-9]")
-
-reg_files <- list.files(file.path(evid_dir, "registries"),
-                        pattern = "\\.csv$", full.names = TRUE)
-
-external <- reg_files |>
-  map(\(f) read_csv(f, col_types = cols(.default = col_character()), na = c("", "NA"))) |>
-  list_rbind()
-
-if (nrow(external) > 0) {
-  stopifnot("registry CSVs need source, mmsi, call_sign, vessel_name, is_fishing, detail" =
-              all(c("source", "mmsi", "call_sign", "vessel_name", "is_fishing", "detail")
-                  %in% names(external)))
-
-  external <- external |> mutate(is_fishing = as.logical(is_fishing),
-                                 cs_key = norm_call_sign(call_sign))
-
-  cand_keys <- candidates |>
-    distinct(MMSI, call_sign) |>
-    mutate(cs_key = norm_call_sign(call_sign))
-
-  ext_matches <- bind_rows(
-    cand_keys |> inner_join(filter(external, !is.na(mmsi)),
-                            by = c("MMSI" = "mmsi"), suffix = c("", ".ext")),
-    cand_keys |> filter(cs_key != "") |>
-      inner_join(filter(external, is.na(mmsi)), by = "cs_key", suffix = c("", ".ext"))
-  )
-
-  ext_evidence <- ext_matches |>
-    group_by(MMSI) |>
-    summarise(ext_sources    = paste(sort(unique(source)), collapse = "|"),
-              ext_detail     = paste(unique(na.omit(detail)), collapse = "; "),
-              ext_fishing    = any(is_fishing %in% TRUE),
-              ext_nonfishing = all(is_fishing %in% FALSE),
-              .groups = "drop")
-} else {
-  ext_evidence <- tibble(MMSI = character(), ext_sources = character(),
-                         ext_detail = character(), ext_fishing = logical(),
-                         ext_nonfishing = logical())
-  message("No external registry CSVs in ", file.path(evid_dir, "registries"))
-}
-```
-
-## Phase 4: Review and decide
-
-### Suggested classifications
+List 1 reaches the review sheet only when there is evidence: a GFW registry
+record listing fishing gear, or a unique GARFO match with commercial or
+for-hire permits. The rest of the pool cannot realistically be researched one
+vessel at a time; its hours are reported below as an upper bound on what the
+classification may still miss.
 
 | Evidence | Suggestion |
 |---|---|
-| Registry or permit lists fishing (list 1) | `fishing`, `confirmed` -- review these first |
-| Registry or permit lists only non-fishing (list 1) | resolved by evidence; GFW's label stands, no review needed |
-| No registry evidence (list 1) | `unknown`, `possible` -- review by hours |
+| GFW registry lists fishing gear (list 1) | `fishing`, `confirmed` |
+| Unique GARFO match, permit years overlap, length agrees (list 1) | `fishing`, `probable` -- confirm via the hull ID |
+| Unique GARFO match, permit years overlap, no length to compare (list 1) | `fishing`, `possible` -- confirm via the hull ID |
 | Charter burst with no prior history (list 2) | exclusion, `probable` |
 | Lease-share rise only (list 2) | exclusion, `possible` |
-| Registry or permit lists non-fishing (list 3) | `non_fishing`, `confirmed` |
-| Name or behaviour only (list 3) | `non_fishing`, `possible` |
+| GFW registry lists non-fishing gear, no GARFO support (list 3) | `non_fishing`, `confirmed` |
+| Name or behaviour only, or a GARFO match contradicts (list 3) | `non_fishing`, `possible` |
 | Battery-level call sign (list 4) | `gear_marker`, `probable` |
 | MMSI not 9 digits only (list 4) | `unknown`, `possible` -- check whether it is a vessel |
 
 Charter windows are suggested from the first and last Stage 3 day with lease
 activity; replace them with Ørsted's dates where available.
 
-```{r}
-review_cols <- c("list", "priority", "reason", "MMSI", "names", "flag", "call_sign",
-                 "gfw_vessel_type", "gfw_gear_type", "vp_hours", "s1", "s2",
-                 "s3", "afe_hours", "h_day", "lease_share", "lease_share_s12",
-                 "lease_share_s3", "reg_records", "reg_sources", "reg_gear",
-                 "gfw_combined", "ext_sources", "ext_detail",
-                 "resolved_by_evidence",
-                 "decision", "final_hull_class", "final_gear_class",
-                 "final_activity_excluded", "final_valid_from", "final_valid_to",
-                 "final_Confidence", "final_Identified_By", "final_evidence_ref",
-                 "final_Notes")
+For list 1 GARFO matches, `gear_class` is suggested from the permits
+(`garfo_permit_type`):
 
-suggestions <- candidates |>
+| GARFO permits | Suggested gear class |
+|---|---|
+| For-hire only | `POLE_AND_LINE` |
+| For-hire plus `screen$oa_bundle_min` or more open-access commercial permits -- the bundle party boats typically hold | `POLE_AND_LINE`, but treat it as `possible` |
+| For-hire plus fewer open-access commercial permits | blank -- the vessel may fish commercially on some trips (e.g. Handgear B, tilefish); the note lists the directed open-access permits |
+| For-hire plus limited-access commercial permits | blank |
+| Commercial: trap permits only (lobster trap areas, red crab, a trap limit) | `FIXED` |
+| Commercial: dredge or trawl permits only (scallop, clam, squid trawl) | `MOBILE` |
+| Anything else | blank |
+
+A vessel gets one gear class, so a dual-permitted vessel that alternates
+charter and commercial trips is misclassified for some of its trips whichever
+class is chosen. Phase 6 reports these vessels as a separate group.
+
+```{r}
+evidence_cols <- c("list", "reason", "names", "flag", "call_sign", "vp_hours",
+                   "s1", "s2", "s3", "afe_hours", "h_day", "lease_share",
+                   "lease_share_s12", "lease_share_s3", "reg_records",
+                   "reg_sources", "reg_gear", "gfw_combined", "reg_length_m",
+                   "garfo_class", "garfo_hull_id", "hull_is_uscg",
+                   "garfo_permits", "garfo_years", "garfo_length_ft",
+                   "garfo_home_port", "garfo_permit_type", "garfo_gear_hint",
+                   "garfo_oa_permits", "garfo_oa_directed", "garfo_categories",
+                   "garfo_max_hulls_with_name", "garfo_max_mmsi_with_name")
+
+assessed <- candidates |>
   left_join(gfw_evidence, by = "MMSI") |>
-  left_join(ext_evidence, by = "MMSI") |>
   mutate(
-    across(c(reg_fishing, reg_nonfishing, ext_fishing, ext_nonfishing),
-           \(x) coalesce(x, FALSE)),
-    fishing_evidence    = reg_fishing | ext_fishing,
-    nonfishing_evidence = reg_nonfishing | ext_nonfishing,
-    resolved_by_evidence = list == "1_missed_fishing" &
-                           nonfishing_evidence & !fishing_evidence,
-    decision = NA_character_,
-    final_hull_class = case_when(
-      list == "4_gear_marker" & str_detect(reason, "battery")    ~ "gear_marker",
-      list == "4_gear_marker"                                    ~ "unknown",
-      list == "1_missed_fishing" & fishing_evidence              ~ "fishing",
-      list == "1_missed_fishing"                                 ~ "unknown",
-      list == "2_charter_activity"                               ~ "fishing",
-      list == "3_nonfishing_typed_fishing"                       ~ "non_fishing"),
-    final_gear_class = NA_character_,
-    final_activity_excluded = list == "2_charter_activity",
-    final_valid_from = if_else(list == "2_charter_activity",
-                               as.character(s3_lease_first), NA_character_),
-    final_valid_to   = if_else(list == "2_charter_activity",
-                               as.character(s3_lease_last), NA_character_),
-    final_Confidence = case_when(
-      list == "1_missed_fishing" & fishing_evidence              ~ "confirmed",
-      list == "2_charter_activity" & burst                       ~ "probable",
-      list == "3_nonfishing_typed_fishing" & nonfishing_evidence ~ "confirmed",
-      list == "4_gear_marker" & str_detect(reason, "battery")    ~ "probable",
-      TRUE                                                       ~ "possible"),
-    final_Identified_By = case_when(
-      list %in% c("1_missed_fishing", "3_nonfishing_typed_fishing") & (ext_fishing | ext_nonfishing)
-        ~ paste0("external_registry:", ext_sources),
-      list %in% c("1_missed_fishing", "3_nonfishing_typed_fishing") & (reg_fishing | reg_nonfishing)
-        ~ "gfw_registry",
-      list == "2_charter_activity" ~ "behavioural_screen",
-      list == "4_gear_marker"      ~ "mmsi_format_screen",
-      TRUE                         ~ "screen"),
-    final_evidence_ref = NA_character_,
-    final_Notes = reason) |>
-  # review order within each list: fishing evidence first, evidence-resolved
-  # last, then by hours
-  arrange(list, desc(fishing_evidence), resolved_by_evidence, desc(vp_hours)) |>
-  group_by(list) |>
-  mutate(priority = row_number()) |>
-  ungroup() |>
+    across(c(reg_fishing, reg_nonfishing), \(x) coalesce(x, FALSE)),
+    garfo_match = coalesce(garfo_match, "none"),
+
+    # GARFO length (ft) against the GFW registry length (m), when both exist
+    length_known = !is.na(reg_length_m) & !is.na(garfo_length_ft),
+    length_agree = length_known &
+      abs(garfo_length_ft * 0.3048 - reg_length_m) <= screen$length_tolerance * reg_length_m,
+    garfo_class = case_when(
+      garfo_match == "unique_years" & length_agree ~ "unique_years_length",
+      garfo_match == "unique_years" & length_known ~ "length_conflict",
+      TRUE                                         ~ garfo_match),
+    # a recreational-only permit is not evidence of a fishing vessel
+    garfo_support = garfo_class %in% c("unique_years_length", "unique_years") &
+                    !garfo_permit_type %in% c("recreational only", "unmapped codes only"),
+    has_evidence = reg_fishing | garfo_support)
+
+review <- assessed |>
+  # list 1 is reviewed only where there is evidence
+  filter(list != "1_missed_fishing" | has_evidence) |>
+  mutate(
+    decision    = NA_character_,
+    decided_on  = NA_character_,
+    Vessel_Name = names,
+    hull_class = case_when(
+      list == "4_gear_marker" & str_detect(reason, "battery") ~ "gear_marker",
+      list == "4_gear_marker"                                 ~ "unknown",
+      list == "1_missed_fishing"                              ~ "fishing",
+      list == "2_charter_activity"                            ~ "fishing",
+      list == "3_nonfishing_typed_fishing"                    ~ "non_fishing"),
+    gear_class = if_else(list == "1_missed_fishing" & garfo_support,
+                         garfo_gear_hint, NA_character_),
+    activity_excluded = as.character(list == "2_charter_activity"),
+    valid_from = if_else(list == "2_charter_activity",
+                         as.character(s3_lease_first), NA_character_),
+    valid_to   = if_else(list == "2_charter_activity",
+                         as.character(s3_lease_last), NA_character_),
+    Operation  = NA_character_,
+    Confidence = case_when(
+      list == "1_missed_fishing" & reg_fishing                          ~ "confirmed",
+      list == "1_missed_fishing" & garfo_class == "unique_years_length" ~ "probable",
+      list == "2_charter_activity" & burst                              ~ "probable",
+      list == "3_nonfishing_typed_fishing" & reg_nonfishing & !garfo_support ~ "confirmed",
+      list == "4_gear_marker" & str_detect(reason, "battery")           ~ "probable",
+      TRUE                                                              ~ "possible"),
+    Identified_By = case_when(
+      list == "1_missed_fishing" & reg_fishing              ~ "gfw_registry",
+      list == "1_missed_fishing" & garfo_support            ~ "garfo_name_match",
+      list == "3_nonfishing_typed_fishing" & reg_nonfishing ~ "gfw_registry",
+      list == "2_charter_activity"                          ~ "behavioural_screen",
+      list == "4_gear_marker"                               ~ "mmsi_format_screen",
+      TRUE                                                  ~ "screen"),
+    evidence_ref = if_else(garfo_support,
+                           paste0("GARFO hull ", garfo_hull_id, "; permit ", garfo_permits),
+                           NA_character_),
+    pull_date = as.character(pull_date),
+    oa_note = case_when(
+      garfo_oa_bundle %in% TRUE ~ paste0(
+        ". Holds ", garfo_n_oa, " open-access commercial permits, a typical party-boat bundle;",
+        " POLE_AND_LINE suggested -- treat the gear class as possible"),
+      garfo_permit_type %in% "for-hire + open-access commercial" ~ paste0(
+        ". Also holds open-access commercial permits (directed: ",
+        if_else(garfo_oa_directed %in% "", "none", garfo_oa_directed),
+        "); may fish commercially on some trips -- set the gear class manually"),
+      TRUE ~ ""),
+    Notes = case_when(
+      garfo_support & hull_is_uscg %in% TRUE ~ paste0(
+        reason, ". To confirm: look up USCG official no. ", garfo_hull_id,
+        " in CGMIX PSIX; its call sign should be ", coalesce(call_sign, "(none in AIS)"),
+        ". GARFO permits: ", garfo_permit_type, oa_note),
+      garfo_support ~ paste0(
+        reason, ". State-registered hull ", garfo_hull_id,
+        "; cannot be linked to a call sign. GARFO permits: ", garfo_permit_type, oa_note),
+      list == "3_nonfishing_typed_fishing" & garfo_match == "unique_years" ~ paste0(
+        reason, ". Note: unique GARFO permit match suggests a fishing vessel"),
+      TRUE ~ reason)) |>
+  # within each list: GFW registry evidence first, then GARFO with agreeing
+  # length, then by hours
+  arrange(list, desc(reg_fishing), desc(garfo_class == "unique_years_length"),
+          desc(vp_hours)) |>
   mutate(across(where(is.numeric), \(x) round(x, 3))) |>
-  select(any_of(review_cols))
+  select(all_of(decision_cols), any_of(evidence_cols))
 ```
 
-### Review file
+### Write the review sheet
 
-The review file is merged, not overwritten. Rows with a decision keep it and
-their `final_*` edits; undecided rows are refreshed so new evidence (e.g. an
-API pass) updates their suggestions; new candidates are added.
+The sheet is regenerated every run; anything you mark in it is collected into
+`vessel_decisions.csv` at the start of the next run (Phase 1).
 
 ```{r}
 dir.create(paths$review, recursive = TRUE, showWarnings = FALSE)
-review_path <- file.path(paths$review, "vessel_review.csv")
-
-existing <- if (file.exists(review_path)) {
-  read_csv(review_path, col_types = cols(.default = col_character()), na = c("", "NA"))
-} else {
-  NULL
-}
-
-decided_cols <- c("decision", str_subset(review_cols, "^final_"))
-fresh <- mutate(suggestions, across(everything(), as.character))
-
-review <- if (is.null(existing)) {
-  fresh
-} else {
-  kept <- filter(existing, !is.na(decision))
-  bind_rows(
-    # new or still-undecided candidates: fresh suggestions
-    anti_join(fresh, kept, by = c("list", "MMSI")),
-    # decided candidates still screened: fresh evidence, kept decisions
-    fresh |>
-      select(-all_of(decided_cols)) |>
-      inner_join(select(kept, list, MMSI, all_of(decided_cols)), by = c("list", "MMSI")),
-    # decided vessels no longer screened (e.g. now in the crosswalk): kept as history
-    anti_join(kept, fresh, by = c("list", "MMSI")))
-}
-
-review <- arrange(review, list, as.integer(priority))
-
 write_csv(review, review_path, na = "")
 
-stopifnot("decision must be blank, accept or reject" =
-            all(review$decision %in% c(NA, "accept", "reject")))
+count(review, list)
 ```
 
-### Apply accepted decisions to the crosswalk
+### What is left unreviewed
+
+List 1 vessels without evidence are not reviewed. Their hours bound what the
+classification could still be missing; report them alongside the results.
 
 ```{r}
-accepted <- review |>
-  filter(decision == "accept") |>
-  transmute(MMSI,
-            valid_from = final_valid_from,
-            valid_to   = final_valid_to,
-            Vessel_Name = names,
-            hull_class = final_hull_class,
-            gear_class = final_gear_class,
-            activity_excluded = final_activity_excluded,
-            Operation = NA_character_,
-            Identified_By = final_Identified_By,
-            Confidence = final_Confidence,
-            evidence_ref = final_evidence_ref,
-            gfw_vessel_type, gfw_gear_type,
-            pull_date = as.character(pull_date),
-            Notes = final_Notes)
-
-cw_raw <- read_csv(paths$crosswalk, col_types = cols(.default = col_character()),
-                   na = c("", "NA"))
-
-new_rows <- accepted |>
-  anti_join(cw_raw, by = c("MMSI", "valid_from", "valid_to", "activity_excluded"))
-
-if (nrow(new_rows) > 0) {
-  updated <- bind_rows(cw_raw, new_rows) |> select(all_of(cw_cols))
-
-  tmp <- tempfile(fileext = ".csv")
-  write_csv(updated, tmp, na = "")
-  read_crosswalk(tmp) # validate before replacing the real file
-
-  write_csv(updated, paths$crosswalk, na = "")
-  message("Added ", nrow(new_rows), " accepted rows to ", paths$crosswalk)
-}
-
-cw <- read_crosswalk(paths$crosswalk)
-```
-
-### Review coverage
-
-Reviewing stops for a list when the hours still unreviewed fall below
-`screen$review_cutoff` of the dataset's total hours. List 1 vessels whose
-registry records only non-fishing gear count as resolved by evidence, so list 1
-is only reachable after the API pass and registry matching.
-
-```{r}
-total_vp  <- sum(vp$hours)
-total_afe <- sum(afe$hours)
-
-review |>
-  mutate(vp_hours = as.numeric(vp_hours), afe_hours = as.numeric(afe_hours),
-         reviewed = !is.na(decision) | resolved_by_evidence %in% "TRUE") |>
-  group_by(list) |>
+assessed |>
+  filter(list == "1_missed_fishing") |>
+  group_by(has_evidence) |>
   summarise(vessels = n(),
-            reviewed = sum(reviewed),
-            unreviewed_vp_share  = sum(vp_hours[!reviewed]) / total_vp,
-            unreviewed_afe_share = sum(afe_hours[!reviewed]) / total_afe,
-            .groups = "drop") |>
-  mutate(below_cutoff = unreviewed_vp_share < screen$review_cutoff &
-                        unreviewed_afe_share < screen$review_cutoff)
+            vp_share  = round(sum(vp_hours) / total_vp, 4),
+            afe_share = round(sum(afe_hours) / total_afe, 4),
+            .groups = "drop")
 ```
 
 ## Phase 5: Classify every record
@@ -898,8 +1165,8 @@ bind_rows(VP = vp_cls, AFE = afe_cls, .id = "dataset") |>
 ```
 
 ```{r}
-write_csv(vp_cls,  file.path(paths$out_gfw, "gfw_vp_id_classified.csv"),  na = "")
-write_csv(afe_cls, file.path(paths$out_gfw, "gfw_afe_id_classified.csv"), na = "")
+write_csv(vp_cls,  file.path(paths$processed_gfw, "gfw_vp_id_classified.csv"),  na = "")
+write_csv(afe_cls, file.path(paths$processed_gfw, "gfw_afe_id_classified.csv"), na = "")
 ```
 
 ## Phase 6: Account for what is left
@@ -960,6 +1227,30 @@ added |>
          afe_hours_imputed  = vp_hours * afe_per_vp)
 ```
 
+### Dual-permitted vessels
+
+Vessels whose GARFO permits combine for-hire with commercial permits
+(`commercial + for-hire`, `for-hire + open-access commercial`) may fish both
+ways, on different trips. A single gear class cannot represent them, so report
+their hours as a separate group and check whether the Stage 2 → 3 change holds
+with them excluded. Only unique, year-overlapping GARFO matches are grouped;
+everything else is `no unique GARFO match`.
+
+```{r}
+permit_group <- profiles |>
+  transmute(MMSI,
+            permit_group = if_else(garfo_match == "unique_years",
+                                   garfo_permit_type, NA_character_))
+
+bind_rows(VP = to_long(vp_cls), AFE = to_long(afe_cls), .id = "dataset") |>
+  left_join(permit_group, by = "MMSI") |>
+  mutate(permit_group = coalesce(permit_group, "no unique GARFO match")) |>
+  group_by(dataset, set, permit_group, `Development Stage`) |>
+  summarise(hours = sum(hours), n_mmsi = n_distinct(MMSI), .groups = "drop") |>
+  pivot_wider(names_from = `Development Stage`, values_from = c(hours, n_mmsi),
+              values_fill = 0)
+```
+
 ### Cell × stage tables by set
 
 Same zero-filled layout as `gfw_fishnet_grid.qmd`, with a `set` column, ready
@@ -977,10 +1268,10 @@ cell_stage_sets <- function(df, value) {
 vp_cell_stage_sets  <- cell_stage_sets(vp_cls,  "vp_hours")
 afe_cell_stage_sets <- cell_stage_sets(afe_cls, "afe_hours")
 
-stopifnot(nrow(vp_cell_stage_sets) == nrow(grid) * 3 * 3)
+stopifnot(nrow(vp_cell_stage_sets) == nrow(grid) * nrow(dev_stages) * 3)
 
-write_csv(vp_cell_stage_sets,  file.path(paths$out_grid, "gfw_vp_cell_stage_sets.csv"))
-write_csv(afe_cell_stage_sets, file.path(paths$out_grid, "gfw_afe_cell_stage_sets.csv"))
+write_csv(vp_cell_stage_sets,  file.path(paths$interim_gfw, "gfw_vp_cell_stage_sets.csv"))
+write_csv(afe_cell_stage_sets, file.path(paths$interim_gfw, "gfw_afe_cell_stage_sets.csv"))
 ```
 
 ## Phase 7: Repeatability checks
@@ -988,12 +1279,13 @@ write_csv(afe_cell_stage_sets, file.path(paths$out_grid, "gfw_afe_cell_stage_set
 ### GFW label drift
 
 GFW's labels change between pulls (CYGNUS was typed FISHING/INCONCLUSIVE in an
-earlier pull and CARGO in this one). Any crosswalk vessel whose current label
-differs from the one recorded when its row was written is listed here for a
-second look.
+earlier pull and CARGO in the 2026-10-06 pull). Any decided vessel whose
+current label differs from the one recorded when the decision was made is
+listed here for a second look.
 
 ```{r}
-cw |>
+decisions |>
+  filter(!is.na(gfw_vessel_type)) |>
   distinct(MMSI, Vessel_Name, gfw_vessel_type, gfw_gear_type, pull_date) |>
   left_join(gfw_labels, by = "MMSI", suffix = c("_recorded", "_current")) |>
   filter(is.na(gfw_vessel_type_current) |

@@ -7,6 +7,11 @@ output: word_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+# run from the repo root (the folder holding renv.lock) so the relative paths
+# in r/R/paths.R resolve whether the qmd is rendered or run chunk by chunk
+root <- getwd()
+while (!file.exists(file.path(root, "renv.lock")) && dirname(root) != root) root <- dirname(root)
+knitr::opts_knit$set(root.dir = root)
 ```
 
 ## Objective
@@ -21,6 +26,12 @@ library(tidyverse)
 library(sf)
 library(lubridate)
 library(spdep)
+
+# shared paths and development-stage definition
+source("r/R/paths.R")
+source("r/R/gfw_helpers.R")
+
+paths <- gfw_paths
 ```
 
 ## Define key, date ranges, and spatial extent for data querying
@@ -73,7 +84,7 @@ end_26 <- '2026-10-01' # as of 10/06/2026
 ```{r}
 # define sf object to pass to `region` argument
 
-orsted_aoi <- st_read("data/sf/aoi/Orsted_AOI.shp") |> 
+orsted_aoi <- st_read(paths$aoi) |>
   select(geometry)
 
 # map aoi to make sure it was created correctly
@@ -324,15 +335,23 @@ gfw_afe_id <- rbind(afe_id_16, afe_id_17, afe_id_18, afe_id_19, afe_id_20, afe_i
 
 ```{r}
 # create subdirectory for end users
-# dir.create("data/raw/gfw",  recursive = TRUE, showWarnings = FALSE)
+# dir.create(paths$raw_gfw, recursive = TRUE, showWarnings = FALSE)
 
 # vp_id
 
-write_csv(gfw_vp_id, "data/raw/gfw/gfw_vp_id.csv") # 446646 obs
+write_csv(gfw_vp_id, paths$raw_vp) # 446646 obs
 
 # afe_id
 
-write_csv(gfw_afe_id, "data/raw/gfw/gfw_afe_id.csv") # 68185 obs
+write_csv(gfw_afe_id, paths$raw_afe) # 68185 obs
+
+# record when this pull was made, for gfw_vessel_filtering.qmd
+write_csv(tibble(pull_date   = Sys.Date(),
+                 query_start = start_16,
+                 query_end   = end_26,
+                 vp_rows     = nrow(gfw_vp_id),
+                 afe_rows    = nrow(gfw_afe_id)),
+          paths$pull_info)
 ```
 
 ## create yyyy-mm column
@@ -346,39 +365,15 @@ gfw_afe_id$'Year Month' <- as.Date(format(gfw_afe_id$`Time Range`, "%Y-%m-01"))
 ## Create development stage column
 
 ```{r}
+# Stage boundaries live in r/R/gfw_helpers.R (dev_stages), shared with the
+# fishnet and vessel filtering qmds
+dev_stages
+
 gfw_vp_id <- gfw_vp_id |>
-  mutate(
-    `Development Stage` = case_when(
-      between(`Year Month`,
-              as.Date("2016-01-01"),
-              as.Date("2019-08-01")) ~ "Stage 1", # 44 months of pre-monitoring
-
-      between(`Year Month`,
-              as.Date("2019-09-01"),
-              as.Date("2023-03-01")) ~ "Stage 2", # protected species surveys began in 9/19. 43 months of pre-construction monitoring 
-
-      between(`Year Month`,
-              as.Date("2023-04-01"),
-              as.Date("2026-09-30")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 42 months of construction & operation across SFW, RWF, and SRW
-    )
-  )
+  mutate(`Development Stage` = stage_of(`Year Month`))
 
 gfw_afe_id <- gfw_afe_id |>
-  mutate(
-    `Development Stage` = case_when(
-      between(`Year Month`,
-              as.Date("2016-01-01"),
-              as.Date("2019-08-01")) ~ "Stage 1", # 44 months of pre-monitoring
-
-      between(`Year Month`,
-              as.Date("2019-09-01"),
-              as.Date("2023-03-01")) ~ "Stage 2", # protected species surveys began in 9/19. 43 months of pre-construction monitoring 
-
-      between(`Year Month`,
-              as.Date("2023-04-01"),
-              as.Date("2026-09-30")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 42 months of construction & operation across SFW, RWF, and SRW
-    )
-  )
+  mutate(`Development Stage` = stage_of(`Year Month`))
 ```
 
 ## Sniff test
@@ -418,7 +413,7 @@ summary(gfw_afe_id)
 # hard-coded here, so adding a vessel means editing that CSV, not this script.
 # Python reads the same file, so the two languages cannot drift apart.
 
-rmPath <- "references/vessel_removals.csv"
+rmPath <- paths$removals
 
 rmVessels <- read_csv(rmPath, col_types = cols(.default = col_character()))
 
@@ -629,17 +624,17 @@ IDs_perDev |>
 # so on a fresh clone these do not exist and write_csv() would fail on the first
 # export. Create them here rather than making the reader do it by hand.
 
-dir.create("data/processed/gfw", recursive = TRUE, showWarnings = FALSE)
+dir.create(paths$processed_gfw, recursive = TRUE, showWarnings = FALSE)
 
-# orsted vessels 
+# orsted vessels
 
-write_csv(gfw_vp_orstedVessels, "data/processed/gfw/gfw_vp_orstedVessels.csv")
+write_csv(gfw_vp_orstedVessels, file.path(paths$processed_gfw, "gfw_vp_orstedVessels.csv"))
 
 # vp_fv
 
-write_csv(gfw_vp_fv, "data/processed/gfw/gfw_vp_fv.csv")
-write_csv(gfw_vp_fv_sub, "data/processed/gfw/gfw_vp_fv_sub.csv")
-write_csv(gfw_vp1_fv_sub, "data/processed/gfw/gfw_vp1_fv_sub.csv")
-write_csv(gfw_vp2_fv_sub, "data/processed/gfw/gfw_vp2_fv_sub.csv")
-write_csv(gfw_vp3_fv_sub, "data/processed/gfw/gfw_vp3_fv_sub.csv")
+write_csv(gfw_vp_fv, file.path(paths$processed_gfw, "gfw_vp_fv.csv"))
+write_csv(gfw_vp_fv_sub, file.path(paths$processed_gfw, "gfw_vp_fv_sub.csv"))
+write_csv(gfw_vp1_fv_sub, file.path(paths$processed_gfw, "gfw_vp1_fv_sub.csv"))
+write_csv(gfw_vp2_fv_sub, file.path(paths$processed_gfw, "gfw_vp2_fv_sub.csv"))
+write_csv(gfw_vp3_fv_sub, file.path(paths$processed_gfw, "gfw_vp3_fv_sub.csv"))
 ```

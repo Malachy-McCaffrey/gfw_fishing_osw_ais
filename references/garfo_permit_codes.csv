@@ -1,0 +1,83 @@
+fishery,code,permit_type,gear_hint,open_access,oa_directed,description,basis,source
+BLUEFISH,1,commercial,,TRUE,TRUE,Commercial (open access),NOAA permit page,https://www.fisheries.noaa.gov/permit/atlantic-bluefish
+BLUEFISH,2,for_hire,,,,"For-hire, party/charter",NOAA permit page,https://www.fisheries.noaa.gov/permit/atlantic-bluefish
+BLUEFISH,3,unknown,,,,Not a NOAA bluefish category; occurs only in the malformed 2026 row that the workflow drops,data check,
+BLACK SEA BASS,1,commercial,,FALSE,,Commercial (moratorium),NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/black-sea-bass
+BLACK SEA BASS,2,for_hire,,,,Recreational charter/party,NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/black-sea-bass
+SCUP,1,commercial,,FALSE,,Commercial (moratorium),NOAA permit page,https://www.fisheries.noaa.gov/permit/scup
+SCUP,2,for_hire,,,,Recreational charter/party,NOAA permit page,https://www.fisheries.noaa.gov/permit/scup
+SUMMER FLOUNDER,1,commercial,,FALSE,,Commercial (moratorium),NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/summer-flounder
+SUMMER FLOUNDER,2,for_hire,,,,Recreational charter/party,NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/summer-flounder
+TILEFISH,1,commercial,,TRUE,TRUE,Commercial (open access),NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/blueline-and-golden-tilefish-includes-recreational
+TILEFISH,2,for_hire,,,,Recreational charter/party,NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/blueline-and-golden-tilefish-includes-recreational
+TILEFISH,3,recreational,,,,Private recreational tilefish vessel permit,NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/blueline-and-golden-tilefish-includes-recreational
+SPINY DOGFISH,1,commercial,,TRUE,TRUE,Commercial (open access),NOAA permit page (search summary),https://fisheries.noaa.gov/permit/spiny-dogfish
+SKATE,1,commercial,,TRUE,TRUE,Commercial; open access assumed (NOAA page does not say; no limited access program),NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/northeast-skate-complex
+SURF CLAM,1,commercial,MOBILE,TRUE,TRUE,Commercial surfclam (open access); hydraulic clam dredge fishery,NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/atlantic-surfclam-and-ocean-quahog
+OCEAN QUAHOG,6,commercial,MOBILE,TRUE,TRUE,Commercial ocean quahog (open access); hydraulic clam dredge fishery,NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/atlantic-surfclam-and-ocean-quahog
+OCEAN QUAHOG,7,commercial,MOBILE,FALSE,,Commercial Maine mahogany quahog (limited access),NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/atlantic-surfclam-and-ocean-quahog
+INCIDENTAL HMS SQUID TRAWL,1,commercial,MOBILE,FALSE,,Incidental swordfish retention for Illex squid moratorium (trawl) vessels,NOAA HMS permits page (search summary),https://www.fisheries.noaa.gov/atlantic-highly-migratory-species/atlantic-highly-migratory-species-permits
+NAFO,1,commercial,,,,NAFO Regulatory Area / high seas authorization; not checked,unverified,
+AMERICAN LOBSTER,1,commercial,,FALSE,,Category 1 (LO1): commercial non-trap,NOAA permit page,https://www.fisheries.noaa.gov/permit/american-lobster
+AMERICAN LOBSTER,2,for_hire,,,,Category 2 (LO2): charter/party non-trap,NOAA permit page,https://www.fisheries.noaa.gov/permit/american-lobster
+AMERICAN LOBSTER,A1,commercial,FIXED,FALSE,,Trap gear Area 1,NOAA permit page,https://www.fisheries.noaa.gov/permit/american-lobster
+AMERICAN LOBSTER,A2,commercial,FIXED,FALSE,,Trap gear Area 2,NOAA permit page,https://www.fisheries.noaa.gov/permit/american-lobster
+AMERICAN LOBSTER,A3,commercial,FIXED,FALSE,,Trap gear Area 3,NOAA permit page,https://www.fisheries.noaa.gov/permit/american-lobster
+AMERICAN LOBSTER,A4,commercial,FIXED,FALSE,,Trap gear Area 4,NOAA permit page,https://www.fisheries.noaa.gov/permit/american-lobster
+AMERICAN LOBSTER,A5,commercial,FIXED,FALSE,,Trap gear Area 5,NOAA permit page,https://www.fisheries.noaa.gov/permit/american-lobster
+AMERICAN LOBSTER,A5W,commercial,FIXED,FALSE,,Area 5 trap waiver: targets black sea bass with unbaited lobster traps; lobster limited to the non-trap possession limit,NOAA bulletin,https://www.fisheries.noaa.gov/bulletin/reminder-federal-lobster-management-area-5-permit-holders-and-area-5-waivers
+AMERICAN LOBSTER,A6,commercial,FIXED,FALSE,,Trap gear Area 6,NOAA permit page,https://www.fisheries.noaa.gov/permit/american-lobster
+AMERICAN LOBSTER,AOC,commercial,FIXED,FALSE,,Trap gear Outer Cape Area,NOAA permit page,https://www.fisheries.noaa.gov/permit/american-lobster
+NORTHEAST MULTI-SPECIES,A,commercial,,FALSE,,Limited access Category A: days-at-sea; all gear except dredge,NOAA permit page,https://www.fisheries.noaa.gov/permit/northeast-multispecies-groundfish-permits
+NORTHEAST MULTI-SPECIES,C,commercial,,FALSE,,Limited access Category C: small vessel exemption (30 ft or less),NOAA permit page,https://www.fisheries.noaa.gov/permit/northeast-multispecies-groundfish-permits
+NORTHEAST MULTI-SPECIES,D,commercial,,FALSE,,Limited access Category D: hook gear (handline; rod and reel; tub trawl; longline),NOAA permit page,https://www.fisheries.noaa.gov/permit/northeast-multispecies-groundfish-permits
+NORTHEAST MULTI-SPECIES,E,commercial,,FALSE,,Limited access Category E: combination vessel (holds limited access scallop permit); all gear except dredge,NOAA permit page,https://www.fisheries.noaa.gov/permit/northeast-multispecies-groundfish-permits
+NORTHEAST MULTI-SPECIES,F,commercial,,FALSE,,Limited access Category F: large mesh individual days-at-sea (gillnet or trawl),NOAA permit page,https://www.fisheries.noaa.gov/permit/northeast-multispecies-groundfish-permits
+NORTHEAST MULTI-SPECIES,HA,commercial,,FALSE,,Limited access Handgear A: rod and reel; handline; tub trawl,NOAA permit page,https://www.fisheries.noaa.gov/permit/northeast-multispecies-groundfish-permits
+NORTHEAST MULTI-SPECIES,HB,commercial,,TRUE,TRUE,Open access Handgear B: rod and reel; handline; tub trawl,NOAA permit page,https://www.fisheries.noaa.gov/permit/northeast-multispecies-groundfish-permits
+NORTHEAST MULTI-SPECIES,I,for_hire,,,,Open access Category I: charter/party,NOAA permit page,https://www.fisheries.noaa.gov/permit/northeast-multispecies-groundfish-permits
+NORTHEAST MULTI-SPECIES,J,commercial,,TRUE,FALSE,Open access Category J: scallop multispecies possession limit (fishing under a scallop DAS),NOAA permit page,https://www.fisheries.noaa.gov/permit/northeast-multispecies-groundfish-permits
+NORTHEAST MULTI-SPECIES,K,commercial,,TRUE,TRUE,Open access Category K: open access multispecies (small-mesh multispecies),NOAA permit page,https://www.fisheries.noaa.gov/permit/northeast-multispecies-groundfish-permits
+MONKFISH,A,commercial,,FALSE,,Limited access DAS without a multispecies or scallop limited access permit,NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/monkfish
+MONKFISH,B,commercial,,FALSE,,Limited access (description not retrieved),NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/monkfish
+MONKFISH,C,commercial,,FALSE,,Limited access DAS with a multispecies or scallop limited access permit,NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/monkfish
+MONKFISH,D,commercial,,FALSE,,Limited access (as listed on the NOAA page),NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/monkfish
+MONKFISH,E,commercial,,TRUE,FALSE,Open access incidental,NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/monkfish
+MONKFISH,F,commercial,,FALSE,,Offshore Fishery Program (Southern Fishery Management Area),NOAA program page (search summary),https://www.fisheries.noaa.gov/new-england-mid-atlantic/commercial-fishing/monkfish-offshore-fishery-program
+MONKFISH,H,commercial,,FALSE,,Limited access DAS for the Southern Fishery Management Area only,NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/monkfish
+SQUID/MACKEREL/BUTTERFISH,1,commercial,,FALSE,,Longfin squid/butterfish moratorium before Amendment 20 split it into 1A-1C (used only 2016-2017 in these files),inferred from data and Amendment 20,https://www.fisheries.noaa.gov/permit/mackerel-squid-and-butterfish
+SQUID/MACKEREL/BUTTERFISH,1A,commercial,,FALSE,,Longfin squid moratorium,NOAA permit page,https://www.fisheries.noaa.gov/permit/mackerel-squid-and-butterfish
+SQUID/MACKEREL/BUTTERFISH,1B,commercial,,FALSE,,Longfin squid moratorium,NOAA permit page,https://www.fisheries.noaa.gov/permit/mackerel-squid-and-butterfish
+SQUID/MACKEREL/BUTTERFISH,1C,commercial,,FALSE,,Longfin squid moratorium,NOAA permit page,https://www.fisheries.noaa.gov/permit/mackerel-squid-and-butterfish
+SQUID/MACKEREL/BUTTERFISH,2,for_hire,,,,Squid/mackerel/butterfish charter/party (open access),NOAA permit page,https://www.fisheries.noaa.gov/permit/mackerel-squid-and-butterfish
+SQUID/MACKEREL/BUTTERFISH,3,commercial,,TRUE,FALSE,Squid/butterfish incidental catch (open access),NOAA permit page,https://www.fisheries.noaa.gov/permit/mackerel-squid-and-butterfish
+SQUID/MACKEREL/BUTTERFISH,4,commercial,,TRUE,TRUE,Atlantic mackerel (open access),NOAA permit page,https://www.fisheries.noaa.gov/permit/mackerel-squid-and-butterfish
+SQUID/MACKEREL/BUTTERFISH,5,commercial,,FALSE,,Illex squid moratorium,NOAA permit page,https://www.fisheries.noaa.gov/permit/mackerel-squid-and-butterfish
+SQUID/MACKEREL/BUTTERFISH,6,commercial,,FALSE,,Butterfish moratorium,NOAA permit page,https://www.fisheries.noaa.gov/permit/mackerel-squid-and-butterfish
+SQUID/MACKEREL/BUTTERFISH,T1,commercial,,FALSE,,Mackerel Tier 1 (limited access),NOAA permit page,https://www.fisheries.noaa.gov/permit/mackerel-squid-and-butterfish
+SQUID/MACKEREL/BUTTERFISH,T2,commercial,,FALSE,,Mackerel Tier 2 (limited access),NOAA permit page,https://www.fisheries.noaa.gov/permit/mackerel-squid-and-butterfish
+SQUID/MACKEREL/BUTTERFISH,T3,commercial,,FALSE,,Mackerel Tier 3 (limited access),NOAA permit page,https://www.fisheries.noaa.gov/permit/mackerel-squid-and-butterfish
+SCALLOP - LIMITED ACCESS,2,commercial,MOBILE,FALSE,,LA 2: full-time,NOAA permit page (search summary),https://fisheries.noaa.gov/permit/atlantic-sea-scallop
+SCALLOP - LIMITED ACCESS,3,commercial,MOBILE,FALSE,,LA 3: part-time,NOAA permit page (search summary),https://fisheries.noaa.gov/permit/atlantic-sea-scallop
+SCALLOP - LIMITED ACCESS,5,commercial,MOBILE,FALSE,,LA 5: full-time small dredge,NOAA permit page (search summary),https://fisheries.noaa.gov/permit/atlantic-sea-scallop
+SCALLOP - LIMITED ACCESS,6,commercial,MOBILE,FALSE,,LA 6: part-time small dredge,NOAA permit page (search summary),https://fisheries.noaa.gov/permit/atlantic-sea-scallop
+SCALLOP - LIMITED ACCESS,7,commercial,MOBILE,FALSE,,LA 7: full-time; authorized to use trawl net,NOAA permit page (search summary),https://fisheries.noaa.gov/permit/atlantic-sea-scallop
+GENERAL CATEGORY SCALLOP,A,commercial,MOBILE,FALSE,,LAGC A: individual fishing quota,NOAA permit page (search summary),https://fisheries.noaa.gov/permit/atlantic-sea-scallop
+GENERAL CATEGORY SCALLOP,B,commercial,MOBILE,FALSE,,LAGC B: Northern Gulf of Maine,NOAA permit page (search summary),https://fisheries.noaa.gov/permit/atlantic-sea-scallop
+GENERAL CATEGORY SCALLOP,C,commercial,,FALSE,,LAGC C: incidental catch (held by vessels using other gear),NOAA permit page (search summary),https://fisheries.noaa.gov/permit/atlantic-sea-scallop
+HERRING,A,commercial,,FALSE,,Category A: all areas limited access,NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/atlantic-herring
+HERRING,B,commercial,,FALSE,,Category B: Areas 2/3 limited access,NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/atlantic-herring
+HERRING,C,commercial,,FALSE,,Category C: incidental catch limited access,NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/atlantic-herring
+HERRING,D,commercial,,TRUE,TRUE,Category D: open access (6;600 lb trip limit; all areas); often held for bait,NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/atlantic-herring
+HERRING,E,commercial,,TRUE,TRUE,Category E: open access (20;000 lb trip limit; Areas 2 and 3); often held for bait,NOAA permit page (search summary),https://www.fisheries.noaa.gov/permit/atlantic-herring
+ATLANTIC DEEP SEA RED CRAB,A,commercial,,TRUE,TRUE,Category A: open access (500 lb possession limit; incidental),NOAA permit page (search summary),https://fisheries.noaa.gov/permit/atlantic-deep-sea-red-crab
+ATLANTIC DEEP SEA RED CRAB,B,commercial,FIXED,FALSE,,Category B: limited access (directed trap fishery),NOAA permit page (search summary),https://fisheries.noaa.gov/permit/atlantic-deep-sea-red-crab
+ATLANTIC DEEP SEA RED CRAB,C,commercial,FIXED,FALSE,,Category C: limited access (directed trap fishery),NOAA permit page (search summary),https://fisheries.noaa.gov/permit/atlantic-deep-sea-red-crab
+HMS,CHARTER/HEADBOAT,for_hire,,,,HMS Charter/Headboat,GARFO HMS file CATEGORY field,
+HMS,GENERAL,commercial,,TRUE,TRUE,Atlantic tunas General category (commercial handgear); open access assumed,GARFO HMS file CATEGORY field,
+HMS,GENERAL & SWORDFISH,commercial,,TRUE,TRUE,Atlantic tunas General category with swordfish general commercial; open access assumed,GARFO HMS file CATEGORY field,
+HMS,HARPOON,commercial,,TRUE,TRUE,Atlantic tunas Harpoon category; open access assumed,GARFO HMS file CATEGORY field,
+HMS,HARPOON & SWORDFISH,commercial,,TRUE,TRUE,Atlantic tunas Harpoon category with swordfish; open access assumed,GARFO HMS file CATEGORY field,
+HMS,SWORDFISH,commercial,,TRUE,TRUE,Swordfish general commercial; open access assumed,GARFO HMS file CATEGORY field,
+HMS,TRAP,commercial,FIXED,FALSE,,Atlantic tunas Trap category (pound nets),GARFO HMS file CATEGORY field,
+HMS,CHB COMMERCIAL SALE ENDORSEMENT,commercial,,TRUE,TRUE,Charter/headboat permit endorsed for commercial sale (CML CHB ENDORSEMENT = Y); open access assumed,GARFO HMS file CML CHB ENDORSEMENT field (interpretation unverified),

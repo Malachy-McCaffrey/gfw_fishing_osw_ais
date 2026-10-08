@@ -3,10 +3,18 @@ title: "MM GFW 0.01° Fishnet Grid (UTM 19N)"
 author: "Malachy McCaffrey"
 date: today
 format: html
+params:
+  fishnet: ""     # override the grid output folder (paths$fishnet)
+  interim_gfw: "" # override the aggregate-table output folder (paths$interim_gfw)
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+# run from the repo root (the folder holding renv.lock) so the relative paths
+# in r/R/paths.R resolve whether the qmd is rendered or run chunk by chunk
+root <- getwd()
+while (!file.exists(file.path(root, "renv.lock")) && dirname(root) != root) root <- dirname(root)
+knitr::opts_knit$set(root.dir = root)
 ```
 
 ## Objective
@@ -27,14 +35,14 @@ The data have not yet been re-processed because GFW's vessel classifications
 produce both false negatives and false positives:
 
 - **False negatives:** fishing vessels typed as `OTHER`, `GEAR`, or
-  `PASSENGER` (e.g. FV JULIE G, ONWA33NT), so filtering on
-  `Vessel Type == "FISHING"` drops real fishing activity.
+  `PASSENGER` (e.g. FV JULIE G), so filtering on `Vessel Type == "FISHING"`
+  drops real fishing activity.
 - **False positives:** non-fishing vessels typed as `FISHING` (e.g. CYGNUS), so
   the same filter keeps non-fishing activity.
 
-Both problems affect VP and AFE. Once vessel classification is resolved,
-re-run the aggregation on the re-processed data; the grid itself does not
-change, because it is built from the cells present in the raw VP data.
+Both problems affect VP and AFE; `gfw_vessel_filtering.qmd` addresses them.
+The grid itself does not depend on that work, because it is built from the
+cells present in the raw VP data.
 
 ## Plan
 
@@ -43,41 +51,42 @@ change, because it is built from the cells present in the raw VP data.
    (e.g. `-71.209999`), so snap with `round(x / 0.01)` -- never `floor()`, which
    drops values like `41.0699999` into the wrong cell. The integer pair
    `cell_id = "ix_iy"` is the join key from here on; floating-point
-   coordinates are never compared.
-2. **Grid = the distinct cells in `gfw_vp_id`** (3,376 cells). Every AFE cell
-   is already among them.
+   coordinates are never compared. `read_gfw()` in `r/R/gfw_helpers.R` does
+   this for every script.
+2. **Grid = the distinct cells in `gfw_vp_id`.** Every AFE cell must already be
+   among them.
 3. **Build each cell from its lower-left corner** in WGS 84, spanning
    `Lon`–`Lon + 0.01` and `Lat`–`Lat + 0.01`. Corners come from integer
    arithmetic so adjacent cells share bit-identical vertices.
 4. **Reproject the polygons to EPSG:32619.** Each cell becomes a parallelogram
-   of about 838 m E–W by 1,111 m N–S, rotated about 1.6° by grid convergence.
-   Do not build a new square UTM fishnet or resample a raster, either of which
-   would redistribute hours between cells.
-5. **Add cell attributes:** `area_km2` (from UTM, 0.929–0.937 km²),
-   `aoi_frac`, and `aoi_class` (inside / edge / outside).
-6. **Grid-cell decisions** (see below): keep the 52 cells outside the AOI;
-   exclude the 51 AOI-touching cells that have no records.
+   of roughly 840 m E–W by 1,110 m N–S, rotated by grid convergence. Do not
+   build a new square UTM fishnet or resample a raster, either of which would
+   redistribute hours between cells.
+5. **Add cell attributes:** `area_km2` (from UTM), `aoi_frac`, and `aoi_class`
+   (inside / edge / outside).
+6. **Grid-cell decisions** (see below): keep data cells outside the AOI;
+   exclude AOI-touching cells that have no records.
 7. **Attach the raw data with a table join on `cell_id`**, aggregate per
-   cell × stage and per cell × month, and fill zeros across the 3,376-cell
-   grid. These are raw-data aggregates (all vessel types); see *Data status*.
+   cell × stage and per cell × month, and fill zeros across the grid. These
+   are raw-data aggregates (all vessel types); see *Data status*.
 8. **Neighbours** from queen contiguity on the UTM grid.
 
 ### Grid-cell decisions
 
 Under the lower-left anchor, two sets of cells sit at the AOI boundary:
 
-- **52 cells outside the AOI -- kept.** All lie along the north and east
-  edges, up to 568 m outside the boundary. They are cells GFW returned for the
-  AOI query and hold real records: 3,063 VP rows (0.69% of rows, 0.44% of
-  hours) and 295 AFE rows in 38 of the 52 cells. They are flagged
-  `aoi_class == "outside"` so they can be dropped in a sensitivity check.
-- **51 AOI-touching cells with no records -- excluded.** All lie along the
-  south and west edges. No VP or AFE record has ever been returned under their
-  keys, so they are not part of the grid and are not zero-filled.
+- **Data cells outside the AOI -- kept.** They lie along the north and east
+  edges. They are cells GFW returned for the AOI query and hold real records,
+  so they are flagged `aoi_class == "outside"` and can be dropped in a
+  sensitivity check.
+- **AOI-touching cells with no records -- excluded.** They lie along the south
+  and west edges. No VP or AFE record has been returned under their keys, so
+  they are not part of the grid and are not zero-filled.
 
 The mirror-image pattern (extra cells to the NE, missing cells to the SW) is
 consistent with GFW selecting cells for a `USER_SHAPEFILE` region by a rule
-that differs from the lower-left labelling. Diagnostics are in
+that differs from the lower-left labelling. The counts for this pull are
+reported under *Grid-cell decision checks*; diagnostics are in
 `r/scratchpad/gridcell_decision.R`.
 
 ### Why a table join, not a spatial join
@@ -85,7 +94,7 @@ that differs from the lower-left labelling. Diagnostics are in
 Each record already names its cell, so the join only has to read the label.
 With lower-left anchoring every point sits exactly on a cell corner shared by
 four cells, and float noise nudges it to an arbitrary side of the edge. On a
-20,000-row sample of `gfw_vp_id`:
+20,000-row sample of the 2026-10-06 `gfw_vp_id` pull:
 
 - `st_intersects` (WGS 84) matched most points to 2 or 4 cells, turning 20,000
   rows into 44,183 and inflating VP hours 2.19×.
@@ -97,46 +106,44 @@ None of these fail loudly. The table join is exact, one-to-one, checkable with
 linking the grid to layers that do not share the key (lease areas, turbines,
 the AOI), done once at the cell level as in the `aoi_frac` step.
 
-## Libraries
+## Libraries and shared code
 
 ```{r}
 library(tidyverse)
 library(sf)
 library(spdep)
+
+source("r/R/paths.R")
+source("r/R/gfw_helpers.R")
+
+paths <- gfw_paths_with(if (exists("params")) params else list())
 ```
 
 ## Parameters
 
 ```{r}
-res     <- 0.01    # GFW "HIGH" spatial resolution, degrees
-crs_utm <- 32619   # WGS 84 / UTM zone 19N
+crs_utm <- 32619 # WGS 84 / UTM zone 19N
 ```
 
 ## Read raw data and snap to cell indices
 
 ```{r}
-# GFW Lat/Lon = lower-left corner of a 0.01 degree cell. Values carry float32
-# noise (e.g. -71.209999), so round() -- never floor() -- to the lattice.
-read_gfw <- function(path) {
-  read_csv(path, show_col_types = FALSE,
-           col_types = cols(MMSI = col_character())) |>
-    mutate(ix = as.integer(round(Lon / res)),
-           iy = as.integer(round(Lat / res)),
-           cell_id = sprintf("%d_%d", ix, iy))
-}
+vp  <- read_gfw(paths$raw_vp)
+afe <- read_gfw(paths$raw_afe)
 
-vp  <- read_gfw("data/raw/gfw/gfw_vp_id.csv")
-afe <- read_gfw("data/raw/gfw/gfw_afe_id.csv")
-
-# every coordinate must sit on the 0.01 lattice (observed max error: 4e-4 cells)
-snap_err <- with(bind_rows(vp, afe), max(abs(Lon / res - ix), abs(Lat / res - iy)))
+# every coordinate must sit on the 0.01 lattice
+snap_err <- with(bind_rows(vp, afe), max(abs(Lon / 0.01 - ix), abs(Lat / 0.01 - iy)))
 stopifnot("coordinates are not on the 0.01 degree lattice" = snap_err < 0.01)
+
+# every record needs a development stage (r/R/gfw_helpers.R)
+stopifnot("records with no development stage" =
+            !anyNA(vp$`Development Stage`) && !anyNA(afe$`Development Stage`))
 ```
 
 ## Grid cells from the VP data
 
 ```{r}
-cells <- distinct(vp, cell_id, ix, iy) # 3376 cells
+cells <- distinct(vp, cell_id, ix, iy)
 
 stopifnot("AFE has cells absent from the VP grid" =
             all(afe$cell_id %in% cells$cell_id))
@@ -161,12 +168,12 @@ grid_wgs <- st_sf(cells,
 ## Reproject and add cell attributes
 
 ```{r}
-aoi_utm <- st_read("data/sf/aoi/Orsted_AOI.shp", quiet = TRUE) |>
+aoi_utm <- st_read(paths$aoi, quiet = TRUE) |>
   st_union() |>
   st_transform(crs_utm)
 
 grid_utm <- st_transform(grid_wgs, crs_utm) |>
-  mutate(area_km2 = as.numeric(st_area(geometry)) / 1e6) # 0.929-0.937 km2
+  mutate(area_km2 = as.numeric(st_area(geometry)) / 1e6)
 
 # fraction of each cell inside the AOI; cells outside it get 0
 in_aoi <- st_intersection(select(grid_utm, cell_id), aoi_utm)
@@ -182,18 +189,15 @@ grid_utm <- grid_utm |>
                             levels = c("inside", "edge", "outside"))) |>
   select(-aoi_m2)
 
-count(st_drop_geometry(grid_utm), aoi_class) # 3118 inside, 206 edge, 52 outside
+count(st_drop_geometry(grid_utm), aoi_class)
+summary(grid_utm$area_km2)
 ```
 
 ## Grid-cell decision checks
 
 ```{r}
-# Kept: the 52 data cells outside the AOI stay in the grid, flagged "outside".
-stopifnot("expected 52 cells outside the AOI" =
-            sum(grid_utm$aoi_class == "outside") == 52)
-
 # Excluded: AOI-touching cells with no records are not added to the grid.
-# Listed here only to document the decision.
+# Built here only to document the decision.
 lattice <- expand_grid(ix = seq(min(cells$ix) - 1L, max(cells$ix) + 1L),
                        iy = seq(min(cells$iy) - 1L, max(cells$iy) + 1L)) |>
   mutate(cell_id = sprintf("%d_%d", ix, iy)) |>
@@ -206,11 +210,17 @@ empty_utm <- st_sf(lattice,
 
 empty_utm <- empty_utm[lengths(st_intersects(empty_utm, aoi_utm)) > 0, ]
 
-nrow(empty_utm) # 51 cells excluded
-
 stopifnot("excluded empty cells leaked into the grid" =
             !any(empty_utm$cell_id %in% grid_utm$cell_id))
+
+outside_ids <- grid_utm$cell_id[grid_utm$aoi_class == "outside"]
 ```
+
+The grid has `r nrow(grid_utm)` cells. `r length(outside_ids)` lie entirely
+outside the AOI and are kept; they hold `r sum(vp$cell_id %in% outside_ids)`
+VP records (`r round(100 * sum(vp$hours[vp$cell_id %in% outside_ids]) / sum(vp$hours), 2)`%
+of VP hours). `r nrow(empty_utm)` AOI-touching cells have no records and are
+excluded.
 
 ## Map check
 
@@ -221,7 +231,7 @@ ggplot() +
   geom_sf(data = aoi_utm, fill = NA, color = "black", linewidth = 0.6) +
   scale_fill_manual(values = c(inside = "#d9d8d2", edge = "#2a78d6", outside = "#eb6834")) +
   labs(fill = NULL,
-       caption = "Dashed: 51 AOI-touching cells with no records (excluded).") +
+       caption = "Dashed: AOI-touching cells with no records (excluded).") +
   theme_minimal()
 ```
 
@@ -229,56 +239,36 @@ ggplot() +
 
 These aggregates describe the **raw GFW data** -- all vessel types, no vessel
 removals, no fishing-hour threshold. They are not fishing-vessel totals; see
-*Data status* above.
+*Data status* above. `Year Month` and `Development Stage` come from
+`read_gfw()`, so the stage boundaries are the ones in `r/R/gfw_helpers.R`.
 
 ```{r}
-# The raw files carry only `Time Range`, so derive `Year Month` and
-# `Development Stage`. Stage boundaries mirror gfw_vp_afe_datapull.qmd --
-# keep the two in sync.
-add_time_fields <- function(df) {
-  df |>
-    mutate(`Year Month` = floor_date(`Time Range`, "month"),
-           `Development Stage` = case_when(
-             between(`Year Month`, as.Date("2016-01-01"), as.Date("2019-08-01")) ~ "Stage 1",
-             between(`Year Month`, as.Date("2019-09-01"), as.Date("2023-03-01")) ~ "Stage 2",
-             between(`Year Month`, as.Date("2023-04-01"), as.Date("2026-09-01")) ~ "Stage 3"))
-}
-
-vp_raw  <- add_time_fields(vp)
-afe_raw <- add_time_fields(afe)
-
 # every record must land in a grid cell -- both should return zero rows
 grid_ids <- st_drop_geometry(grid_utm) |> select(cell_id)
 
 stopifnot(
-  "VP records with no grid cell"  = nrow(anti_join(vp_raw,  grid_ids, by = "cell_id")) == 0,
-  "AFE records with no grid cell" = nrow(anti_join(afe_raw, grid_ids, by = "cell_id")) == 0
+  "VP records with no grid cell"  = nrow(anti_join(vp,  grid_ids, by = "cell_id")) == 0,
+  "AFE records with no grid cell" = nrow(anti_join(afe, grid_ids, by = "cell_id")) == 0
 )
 
-# stages run Jan 2016 - Sep 2026, covering the full pull; every record needs one
-stopifnot(
-  "VP records with no development stage"  = !anyNA(vp_raw$`Development Stage`),
-  "AFE records with no development stage" = !anyNA(afe_raw$`Development Stage`)
-)
-
-count(vp_raw, `Development Stage`)
+count(vp, `Development Stage`)
 ```
 
 ```{r}
-# cell x development stage, zero-filled across the 3376-cell grid
+# cell x development stage, zero-filled across the grid
 # counting unit is MMSI, not Vessel ID (see references/data_dictionary.md)
 
-vp_cell_stage <- vp_raw |>
+vp_cell_stage <- vp |>
   group_by(cell_id, `Development Stage`) |>
-  summarise(vp_hours = sum(`Vessel Presence Hours`),
+  summarise(vp_hours = sum(hours),
             n_mmsi   = n_distinct(MMSI),
             .groups  = "drop") |>
   complete(cell_id = grid_utm$cell_id, `Development Stage`,
            fill = list(vp_hours = 0, n_mmsi = 0L))
 
-afe_cell_stage <- afe_raw |>
+afe_cell_stage <- afe |>
   group_by(cell_id, `Development Stage`) |>
-  summarise(afe_hours = sum(`Apparent Fishing Hours`),
+  summarise(afe_hours = sum(hours),
             n_mmsi    = n_distinct(MMSI),
             .groups   = "drop") |>
   complete(cell_id = grid_utm$cell_id, `Development Stage`,
@@ -288,19 +278,19 @@ afe_cell_stage <- afe_raw |>
 ```{r}
 # cell x month, zero-filled across the grid and every month in the record
 
-months <- seq(min(vp_raw$`Year Month`), max(vp_raw$`Year Month`), by = "month")
+months <- seq(min(vp$`Year Month`), max(vp$`Year Month`), by = "month")
 
-vp_cell_month <- vp_raw |>
+vp_cell_month <- vp |>
   group_by(cell_id, `Year Month`) |>
-  summarise(vp_hours = sum(`Vessel Presence Hours`),
+  summarise(vp_hours = sum(hours),
             n_mmsi   = n_distinct(MMSI),
             .groups  = "drop") |>
   complete(cell_id = grid_utm$cell_id, `Year Month` = months,
            fill = list(vp_hours = 0, n_mmsi = 0L))
 
-afe_cell_month <- afe_raw |>
+afe_cell_month <- afe |>
   group_by(cell_id, `Year Month`) |>
-  summarise(afe_hours = sum(`Apparent Fishing Hours`),
+  summarise(afe_hours = sum(hours),
             n_mmsi    = n_distinct(MMSI),
             .groups   = "drop") |>
   complete(cell_id = grid_utm$cell_id, `Year Month` = months,
@@ -310,7 +300,7 @@ stopifnot(nrow(vp_cell_month) == nrow(grid_utm) * length(months))
 ```
 
 ```{r}
-# spatial versions with area-normalised density, since cell area varies ~1%
+# spatial versions with area-normalised density, since cell area varies
 
 vp_stage_sf <- grid_utm |>
   left_join(vp_cell_stage, by = "cell_id") |>
@@ -324,12 +314,12 @@ afe_stage_sf <- grid_utm |>
 ## Neighbours
 
 ```{r}
-# Cells are ~838 x 1,111 m, not square: a distance band would link E-W
+# Cells are taller (N-S) than wide (E-W): a distance band would link E-W
 # neighbours but skip N-S ones, so use contiguity.
 nb <- poly2nb(grid_utm, queen = TRUE, snap = 0)
 lw <- nb2listw(nb, style = "W", zero.policy = TRUE)
 
-summary(card(nb)) # mean ~7.8 links, no islands
+summary(card(nb))
 stopifnot("grid has cells with no neighbours" = all(card(nb) > 0))
 ```
 
@@ -338,12 +328,12 @@ stopifnot("grid has cells with no neighbours" = all(card(nb) > 0))
 ```{r}
 # grid (supersedes archive/fishnet/Orsted_sqGrid_utm19n.shp, which was built
 # treating Lat/Lon as centroids)
-st_write(grid_utm, "data/sf/fishnet/gfw_grid_utm19n.gpkg", delete_dsn = TRUE)
+st_write(grid_utm, file.path(paths$fishnet, basename(paths$grid)), delete_dsn = TRUE)
 
 # raw-data aggregates (all vessel types); file names keep the raw "_id" suffix
 # so they are not mistaken for fishing-vessel totals
-write_csv(vp_cell_stage,  "data/interim/gfw/gfw_vp_id_cell_stage.csv")
-write_csv(afe_cell_stage, "data/interim/gfw/gfw_afe_id_cell_stage.csv")
-write_csv(vp_cell_month,  "data/interim/gfw/gfw_vp_id_cell_month.csv")
-write_csv(afe_cell_month, "data/interim/gfw/gfw_afe_id_cell_month.csv")
+write_csv(vp_cell_stage,  file.path(paths$interim_gfw, "gfw_vp_id_cell_stage.csv"))
+write_csv(afe_cell_stage, file.path(paths$interim_gfw, "gfw_afe_id_cell_stage.csv"))
+write_csv(vp_cell_month,  file.path(paths$interim_gfw, "gfw_vp_id_cell_month.csv"))
+write_csv(afe_cell_month, file.path(paths$interim_gfw, "gfw_afe_id_cell_month.csv"))
 ```

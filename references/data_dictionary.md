@@ -30,6 +30,14 @@ Unfiltered API output, 18 columns. One row = one vessel × one 0.01° cell × on
 | `Development Stage` | string | `Stage 1` / `Stage 2` / `Stage 3`, derived in the R pull |
 | `Year Month` | date | First of month, derived |
 
+### `data/raw/gfw/pull_info.csv`
+
+Written by the pull alongside the raw files: `pull_date` (the day the pull
+ran), `query_start` / `query_end` (the date range requested) and `vp_rows` /
+`afe_rows`. `gfw_vessel_filtering.qmd` reads `pull_date` from it; for pulls
+made before the file existed it falls back to the raw VP file's modification
+date, with a warning.
+
 ### `data/processed/gfw/gfw_{vp,afe}{1,2,3}_*_sub.csv`
 
 Cleaned per-stage files — what the analysis actually reads. Same schema minus
@@ -103,11 +111,15 @@ Mutually exclusive, so counts sum to the grid size: `stable hot`, `gained hot`,
 
 | Stage | Window | Months | Rationale |
 |---|---|---|---|
-| 1 | 2016-01-01 → 2019-08-01 | 44 | Pre-monitoring baseline |
-| 2 | 2019-09-01 → 2023-03-01 | 43 | Protected-species surveys began 09/2019 |
-| 3 | 2023-04-01 → 2026-09-01 | 42 | Seabed prep for South Fork Wind began 04/2023 |
+| 1 | 2016-01-01 → 2019-08-31 | 44 | Pre-monitoring baseline |
+| 2 | 2019-09-01 → 2023-03-31 | 43 | Protected-species surveys began 09/2019 |
+| 3 | 2023-04-01 → 2026-09-30 | 42 | Seabed prep for South Fork Wind began 04/2023 |
 
 Stage 3 runs through the end of the current pull — data ends 2026-09-30.
+
+The R code takes these windows from one place, `dev_stages` in
+`r/R/gfw_helpers.R`; a record's stage comes from its `Year Month`. Change
+them there, not in individual scripts.
 
 ---
 
@@ -147,6 +159,20 @@ found rather than stopping at the first: blank names, an MMSI that is not 9
 digits, duplicate MMSI, unknown `Scope` or `Confidence` values, a `Date_Added`
 that is not ISO. `load_removal_list()` logs the breakdown by scope and
 confidence on every read; the list currently holds 46 vessels.
+
+---
+
+## Vessel classification files
+
+Used by `r/scripts/rmd/gfw_vessel_filtering.qmd`.
+
+| File | Tracked | Role |
+|---|---|---|
+| `references/vessel_decisions.csv` | yes | Review decisions, the only file edited by hand. Crosswalk columns plus `decision` (`accept` / `reject`) and `decided_on`. A decision for a removal-list MMSI replaces that vessel's removal-list row. |
+| `references/vessel_crosswalk.csv` | yes | **Generated** every run from `vessel_removals.csv` and the accepted decisions. One row per MMSI per validity window (`valid_from`–`valid_to`), with `hull_class`, `gear_class`, `activity_excluded` and `Confidence`. Do not edit. |
+| `references/garfo_permit_codes.csv` | yes | Meaning of each GARFO fishery permit code: permit type, gear hint, open access, NOAA source |
+| `data/processed/vessel_review/vessel_review.csv` | no | **Generated** review sheet: candidates, evidence and a suggested decision per vessel. Rows marked `accept` / `reject` are copied into `vessel_decisions.csv` on the next run. |
+| `data/raw/vessel_evidence/` | no | GFW identity API cache (queried IDs with date, status and dataset version) and the GARFO permit lists in `registries/` |
 
 ---
 

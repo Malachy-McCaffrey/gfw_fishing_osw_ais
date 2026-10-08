@@ -420,7 +420,7 @@ gfw_vp_id <- gfw_vp_id |>
 
       between(`Year Month`,
               as.Date("2023-04-01"),
-              as.Date("2026-09-01")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 42 months (through 09/26) of construction & operation across SFW, RWF, and SRW
+              as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 40 months of construction & operation across SFW, RWF, and SRW
     )
   )
 
@@ -437,7 +437,7 @@ gfw_vp_fv <- gfw_vp_fv |>
 
       between(`Year Month`,
               as.Date("2023-04-01"),
-              as.Date("2026-09-01")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 42 months (through 09/26) of construction & operation across SFW, RWF, and SRW
+              as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 40 months of construction & operation across SFW, RWF, and SRW
     )
   )
 
@@ -454,34 +454,9 @@ gfw_afe_id <- gfw_afe_id |>
 
       between(`Year Month`,
               as.Date("2023-04-01"),
-              as.Date("2026-09-01")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 42 months (through 09/26) of construction & operation across SFW, RWF, and SRW
+              as.Date("2026-07-17")) ~ "Stage 3" # sea bed prep for SFW began in 04/23. 40 months of construction & operation across SFW, RWF, and SRW
     )
   )
-```
-
-## Chrs to factors
-
-```{r}
-gfw_vp_id$`Vessel Type` <- as.factor(gfw_vp_id$`Vessel Type`)
-gfw_vp_id$`Vessel Name` <- as.factor(gfw_vp_id$`Vessel Name`)
-gfw_vp_id$`Gear Type` <- as.factor(gfw_vp_id$`Gear Type`)
-gfw_vp_id$`Development Stage` <- as.factor(gfw_vp_id$`Development Stage`)
-gfw_vp_id$MMSI <- as.factor(gfw_vp_id$MMSI)
-gfw_vp_id$Flag <-  as.factor(gfw_vp_id$Flag)
-gfw_vp_id$`Vessel ID` <-  as.factor(gfw_vp_id$`Vessel ID`)
-
-gfw_vp_fv$`Gear Type` <- as.factor(gfw_vp_fv$`Gear Type`)
-gfw_vp_fv$`Vessel Name` <- as.factor(gfw_vp_fv$`Vessel Name`)
-gfw_vp_fv$`Development Stage` <- as.factor(gfw_vp_fv$`Development Stage`)
-gfw_vp_fv$MMSI <- as.factor(gfw_vp_fv$MMSI)
-gfw_vp_fv$Flag <-  as.factor(gfw_vp_fv$Flag)
-gfw_vp_fv$`Vessel ID` <-  as.factor(gfw_vp_fv$`Vessel ID`)
-
-gfw_afe_id$`Gear Type` <- as.factor(gfw_afe_id$`Gear Type`)
-gfw_afe_id$`Vessel Name` <- as.factor(gfw_afe_id$`Vessel Name`)
-gfw_afe_id$MMSI <- as.factor(gfw_afe_id$MMSI)
-gfw_afe_id$Flag <-  as.factor(gfw_afe_id$Flag)
-gfw_afe_id$`Vessel ID` <-  as.factor(gfw_afe_id$`Vessel ID`)
 ```
 
 ## Sniff test
@@ -579,13 +554,11 @@ if (length(rmProblems) > 0) {
 rmCharter   <- rmVessels |> filter(Scope == "stages_2_3") |> pull(MMSI)
 rmAllStages <- rmVessels |> filter(Scope == "all_stages") |> pull(MMSI)
 
-# MMSI was coerced to a factor above, so compare on as.character().
-
 # isolate orsted vessels
 
 gfw_vp_orstedVessels <- gfw_vp_id |>
   filter(
-    as.character(MMSI) %in% rmCharter &
+    (MMSI) %in% rmCharter &
     `Development Stage` %in% c("Stage 2", "Stage 3"))
 
 # remove orsted charter vessels (stages 2-3) and non-fishing vessels (all stages)

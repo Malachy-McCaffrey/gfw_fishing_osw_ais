@@ -8,7 +8,7 @@ output: word_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 # run from the repo root (the folder holding renv.lock) so the relative paths
-# in r/R/paths.R resolve whether the qmd is rendered or run chunk by chunk
+# in r/paths.R resolve whether the qmd is rendered or run chunk by chunk
 root <- getwd()
 while (!file.exists(file.path(root, "renv.lock")) && dirname(root) != root) root <- dirname(root)
 knitr::opts_knit$set(root.dir = root)
@@ -28,8 +28,8 @@ library(lubridate)
 library(spdep)
 
 # shared paths and development-stage definition
-source("r/R/paths.R")
-source("r/R/gfw_helpers.R")
+source("r/paths.R")
+source("r/gfw_helpers.R")
 
 paths <- gfw_paths
 ```
@@ -365,7 +365,7 @@ gfw_afe_id$'Year Month' <- as.Date(format(gfw_afe_id$`Time Range`, "%Y-%m-01"))
 ## Create development stage column
 
 ```{r}
-# Stage boundaries live in r/R/gfw_helpers.R (dev_stages), shared with the
+# Stage boundaries live in r/gfw_helpers.R (dev_stages), shared with the
 # fishnet and vessel filtering qmds
 dev_stages
 

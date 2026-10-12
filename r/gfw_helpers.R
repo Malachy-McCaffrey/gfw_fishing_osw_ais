@@ -1,5 +1,5 @@
 # Helpers shared by the GFW qmds. Source after loading the tidyverse:
-#   source("r/R/paths.R"); source("r/R/gfw_helpers.R")
+#   source("r/paths.R"); source("r/gfw_helpers.R")
 
 # Development stages -------------------------------------------------------
 # The single definition used by every script. A record's stage comes from its
@@ -67,4 +67,6 @@ gear_class_map <- c(
 
 gear_class_of <- function(g) dplyr::coalesce(unname(gear_class_map[g]), "UNRESOLVED")
 
-fishing_gear_codes <- c(names(gear_class_map), "FISHING", "INCONCLUSIVE")
+# gear codes that mark a fishing vessel; OTHER_FISHING appears in GFW registry
+# records (e.g. ICCAT) but not in the AIS Gear Type field
+fishing_gear_codes <- c(names(gear_class_map), "FISHING", "INCONCLUSIVE", "OTHER_FISHING")

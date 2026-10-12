@@ -1,0 +1,15 @@
+survey_name,MMSI,Vessel_Name,ais_name,survey_days,ais_days,Notes
+AMELIA ANNE,338405326,Amelia Anne,AMELIA ANNE,427,195,Removal-list MMSI; often surveys with Ashley Ann II and Erica Knight
+ARCH ANGEL,368407550,Archangel,ARCHANGEL,3,3,Removal-list MMSI; the other removal-list Archangels (367478020 and 368308710) have no AIS records on these survey days
+ASHLEY ANN II,338328681,Ashley Ann II,ASHLEY ANN II,434,184,Removal-list MMSI
+CAILYN & MAREN,338389953,Cailyn & Maren,CAILYN & MAREN,37,26,Removal-list MMSI
+CAILYN & MAREN II,338538875,Cailyn and Maren,CAILYN AND MAREN,9,9,Removal-list MMSI (listed as Safety: the open-ended exclusion is kept)
+CAILYN AND MAREN,338389953,Cailyn & Maren,CAILYN & MAREN,47,39,Spelling variant of Cailyn & Maren (2021-2022); not Cailyn & Maren II
+ERICA KNIGHT,338402566,Erica Knight,ERICA KNIGHT,402,110,Removal-list MMSI
+HARVEST MOON,338399049,Harvest Moon,HARVEST MOON,70,70,Removal-list MMSI
+HEATHER LYNN,367119340,Heather Lynn,HEATHER LYNN,94,86,Removal-list MMSI
+KATHY MARIE,366758680,Kathy Marie,KATHY MARIE,9,9,Removal-list MMSI
+MISTER G,338229941,Mister G,MISTER G,63,63,Removal-list MMSI
+MORE MISERY,338442062,More Misery,MORE MISERY,49,25,Removal-list MMSI
+PRINCESS SCARLETT,368003140,Princess Scarlett,FV PRINCESS SCARLETT,6,6,Removal-list MMSI
+SWEET MISERY,338489747,Sweet Misery,SWEET MISERY,25,22,Removal-list MMSI

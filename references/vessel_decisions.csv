@@ -1,1 +1,22 @@
 decision,decided_on,MMSI,valid_from,valid_to,Vessel_Name,hull_class,activity_excluded,Operation,Identified_By,Confidence,evidence_ref,gfw_vessel_type,gfw_gear_type,pull_date,Notes
+accept,2026-10-11,338394719,,,PASQUE,fishing,FALSE,,marinetraffic,probable,MarineTraffic,OTHER,OTHER,2026-10-06,"Fishing vessel out of Falmouth, MA per MarineTraffic; GFW types it OTHER (no call sign in AIS)"
+accept,2026-10-11,338301301,,,BACKLASH,fishing,FALSE,,marinetraffic,probable,MarineTraffic,OTHER,OTHER,2026-10-06,Fishing vessel per MarineTraffic; GFW types it OTHER (no call sign in AIS)
+accept,2026-10-12,367478020,,2019-08-31,Archangel,fishing,FALSE,,orsted_list,confirmed,,PASSENGER,PASSENGER,2026-10-06,Chartered fishing hull GFW types PASSENGER; counts as fishing outside its charter windows
+accept,2026-10-12,367478020,2019-09-01,,Archangel,fishing,TRUE,Survey,orsted_list,confirmed,,PASSENGER,PASSENGER,2026-10-06,Orsted charter (removal list) with no dates yet; excluded from the start of Stage 2
+accept,2026-10-12,368308710,,2019-08-31,Archangel,fishing,FALSE,,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,Chartered fishing hull GFW types OTHER; counts as fishing outside its charter windows
+accept,2026-10-12,368308710,2019-09-01,,Archangel,fishing,TRUE,Survey,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,Orsted charter (removal list) with no dates yet; excluded from the start of Stage 2
+accept,2026-10-12,368316410,,2019-08-31,Fleet Queen,fishing,FALSE,,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,Chartered fishing hull GFW types OTHER; counts as fishing outside its charter windows
+accept,2026-10-12,368316410,2019-09-01,,Fleet Queen,fishing,TRUE,Safety,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,Orsted charter (removal list) with no dates yet; excluded from the start of Stage 2
+accept,2026-10-12,368346080,,2019-08-31,Triunfo,fishing,FALSE,,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,Chartered fishing hull GFW types OTHER; counts as fishing outside its charter windows
+accept,2026-10-12,368346080,2019-09-01,,Triunfo,fishing,TRUE,Safety,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,Orsted charter (removal list) with no dates yet; excluded from the start of Stage 2
+accept,2026-10-12,368364250,,2019-08-31,Sea Wind,fishing,FALSE,,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,Chartered fishing hull GFW types OTHER; counts as fishing outside its charter windows
+accept,2026-10-12,368364250,2019-09-01,,Sea Wind,fishing,TRUE,Safety,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,Orsted charter (removal list) with no dates yet; excluded from the start of Stage 2
+accept,2026-10-12,368411440,,,Celtic,non_fishing,FALSE,Safety,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,"Port tender, not a fishing vessel (analyst knowledge); Orsted safety charter; GFW types it OTHER"
+accept,2026-10-12,368407550,,2025-09-28,Archangel,fishing,FALSE,,orsted_list,confirmed,,PASSENGER,PASSENGER,2026-10-06,Chartered fishing hull GFW types PASSENGER; counts as fishing outside its charter windows
+accept,2026-10-12,368407550,2025-09-29,2025-09-29,Archangel,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,PASSENGER,PASSENGER,2026-10-06,1 survey trip: SFW
+accept,2026-10-12,368407550,2025-09-30,2026-05-25,Archangel,fishing,FALSE,,orsted_list,confirmed,,PASSENGER,PASSENGER,2026-10-06,Chartered fishing hull GFW types PASSENGER; counts as fishing outside its charter windows
+accept,2026-10-12,368407550,2026-05-26,2026-05-26,Archangel,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,PASSENGER,PASSENGER,2026-10-06,1 survey trip: SFW
+accept,2026-10-12,368407550,2026-05-27,2026-05-28,Archangel,fishing,FALSE,,orsted_list,confirmed,,PASSENGER,PASSENGER,2026-10-06,Chartered fishing hull GFW types PASSENGER; counts as fishing outside its charter windows
+accept,2026-10-12,368407550,2026-05-29,2026-05-29,Archangel,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,PASSENGER,PASSENGER,2026-10-06,1 survey trip: SFW
+accept,2026-10-12,368407550,2026-05-30,2026-08-31,Archangel,fishing,FALSE,,orsted_list,confirmed,,PASSENGER,PASSENGER,2026-10-06,Chartered fishing hull GFW types PASSENGER; counts as fishing outside its charter windows
+accept,2026-10-12,368407550,2026-09-01,,Archangel,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,PASSENGER,PASSENGER,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are

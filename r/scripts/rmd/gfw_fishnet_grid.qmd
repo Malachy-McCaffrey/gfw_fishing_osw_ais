@@ -11,7 +11,7 @@ params:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 # run from the repo root (the folder holding renv.lock) so the relative paths
-# in r/R/paths.R resolve whether the qmd is rendered or run chunk by chunk
+# in r/paths.R resolve whether the qmd is rendered or run chunk by chunk
 root <- getwd()
 while (!file.exists(file.path(root, "renv.lock")) && dirname(root) != root) root <- dirname(root)
 knitr::opts_knit$set(root.dir = root)
@@ -51,7 +51,7 @@ cells present in the raw VP data.
    (e.g. `-71.209999`), so snap with `round(x / 0.01)` -- never `floor()`, which
    drops values like `41.0699999` into the wrong cell. The integer pair
    `cell_id = "ix_iy"` is the join key from here on; floating-point
-   coordinates are never compared. `read_gfw()` in `r/R/gfw_helpers.R` does
+   coordinates are never compared. `read_gfw()` in `r/gfw_helpers.R` does
    this for every script.
 2. **Grid = the distinct cells in `gfw_vp_id`.** Every AFE cell must already be
    among them.
@@ -113,8 +113,8 @@ library(tidyverse)
 library(sf)
 library(spdep)
 
-source("r/R/paths.R")
-source("r/R/gfw_helpers.R")
+source("r/paths.R")
+source("r/gfw_helpers.R")
 
 paths <- gfw_paths_with(if (exists("params")) params else list())
 ```
@@ -135,7 +135,7 @@ afe <- read_gfw(paths$raw_afe)
 snap_err <- with(bind_rows(vp, afe), max(abs(Lon / 0.01 - ix), abs(Lat / 0.01 - iy)))
 stopifnot("coordinates are not on the 0.01 degree lattice" = snap_err < 0.01)
 
-# every record needs a development stage (r/R/gfw_helpers.R)
+# every record needs a development stage (r/gfw_helpers.R)
 stopifnot("records with no development stage" =
             !anyNA(vp$`Development Stage`) && !anyNA(afe$`Development Stage`))
 ```
@@ -240,7 +240,7 @@ ggplot() +
 These aggregates describe the **raw GFW data** -- all vessel types, no vessel
 removals, no fishing-hour threshold. They are not fishing-vessel totals; see
 *Data status* above. `Year Month` and `Development Stage` come from
-`read_gfw()`, so the stage boundaries are the ones in `r/R/gfw_helpers.R`.
+`read_gfw()`, so the stage boundaries are the ones in `r/gfw_helpers.R`.
 
 ```{r}
 # every record must land in a grid cell -- both should return zero rows

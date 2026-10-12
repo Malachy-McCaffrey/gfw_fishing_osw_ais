@@ -25,6 +25,8 @@ gfw_paths <- list(
   registries    = "data/raw/vessel_evidence/registries", # GARFO permit lists, read only
   review        = "data/processed/vessel_review",        # generated review sheet
   removals      = "references/vessel_removals.csv",
+  survey_dates  = "references/orsted_fv_survey_dates_*.csv", # Ørsted survey trips; every match is read
+  survey_vessels = "references/orsted_survey_vessels.csv",  # survey-file vessel names -> MMSI
   decisions     = "references/vessel_decisions.csv",
   gear          = "references/vessel_gear.csv",          # gear corrections
   crosswalk     = "references/vessel_crosswalk.csv",     # generated from the two above

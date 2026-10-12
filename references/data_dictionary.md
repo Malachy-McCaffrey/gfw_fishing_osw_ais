@@ -118,7 +118,7 @@ Mutually exclusive, so counts sum to the grid size: `stable hot`, `gained hot`,
 Stage 3 runs through the end of the current pull — data ends 2026-09-30.
 
 The R code takes these windows from one place, `dev_stages` in
-`r/R/gfw_helpers.R`; a record's stage comes from its `Year Month`. Change
+`r/gfw_helpers.R`; a record's stage comes from its `Year Month`. Change
 them there, not in individual scripts.
 
 ---
@@ -151,14 +151,20 @@ the CSV; nothing vessel-specific is hard-coded in either language.
 - **`stages_2_3`** -- chartered working fishing hulls. Stages 2-3 are removed,
   Stage 1 is retained as genuine fishing activity.
 - **`all_stages`** -- not a fishing vessel under any circumstances, so there is
-  no baseline worth keeping. Currently only NOAA Gloria Michelle, a NOAA
-  Fisheries research vessel that GFW classes as FISHING/TRAWLERS.
+  no baseline worth keeping. Currently four vessels: NOAA Gloria Michelle, a
+  NOAA Fisheries research vessel that GFW classes as FISHING/TRAWLERS; the
+  cargo vessels Sunnanvik (GFW: FISHING/INCONCLUSIVE) and Cygnus (GFW: CARGO);
+  and Celtic, an Ørsted safety-charter port tender (GFW: OTHER).
 
 Both readers validate the file on load and fail loudly, listing every problem
 found rather than stopping at the first: blank names, an MMSI that is not 9
 digits, duplicate MMSI, unknown `Scope` or `Confidence` values, a `Date_Added`
 that is not ISO. `load_removal_list()` logs the breakdown by scope and
 confidence on every read; the list currently holds 46 vessels.
+
+In `gfw_vessel_filtering.qmd`, a `stages_2_3` vessel's open-ended exclusion
+is replaced by its actual survey windows when it appears in the Ørsted
+survey-date files; see [Ørsted survey dates](#orsted-survey-dates).
 
 ---
 
@@ -170,11 +176,52 @@ Used by `r/scripts/rmd/gfw_vessel_filtering.qmd`.
 |---|---|---|
 | `references/vessel_decisions.csv` | yes | Hull and activity decisions, edited by hand. Crosswalk columns plus `decision` (`accept` / `reject`) and `decided_on`. A decision for a removal-list MMSI replaces that vessel's removal-list row. |
 | `references/vessel_gear.csv` | yes | Gear corrections, edited by hand: `MMSI`, optional `valid_from`/`valid_to`, `gear_class` (`MOBILE` / `FIXED` / `POLE_AND_LINE` / `UNRESOLVED`), `basis`, `evidence_ref`, `decision`, `decided_on`. An accepted row overrides GFW's gear for that vessel's records in the window; independent of the crosswalk, so a charter vessel's gear can be fixed without touching its exclusion. |
-| `references/vessel_crosswalk.csv` | yes | **Generated** every run from `vessel_removals.csv` and the accepted decisions. One row per MMSI per validity window (`valid_from`–`valid_to`), with `hull_class`, `activity_excluded` and `Confidence`, and GFW's labels in the current pull. Do not edit. |
+| `references/orsted_fv_survey_dates_*.csv` | yes | Ørsted's lists of survey trips by chartered fishing vessel, kept as delivered; every file matching the pattern is read. See [Ørsted survey dates](#orsted-survey-dates). |
+| `references/orsted_survey_vessels.csv` | yes | Maps each vessel name in the survey files to an MMSI: `survey_name` (upper case, F/V prefix removed), `MMSI`, `Vessel_Name`, `ais_name`, and the match evidence `survey_days` / `ais_days` (survey days on which that MMSI has AIS records). Add a row when a new file brings a new name; the run stops on any unmapped name. |
+| `references/vessel_crosswalk.csv` | yes | **Generated** every run from `vessel_removals.csv`, the survey-date files and the accepted decisions (a decision replaces survey-date and removal-list rows; survey-date rows replace removal-list rows). One row per MMSI per validity window (`valid_from`–`valid_to`), with `hull_class`, `activity_excluded` and `Confidence`, and GFW's labels in the current pull. Inside the window, `hull_class` overrides GFW's `Vessel Type` when deciding set membership (`fishing` adds a vessel GFW does not type FISHING; `non_fishing` / `gear_marker` removes one it does); the `Vessel Type` column itself is never rewritten. Do not edit. |
 | `references/garfo_permit_codes.csv` | yes | Meaning of each GARFO fishery permit code: permit type, gear hint, open access, NOAA source |
 | `data/processed/vessel_review/vessel_review.csv` | no | **Generated** hull/activity review sheet: candidates, evidence and a suggested decision per vessel. Rows marked `accept` / `reject` are copied into `vessel_decisions.csv` on the next run. |
 | `data/processed/vessel_review/gear_review.csv` | no | **Generated** gear review sheet: every removal-list fishing vessel, plus fishing vessels with unresolved GFW gear or GARFO permits that disagree, with a suggested gear class. Marked rows are copied into `vessel_gear.csv` on the next run. |
 | `data/raw/vessel_evidence/` | no | GFW identity API cache (queried IDs with date, status and dataset version) and the GARFO permit lists in `registries/` |
+
+### Ørsted survey dates {#orsted-survey-dates}
+
+`references/orsted_fv_survey_dates_aug2026.csv`: one row per vessel per survey
+trip, 595 trips from 2020-10-28 to 2026-08-11.
+
+| Column | Meaning |
+|---|---|
+| `Project` | Survey area: `SFW`, `REV`, `SRW`, `North Control Area`, `South Control Area`, `NEP` (all project areas), or a combination such as `REV / SRW` |
+| `Departure Date`, `Return Date` | ISO dates of the trip, inclusive; one-day trips have equal dates |
+| `Vessel` | Vessel name as written by Ørsted. Spellings vary (`F/V Heather Lynn`, `Cailyn and Maren`), and some cells list two vessels separated by a comma |
+| `Note` | Free text (one row) |
+
+The file also has blank spacer rows and two empty trailing columns, which are
+ignored.
+
+How `gfw_vessel_filtering.qmd` uses it:
+
+- Each trip becomes part of a crosswalk window for its MMSI (`hull_class =
+  fishing`, `activity_excluded = TRUE`, `Operation = Survey`, `Identified_By =
+  orsted_survey_dates`, `Confidence = confirmed`). A vessel's trips that
+  overlap or fall on consecutive days are merged into one window, and the
+  projects are listed in `Notes`. Dates are used as given: they are not
+  shifted to UTC.
+- For each survey vessel these windows replace its open-ended removal-list
+  row, so its records between trips and before its first listed trip count as
+  fishing.
+- **Survey work only.** The file does not date guard or scout work, so
+  vessels listed as `Safety` in `vessel_removals.csv` keep their open-ended
+  removal-list row (currently Cailyn & Maren II, 338538875).
+- **Incomplete.** The file runs through August 2026; dates for September and
+  October 2026 are still to come. `survey_dates_through` (Parameters chunk,
+  currently 2026-08-31) marks the last day covered. Every survey vessel gets an
+  open-ended exclusion from the day after it, and the run stops if a trip ends
+  later. When a new file arrives, add it to `references/` with the same name
+  pattern, map any new names, and move `survey_dates_through`.
+- **Arch Angel** matches MMSI 368407550 (GFW type PASSENGER). The other
+  removal-list Archangels (367478020, 368308710) have no AIS records on its
+  survey days.
 
 ---
 

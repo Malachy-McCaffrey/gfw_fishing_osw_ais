@@ -1158,12 +1158,19 @@ has_rfmo_source <- function(s) {
   map_lgl(str_split(coalesce(s, ""), fixed("|")), \(x) any(x %in% rfmo_sources))
 }
 
+# A registry record is matched to an MMSI by vessel identity, so it can belong
+# to another hull: its own MMSI or call sign must agree with AIS for its gear
+# to count as fishing evidence.
 gfw_evidence <- queried_mmsi |>
   left_join(registry |>
+              left_join(select(profiles, MMSI, call_sign), by = "MMSI") |>
+              mutate(id_match = coalesce(reg_mmsi == MMSI, FALSE) |
+                       coalesce(reg_callsign == call_sign, FALSE)) |>
               group_by(MMSI) |>
               summarise(reg_records  = n(),
                         reg_sources  = paste(sort(unique(source)), collapse = "|"),
                         reg_gear     = paste(sort(unique(reg_gear)), collapse = "|"),
+                        reg_gear_id  = paste(sort(unique(reg_gear[id_match])), collapse = "|"),
                         reg_length_m = suppressWarnings(
                           median(as.numeric(reg_length_m), na.rm = TRUE)),
                         .groups = "drop"),
@@ -1176,9 +1183,10 @@ gfw_evidence <- queried_mmsi |>
             by = "MMSI") |>
   mutate(reg_records    = coalesce(reg_records, 0L),
          reg_length_m   = if_else(is.nan(reg_length_m), NA_real_, reg_length_m),
-         reg_fishing    = reg_records > 0 & has_fishing_gear(reg_gear),
+         reg_fishing    = reg_records > 0 & has_fishing_gear(reg_gear_id),
          reg_rfmo       = reg_records > 0 & has_rfmo_source(reg_sources),
-         reg_nonfishing = reg_records > 0 & !reg_fishing & !reg_rfmo)
+         # no fishing gear on any record, matched or not
+         reg_nonfishing = reg_records > 0 & !has_fishing_gear(reg_gear) & !reg_rfmo)
 
 count(gfw_evidence, reg_records > 0, reg_fishing, reg_rfmo)
 ```
@@ -1203,7 +1211,7 @@ with more, one hull can agree on length by chance.
 
 | Evidence | Suggestion |
 |---|---|
-| GFW registry lists fishing gear (list 1) | `fishing`, `confirmed` |
+| GFW registry lists fishing gear on a record whose MMSI or call sign matches AIS (list 1) | `fishing`, `confirmed` |
 | On an RFMO vessel list, e.g. ICCAT, whatever the registry type (list 1) | `fishing`, `probable` -- a US ICCAT listing covers HMS Angling (private recreational) as well as Charter/Headboat; a GARFO HMS Charter/Headboat permit points to for-hire |
 | Unique GARFO match, permit years overlap, length agrees (list 1) | `fishing`, `probable` -- confirm via the hull ID |
 | Ambiguous GARFO name resolved by length (list 1) | `fishing`, `probable` -- confirm via the hull ID |

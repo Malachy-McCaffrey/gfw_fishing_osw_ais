@@ -424,8 +424,7 @@ rmVessels <- read_csv(rmPath, col_types = cols(.default = col_character()))
 
 stopifnot(
   "removal list is missing required columns" =
-    all(c("Vessel_Name", "MMSI", "Scope", "Identified_By",
-          "Confidence") %in% names(rmVessels))
+    all(c("Vessel_Name", "MMSI", "Scope", "Identified_By") %in% names(rmVessels))
 )
 
 rmProblems <- c(
@@ -442,11 +441,6 @@ rmProblems <- c(
   if (!all(rmVessels$Scope %in% c("stages_2_3", "all_stages")))
     paste0("unknown Scope value: ",
            paste(setdiff(rmVessels$Scope, c("stages_2_3", "all_stages")),
-                 collapse = ", ")),
-  if (!all(rmVessels$Confidence %in% c("confirmed", "probable", "possible")))
-    paste0("unknown Confidence value: ",
-           paste(setdiff(rmVessels$Confidence,
-                         c("confirmed", "probable", "possible")),
                  collapse = ", "))
 )
 

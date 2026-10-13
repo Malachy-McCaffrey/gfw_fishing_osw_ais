@@ -5,6 +5,7 @@ date: today
 format: html
 params:
   run_gfw_api: false  # true to look up uncached candidates in the GFW identity API
+  run_psix_api: false # true to look up uncached hull IDs and call signs in USCG CGMIX PSIX
   # Path overrides (see r/paths.R); leave blank to use the project paths.
   decisions: ""
   gear: ""
@@ -34,8 +35,8 @@ pulls, following the hybrid approach in `r/scratchpad/vessel_filtering_plan.qmd`
   it generates the **MMSI crosswalk** that classifies every record
 - a **screen** of the raw data produces review lists
 - the **GFW vessel-identity API** and **NOAA GARFO permit lists** supply evidence
-- **three analysis sets** (Strict / Primary / Inclusive) carry what stays
-  uncertain into the results
+- **two analysis sets** compare GFW's unprocessed labels (Strict) with the
+  verified classification (Primary)
 
 Two separate problems are handled:
 
@@ -67,10 +68,13 @@ Each pass:
 
 1. **Run with the API off** (the default). Check the list sizes and screening
    thresholds.
-2. **Run once with the API on**: render with `-P run_gfw_api:true`, or set
-   `run_gfw_api: true` in the header. Lookups are cached in
-   `data/raw/vessel_evidence/`, so each Vessel ID is queried once; set it back
-   to `false` afterwards.
+2. **Run once with the APIs on**: render with
+   `-P run_gfw_api:true -P run_psix_api:true`, or set both in the header.
+   Lookups are cached in `data/raw/vessel_evidence/`, so each Vessel ID, hull
+   ID and call sign is queried once; set them back to `false` afterwards. The
+   PSIX lookups need the GFW evidence (they run only for vessels that reach
+   the review sheet), so turn PSIX on in the same run as the GFW API or after
+   it.
 3. **Review** the two sheets. Their first columns are a suggestion in the same
    layout as the matching input file (`vessel_review.csv` →
    `vessel_decisions.csv`; `gear_review.csv` → `vessel_gear.csv`). For each row
@@ -113,6 +117,8 @@ qparams <- if (isTRUE(getOption("knitr.in.progress"))) params else {
 paths       <- gfw_paths_with(qparams)
 run_gfw_api <- isTRUE(qparams$run_gfw_api)
 message("GFW identity API lookups are ", if (run_gfw_api) "ON" else "OFF")
+run_psix_api <- isTRUE(qparams$run_psix_api)
+message("USCG PSIX lookups are ", if (run_psix_api) "ON" else "OFF")
 ```
 
 ## Parameters
@@ -208,12 +214,13 @@ for the charter (`TRUE`).
 | `valid_from`, `valid_to` | ISO dates (`YYYY-MM-DD`); blank = open-ended |
 | `hull_class` | `fishing` / `non_fishing` / `gear_marker` / `unknown` |
 | `activity_excluded` | `TRUE` = records in the window are not fishing (charter work) |
-| `Confidence` | `confirmed` / `probable` / `possible` |
 | `Identified_By`, `evidence_ref`, `Notes` | Where the decision came from |
 | `gfw_vessel_type`, `gfw_gear_type`, `pull_date` | GFW's labels when the decision was made |
 
 `vessel_decisions.csv` has the same columns plus `decision` (`accept` /
-`reject`) and `decided_on`. The crosswalk is built as:
+`reject`) and `decided_on`. Every crosswalk row is treated as verified: accept
+a suggestion only after checking it (MarineTraffic, CGMIX PSIX, the operator's
+website), and record the check in `evidence_ref`. The crosswalk is built as:
 
 - **Removal-list rows.** Charter vessels (`Scope == "stages_2_3"`) become
   fishing hulls with an activity exclusion from the start of Stage 2;
@@ -246,7 +253,7 @@ vessel's gear never touches its hull or charter treatment.
 ```{r}
 cw_cols <- c("MMSI", "valid_from", "valid_to", "Vessel_Name", "hull_class",
              "activity_excluded", "Operation", "Identified_By",
-             "Confidence", "evidence_ref", "gfw_vessel_type", "gfw_gear_type",
+             "evidence_ref", "gfw_vessel_type", "gfw_gear_type",
              "pull_date", "Notes")
 decision_cols <- c("decision", "decided_on", cw_cols)
 
@@ -325,8 +332,6 @@ validate_crosswalk <- function(cw) {
   problems <- c(
     if (any(!cw$hull_class %in% c("fishing", "non_fishing", "gear_marker", "unknown")))
       "unknown hull_class",
-    if (any(!cw$Confidence %in% c("confirmed", "probable", "possible")))
-      "unknown Confidence",
     if (anyNA(cw$activity_excluded))
       "activity_excluded must be TRUE or FALSE",
     if (any(cw$hull_class != "gear_marker" & !grepl("^[0-9]{9}$", cw$MMSI)))
@@ -426,7 +431,7 @@ survey_pending <- survey_windows |>
 
 survey_rows <- bind_rows(survey_windows, survey_pending) |>
   mutate(hull_class = "fishing", activity_excluded = "TRUE", Operation = "Survey",
-         Identified_By = "orsted_survey_dates", Confidence = "confirmed",
+         Identified_By = "orsted_survey_dates",
          pull_date = as.character(.env$pull_date)) |>
   left_join(gfw_labels, by = "MMSI")
 
@@ -437,7 +442,7 @@ removal_rows <- removal_list |>
             valid_to   = NA_character_,
             hull_class = if_else(Scope == "stages_2_3", "fishing", "non_fishing"),
             activity_excluded = if_else(Scope == "stages_2_3", "TRUE", "FALSE"),
-            Operation, Identified_By, Confidence,
+            Operation, Identified_By,
             evidence_ref = NA_character_,
             # the pull the crosswalk was built against (pull_info.csv)
             pull_date = as.character(.env$pull_date),
@@ -458,7 +463,7 @@ cw <- cw_out |>
 
 write_csv(cw_out, paths$crosswalk, na = "")
 
-count(cw, hull_class, activity_excluded, Confidence)
+count(cw, hull_class, activity_excluded)
 ```
 
 ### Gear corrections
@@ -573,7 +578,7 @@ name match is only a lead:
 | `none` | No match |
 
 Phase 4 adds a length check once GFW registry lengths are available. A name
-match is never suggested as `confirmed`. To confirm one, look up the hull ID in
+match is only a suggestion. To confirm one, look up the hull ID in
 the USCG PSIX search on CGMIX (numeric hull IDs are USCG official numbers) and
 check that the vessel's call sign matches the AIS call sign, then record the
 hull ID in `evidence_ref`. State-registered hull IDs (e.g. `MS6930PP`) cannot
@@ -1209,19 +1214,20 @@ hull's permits then stand in for the name's (`ambiguous_length_resolved`).
 Only names matching at most `screen$max_resolve_hulls` (3) hulls are resolved:
 with more, one hull can agree on length by chance.
 
-| Evidence | Suggestion |
-|---|---|
-| GFW registry lists fishing gear on a record whose MMSI or call sign matches AIS (list 1) | `fishing`, `confirmed` |
-| On an RFMO vessel list, e.g. ICCAT, whatever the registry type (list 1) | `fishing`, `probable` -- a US ICCAT listing covers HMS Angling (private recreational) as well as Charter/Headboat; a GARFO HMS Charter/Headboat permit points to for-hire |
-| Unique GARFO match, permit years overlap, length agrees (list 1) | `fishing`, `probable` -- confirm via the hull ID |
-| Ambiguous GARFO name resolved by length (list 1) | `fishing`, `probable` -- confirm via the hull ID |
-| Unique GARFO match, permit years overlap, no length to compare (list 1) | `fishing`, `possible` -- confirm via the hull ID |
-| Charter burst with no prior history (list 2) | exclusion, `probable` |
-| Lease-share rise only (list 2) | exclusion, `possible` |
-| GFW registry lists non-fishing gear, no GARFO support (list 3) | `non_fishing`, `confirmed` |
-| Name or behaviour only, or a GARFO match contradicts (list 3) | `non_fishing`, `possible` |
-| Battery-level call sign (list 4) | `gear_marker`, `probable` |
-| MMSI not 9 digits only (list 4) | `unknown`, `possible` -- check whether it is a vessel |
+Every row is a suggestion to check, not a classification. Accepted rows are
+treated as verified and enter the Primary set, so accept only after a check
+confirms that the AIS vessel (MMSI) is what the suggestion says; reject a row
+that cannot be verified.
+
+| Evidence | Suggestion | Check before accepting |
+|---|---|---|
+| GFW registry lists fishing gear on a record whose MMSI or call sign matches AIS (list 1) | `fishing` | MarineTraffic MMSI search shows a fishing vessel |
+| On an RFMO vessel list, e.g. ICCAT, whatever the registry type (list 1) | `fishing` | A US ICCAT listing covers HMS Angling (private recreational) as well as Charter/Headboat; the MarineTraffic photo separates sport fishing boats from motor yachts |
+| Unique or length-resolved GARFO match, permit years overlap (list 1) | `fishing` | The AIS vessel is the GARFO hull: PSIX call sign for the hull ID matches AIS, or the MarineTraffic MMSI search agrees. A PSIX hull lookup alone shows only that the hull is a fishing vessel |
+| Charter burst, or a lease-share rise (list 2) | exclusion | Charter dates from Ørsted or the operator |
+| GFW registry lists non-fishing gear, or name or behaviour only (list 3) | `non_fishing` | MarineTraffic MMSI search; a unique GARFO match is noted as contrary evidence |
+| Battery-level call sign (list 4) | `gear_marker` | |
+| MMSI not 9 digits only (list 4) | `unknown` | Whether it is a vessel |
 
 Charter windows are suggested from the first and last Stage 3 day with lease
 activity; replace them with Ørsted's dates where available.
@@ -1239,7 +1245,8 @@ evidence_cols <- c("list", "reason", "names", "flag", "call_sign", "vp_hours",
                    "garfo_permits", "garfo_years", "garfo_length_ft",
                    "garfo_home_port", "garfo_permit_type", "garfo_gear_hint",
                    "garfo_oa_permits", "garfo_oa_directed", "garfo_categories",
-                   "garfo_max_hulls_with_name", "garfo_max_mmsi_with_name")
+                   "garfo_max_hulls_with_name", "garfo_max_mmsi_with_name",
+                   "psix_link", "psix_hull", "psix_ais_call_sign")
 
 # GARFO length (ft) agrees with the GFW registry length (m)
 length_agrees <- function(garfo_ft, reg_m) {
@@ -1292,7 +1299,242 @@ assessed <- candidates |>
                                        "ambiguous_length_resolved") &
                     !garfo_permit_type %in% c("recreational only", "unmapped codes only"),
     has_evidence = reg_fishing | reg_rfmo | garfo_support)
+```
 
+### USCG PSIX checks
+
+A GARFO match links a hull to an MMSI by name only. The USCG Port State
+Information Exchange (PSIX, on CGMIX) ties a USCG official number (the numeric
+GARFO hull ID) to a call sign and a service type, and the AIS call sign to an
+official number, so it can test whether the AIS vessel is the GARFO hull.
+Lookups go through PSIX's public web service and are cached in
+`data/raw/vessel_evidence/psix_lookups.csv`, one row per vessel returned, so
+each hull ID and call sign is requested once across runs. They run only with
+`run_psix_api: true`.
+
+Two lookups are made for vessels that reach the review sheet (list 1 with
+evidence, and list 3): the GARFO hull ID, when it is a USCG official number,
+and the AIS call sign, when the vessel is US-flagged and the call sign has a US
+format. `psix_link` records the outcome:
+
+| `psix_link` | Meaning | Effect |
+|---|---|---|
+| `match` | The AIS call sign is the hull's PSIX call sign, or looks up to the hull's official number | Hull identity confirmed; the PSIX service type still has to fit (a whale-watch boat and a headboat are both inspected passenger vessels) |
+| `ais_is_other_hull` | The AIS call sign looks up to a different official number | GARFO match not used |
+| `call_sign_differs` | The hull's PSIX call sign differs from the AIS call sign | Note only: the call sign may have changed when a licence was reissued, or the MMSI may be another boat with the name |
+| `hull_has_cs_ais_none` | The hull has a call sign in PSIX but AIS broadcasts none | Note only: check that the MMSI is that hull (it may be another boat with the name) |
+| `hull_not_found` | The official number is not in PSIX | Note only |
+| `no_link` | Neither side has a call sign to compare | Note only |
+| `not_queried` | A lookup is still missing from the cache | Run with `run_psix_api: true` |
+
+A `match` whose PSIX service type is not fishing, passenger or recreational
+(e.g. research, towing, freight) also stops the GARFO match from being used. A
+GARFO match that is not used no longer counts as list-1 evidence. A vessel
+with no other evidence then leaves the review sheet, and its GARFO permits are
+not used for its gear hint or permit group. `psix_hull` and
+`psix_ais_call_sign` give what PSIX returned for each side. They also show
+when the AIS vessel's PSIX name differs from its AIS name.
+
+```{r}
+psix_path <- file.path(evid_dir, "psix_lookups.csv")
+psix_cols <- c("key_type", "key", "queried_on", "status", "psix_official_no",
+               "psix_name", "psix_call_sign", "psix_service", "psix_status")
+
+# One PSIX vessel-summary query by call sign or official number (the service's
+# VIN field). Returns NULL when PSIX has no match.
+psix_query <- function(call_sign = "", official_no = "") {
+  body <- paste0(
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>',
+    '<getVesselSummaryXMLString xmlns="https://cgmix.uscg.mil">',
+    '<VesselID></VesselID><VesselName></VesselName>',
+    '<CallSign>', call_sign, '</CallSign><VIN>', official_no, '</VIN>',
+    '<HIN></HIN><Flag></Flag><Service></Service><BuildYear></BuildYear>',
+    '</getVesselSummaryXMLString></soap:Body></soap:Envelope>')
+
+  resp <- httr2::request("https://cgmix.uscg.mil/xml/PSIXData.asmx") |>
+    httr2::req_headers(SOAPAction = '"https://cgmix.uscg.mil/getVesselSummaryXMLString"') |>
+    httr2::req_body_raw(body, type = "text/xml; charset=utf-8") |>
+    httr2::req_timeout(60) |>
+    httr2::req_retry(max_tries = 3) |>
+    httr2::req_perform()
+
+  # the result is an XML document escaped inside the SOAP response
+  inner <- xml2::xml_text(xml2::xml_find_first(
+    xml2::read_xml(httr2::resp_body_string(resp)),
+    "//*[local-name()='getVesselSummaryXMLStringResult']"))
+  if (is.na(inner) || inner == "") return(NULL)
+  v <- xml2::xml_find_all(xml2::read_xml(inner), "//VesselSummary")
+  if (length(v) == 0) return(NULL)
+
+  field <- \(f) xml2::xml_text(xml2::xml_find_first(v, f))
+  tibble(psix_official_no = field("Identification"),
+         psix_name        = field("VesselName"),
+         psix_call_sign   = field("VesselCallSign"),
+         psix_service     = field("ServiceType"),
+         psix_status      = field("StatusLookupName"))
+}
+
+# AIS call signs in US format (K, N, W or AA-AL prefix); others are not looked up
+us_call_sign <- function(cs) {
+  x <- str_remove_all(toupper(coalesce(cs, "")), "\\s")
+  if_else(str_detect(x, "^(K|N|W|A[A-L])[A-Z0-9]{2,6}$"), x, NA_character_)
+}
+
+# what to look up per MMSI: the AIS call sign, and a single GARFO hull ID that
+# is a USCG official number
+psix_keys <- function(df) {
+  df |>
+    transmute(MMSI,
+              ais_cs = if_else(flag %in% "USA", us_call_sign(call_sign), NA_character_),
+              hull   = if_else(garfo_match %in% c("unique_years", "ambiguous_length_resolved") &
+                                 str_detect(coalesce(garfo_hull_id, ""), "^[0-9]+$"),
+                               garfo_hull_id, NA_character_))
+}
+
+psix_targets <- assessed |>
+  filter((list == "1_missed_fishing" & has_evidence) | list == "3_nonfishing_typed_fishing") |>
+  psix_keys()
+
+psix <- read_ev(psix_path, psix_cols)
+
+to_psix <- bind_rows(
+  tibble(key_type = "call_sign",   key = psix_targets$ais_cs),
+  tibble(key_type = "official_no", key = psix_targets$hull)) |>
+  filter(!is.na(key)) |>
+  distinct() |>
+  anti_join(filter(psix, status %in% c("ok", "not_found")), by = c("key_type", "key"))
+
+message(nrow(to_psix), " PSIX lookups not yet made")
+
+if (run_psix_api && nrow(to_psix) > 0) {
+  for (i in seq_len(nrow(to_psix))) {
+    k   <- to_psix[i, ]
+    res <- tryCatch(
+      if (k$key_type == "call_sign") psix_query(call_sign = k$key)
+      else psix_query(official_no = k$key),
+      error = function(e) e)
+
+    status <- if (inherits(res, "error")) "error" else if (is.null(res)) "not_found" else "ok"
+    out <- (if (status == "ok") res else tibble(psix_official_no = NA_character_)) |>
+      mutate(key_type = k$key_type, key = k$key,
+             queried_on = as.character(Sys.Date()), status = status)
+    out[setdiff(psix_cols, names(out))] <- NA_character_
+    append_csv(select(out, all_of(psix_cols)), psix_path)
+    Sys.sleep(1)
+  }
+  psix <- read_ev(psix_path, psix_cols)
+}
+
+count(psix, key_type, status)
+```
+
+```{r}
+# Compares the cached PSIX records with each MMSI's call sign and GARFO hull
+# (from psix_keys); also used, cache only, for the gear review sheet
+psix_evaluate <- function(targets, psix) {
+  psix_done <- psix |> filter(status %in% c("ok", "not_found")) |> distinct(key_type, key)
+
+  # PSIX returns partial matches too; keep exact ones. "N/A" = no call sign
+  psix_ok <- psix |>
+    filter(status == "ok") |>
+    mutate(psix_call_sign = na_if(psix_call_sign, "N/A"),
+           desc = paste0("official no. ", psix_official_no, " ", psix_name,
+                         ", call sign ", coalesce(psix_call_sign, "none"),
+                         ", ", psix_service))
+
+  collapse <- \(x) na_if(paste(sort(unique(na.omit(x))), collapse = "|"), "")
+
+  by_hull <- psix_ok |>
+    filter(key_type == "official_no", psix_official_no == key) |>
+    group_by(hull = key) |>
+    summarise(hull_cs = collapse(psix_call_sign), hull_service = collapse(psix_service),
+              psix_hull = paste(unique(desc), collapse = "; "), .groups = "drop")
+
+  by_cs <- psix_ok |>
+    filter(key_type == "call_sign", psix_call_sign == key) |>
+    group_by(ais_cs = key) |>
+    summarise(cs_official_no = collapse(psix_official_no),
+              psix_ais_call_sign = paste(unique(desc), collapse = "; "), .groups = "drop")
+
+  in_list <- \(x, s) map2_lgl(x, s, \(a, b) !is.na(a) && a %in% str_split_1(coalesce(b, ""), fixed("|")))
+  not_fishing_service <- \(s) !is.na(s) & !str_detect(s, regex("fish|passenger|recreational", ignore_case = TRUE))
+
+  targets |>
+    left_join(by_hull, by = "hull") |>
+    left_join(by_cs, by = "ais_cs") |>
+    mutate(
+      hull_done = is.na(hull) | hull %in% psix_done$key[psix_done$key_type == "official_no"],
+      cs_done   = is.na(ais_cs) | ais_cs %in% psix_done$key[psix_done$key_type == "call_sign"],
+      cs_match  = in_list(ais_cs, hull_cs) | in_list(hull, cs_official_no),
+      psix_link = case_when(
+        is.na(hull)                         ~ NA_character_,
+        !hull_done | !cs_done               ~ "not_queried",
+        cs_match                            ~ "match",
+        !is.na(cs_official_no)              ~ "ais_is_other_hull",
+        !is.na(ais_cs) & !is.na(hull_cs)    ~ "call_sign_differs",
+        is.na(ais_cs) & !is.na(hull_cs)     ~ "hull_has_cs_ais_none",
+        is.na(psix_hull)                    ~ "hull_not_found",
+        TRUE                                ~ "no_link"),
+      # a call sign can change when a licence is reissued, so a differing one
+      # is only noted
+      psix_contradicts = psix_link %in% "ais_is_other_hull" |
+        (psix_link %in% "match" & not_fishing_service(hull_service)),
+      psix_ais_call_sign = case_when(
+        !is.na(psix_ais_call_sign) ~ psix_ais_call_sign,
+        !is.na(ais_cs) & cs_done   ~ "not in PSIX",
+        TRUE                       ~ NA_character_),
+      psix_note = case_when(
+        psix_link %in% "not_queried" ~
+          "PSIX not yet looked up (run with run_psix_api: true)",
+        psix_contradicts & psix_link %in% "match" ~ paste0(
+          "PSIX: AIS call sign matches GARFO hull ", hull, " (", psix_hull,
+          "), but its service type is not fishing; GARFO match not used"),
+        psix_link %in% "match" ~ paste0(
+          "PSIX: AIS call sign matches GARFO hull ", hull, " (", psix_hull, ")"),
+        psix_link %in% "ais_is_other_hull" ~ paste0(
+          "PSIX: AIS call sign ", ais_cs, " is ", psix_ais_call_sign, ", not GARFO hull ",
+          hull, " (", coalesce(psix_hull, "not in PSIX"), "); GARFO match not used"),
+        psix_link %in% "call_sign_differs" ~ paste0(
+          "PSIX: GARFO hull ", hull, " has call sign ", hull_cs, ", AIS broadcasts ",
+          ais_cs, "; check that this MMSI is that hull (the call sign may have changed)"),
+        psix_link %in% "hull_has_cs_ais_none" ~ paste0(
+          "PSIX: GARFO hull ", hull, " (", psix_hull, ") has a call sign but AIS ",
+          "broadcasts none; check that this MMSI is that hull"),
+        psix_link %in% "hull_not_found" ~ paste0("PSIX: GARFO hull ", hull, " not found"),
+        psix_link %in% "no_link" ~ paste0(
+          "PSIX: GARFO hull ", hull, " (", psix_hull, ") has no call sign to compare"),
+        !is.na(psix_ais_call_sign) ~ paste0("PSIX: AIS call sign ", ais_cs, " is ",
+                                            psix_ais_call_sign),
+        TRUE ~ NA_character_))
+}
+
+psix_checks <- psix_evaluate(psix_targets, psix)
+
+count(psix_checks, psix_link, psix_contradicts)
+
+# re-running this chunk interactively replaces, rather than duplicates, the columns
+psix_add <- c("psix_link", "psix_hull", "psix_ais_call_sign", "psix_contradicts", "psix_note")
+assessed <- assessed |>
+  select(-any_of(psix_add)) |>
+  left_join(select(psix_checks, MMSI, all_of(psix_add)), by = "MMSI") |>
+  mutate(psix_contradicts = coalesce(psix_contradicts, FALSE),
+         garfo_support = garfo_support & !psix_contradicts,
+         has_evidence  = reg_fishing | reg_rfmo | garfo_support)
+
+# MMSIs whose GARFO match PSIX contradicts: no GARFO gear hint or permit group
+psix_not_hull <- assessed$MMSI[assessed$psix_contradicts]
+
+# list-1 vessels that leave the review sheet because PSIX contradicts their
+# only evidence
+assessed |>
+  filter(list == "1_missed_fishing", psix_contradicts, !has_evidence) |>
+  select(MMSI, names, call_sign, garfo_hull_id, psix_note)
+```
+
+### Build the review sheet
+
+```{r}
 review <- assessed |>
   # list 1 is reviewed only where there is evidence
   filter(list != "1_missed_fishing" | has_evidence) |>
@@ -1312,15 +1554,6 @@ review <- assessed |>
     valid_to   = if_else(list == "2_charter_activity",
                          as.character(s3_lease_last), NA_character_),
     Operation  = NA_character_,
-    Confidence = case_when(
-      list == "1_missed_fishing" & reg_fishing                          ~ "confirmed",
-      list == "1_missed_fishing" & reg_rfmo                             ~ "probable",
-      list == "1_missed_fishing" & garfo_support &
-        garfo_class %in% c("unique_years_length", "ambiguous_length_resolved") ~ "probable",
-      list == "2_charter_activity" & burst                              ~ "probable",
-      list == "3_nonfishing_typed_fishing" & reg_nonfishing & !garfo_support ~ "confirmed",
-      list == "4_gear_marker" & str_detect(reason, "battery")           ~ "probable",
-      TRUE                                                              ~ "possible"),
     Identified_By = case_when(
       list == "1_missed_fishing" & reg_fishing              ~ "gfw_registry",
       list == "1_missed_fishing" & reg_rfmo                 ~ "gfw_registry_rfmo",
@@ -1336,16 +1569,21 @@ review <- assessed |>
     hms_chb   = str_detect(coalesce(garfo_categories, ""), fixed("HMS:CHARTER/HEADBOAT")),
     Notes = paste0(
       case_when(
-        garfo_support & hull_is_uscg %in% TRUE ~ paste0(
+        garfo_support & hull_is_uscg %in% TRUE &
+          (is.na(psix_link) | psix_link %in% "not_queried") ~ paste0(
           reason, ". To confirm: look up USCG official no. ", garfo_hull_id,
           " in CGMIX PSIX; its call sign should be ", coalesce(call_sign, "(none in AIS)"),
           ". GARFO permits: ", garfo_permit_type),
+        garfo_support & hull_is_uscg %in% TRUE ~ paste0(
+          reason, ". GARFO permits: ", garfo_permit_type),
         garfo_support ~ paste0(
           reason, ". State-registered hull ", garfo_hull_id,
           "; cannot be linked to a call sign. GARFO permits: ", garfo_permit_type),
-        list == "3_nonfishing_typed_fishing" & garfo_match == "unique_years" ~ paste0(
+        list == "3_nonfishing_typed_fishing" & garfo_match == "unique_years" &
+          !psix_contradicts ~ paste0(
           reason, ". Note: unique GARFO permit match suggests a fishing vessel"),
         TRUE ~ reason),
+      if_else(!is.na(psix_note), paste0(". ", psix_note), ""),
       if_else(garfo_support & garfo_class == "ambiguous_length_resolved",
               paste0(". GARFO name matches ", garfo_hulls,
                      " hulls; only this one agrees with the registry length"), ""),
@@ -1357,10 +1595,9 @@ review <- assessed |>
           TRUE    ~ "no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)")),
         ""))) |>
   # within each list: GFW registry evidence first, then RFMO listings, then
-  # GARFO with agreeing length, then by hours
+  # GARFO hulls PSIX ties to the AIS call sign, then by hours
   arrange(list, desc(reg_fishing), desc(reg_rfmo),
-          desc(garfo_class %in% c("unique_years_length", "ambiguous_length_resolved")),
-          desc(vp_hours)) |>
+          desc(psix_link %in% "match"), desc(vp_hours)) |>
   mutate(across(where(is.numeric), \(x) round(x, 3))) |>
   select(all_of(decision_cols), any_of(evidence_cols))
 ```
@@ -1397,9 +1634,10 @@ fishing_vp <- sum(profiles$vp_hours[profiles$gfw_vessel_type %in% "FISHING"])
 unreviewed <- assessed |>
   filter(list == "1_missed_fishing") |>
   mutate(evidence = case_when(
-    has_evidence   ~ "for fishing (reviewed)",
-    reg_nonfishing ~ "registry, no fishing gear",
-    TRUE           ~ "none either way"))
+    has_evidence     ~ "for fishing (reviewed)",
+    psix_contradicts ~ "GARFO match contradicted by PSIX",
+    reg_nonfishing   ~ "registry, no fishing gear",
+    TRUE             ~ "none either way"))
 
 unreviewed |>
   group_by(evidence) |>
@@ -1468,11 +1706,17 @@ gear_evidence_cols <- c("gear_reason", "gfw_class", "garfo_match", "garfo_gear_h
                         "garfo_hull_id", "reg_records", "reg_gear", "names",
                         "vp_hours", "afe_hours", "s1", "s2", "s3")
 
+# GARFO hulls PSIX says are not the AIS vessel, from cached lookups only (an
+# accepted vessel was looked up while it was on the hull review sheet)
+gear_psix <- gear_candidates |> apply_resolved() |> psix_keys() |> psix_evaluate(psix)
+not_hull  <- union(psix_not_hull, gear_psix$MMSI[gear_psix$psix_contradicts])
+
 gear_review <- gear_candidates |>
   apply_resolved() |>
   left_join(select(gfw_evidence, MMSI, reg_records, reg_gear, reg_rfmo), by = "MMSI") |>
   mutate(
-    garfo_hint  = if_else(garfo_match %in% c("unique_years", "ambiguous_length_resolved"),
+    garfo_hint  = if_else(garfo_match %in% c("unique_years", "ambiguous_length_resolved") &
+                            !MMSI %in% not_hull,
                           garfo_gear_hint, NA_character_),
     reg_hint    = reg_gear_class(reg_gear),
     # an RFMO-listed (e.g. ICCAT) vessel with no gear evidence is a sport or
@@ -1517,22 +1761,20 @@ count(gear_review, basis, gear_class)
 ## Phase 5: Classify every record
 
 Each record is matched to at most one crosswalk row by MMSI and date. Records
-with no row keep GFW's label. Three analysis sets follow:
+with no row keep GFW's label. Two analysis sets follow:
 
-| Set | Fishing hulls GFW missed that are added | Non-fishing hulls and charter activity removed |
-|---|---|---|
-| **Strict** | none | `confirmed` only |
-| **Primary** | `confirmed` | `confirmed` and `probable` |
-| **Inclusive** | `confirmed`, `probable`, `possible` | `confirmed` and `probable` |
+| Set | Records kept |
+|---|---|
+| **Strict** | GFW `Vessel Type == FISHING`, nothing else applied: the unprocessed GFW data |
+| **Primary** | Strict, minus the crosswalk's non-fishing hulls, charter and survey windows (removal list, survey dates and accepted decisions) and gear markers, plus the fishing hulls GFW missed (accepted decisions) |
 
-Gear markers are removed from every set. The sets differ along two axes, so
-they are not strictly nested: Strict adds nothing but also removes the least.
-`possible` exclusions (e.g. ESS Pride) are removed from no set; list them as
-a stated sensitivity rather than as a filter.
+Every crosswalk row counts as verified, so the difference between the two
+sets is the effect of the processing.
 
 Each record's `gear_class` is the accepted correction in `vessel_gear.csv`
 whose window contains its date, otherwise GFW's `Gear Type` through the gear
-map; `gear_source` says which.
+map; `gear_source` says which. `gear_class_gfw` keeps GFW's gear for the
+Strict set.
 
 ```{r}
 classify <- function(df, cw, gear) {
@@ -1542,7 +1784,6 @@ classify <- function(df, cw, gear) {
               cw_to   = coalesce(valid_to, hi_date),
               cw_hull = hull_class,
               cw_excluded = activity_excluded,
-              cw_confidence = Confidence,
               cw_identified_by = Identified_By)
 
   gear_join <- gear |>
@@ -1560,20 +1801,17 @@ classify <- function(df, cw, gear) {
   out |>
     mutate(
       gfw_fishing = `Vessel Type` %in% "FISHING",
-      conf_cp     = cw_confidence %in% c("confirmed", "probable"),
       is_marker   = cw_hull %in% "gear_marker",
-      nonfish_c   = cw_hull %in% "non_fishing" & cw_confidence %in% "confirmed",
-      nonfish_cp  = cw_hull %in% "non_fishing" & conf_cp,
-      added_c     = cw_hull %in% "fishing" & !gfw_fishing & cw_confidence %in% "confirmed",
-      added_any   = cw_hull %in% "fishing" & !gfw_fishing,
-      excl_c      = cw_excluded %in% TRUE & cw_confidence %in% "confirmed",
-      excl_cp     = cw_excluded %in% TRUE & conf_cp,
-      in_strict    = gfw_fishing & !is_marker & !nonfish_c & !excl_c,
-      in_primary   = (gfw_fishing | added_c) & !is_marker & !nonfish_cp & !excl_cp,
-      in_inclusive = (gfw_fishing | added_any) & !is_marker & !nonfish_cp & !excl_cp,
-      gear_class  = coalesce(gear_override, gear_class_of(`Gear Type`)),
+      nonfish     = cw_hull %in% "non_fishing",
+      added       = cw_hull %in% "fishing" & !gfw_fishing,
+      excluded    = cw_excluded %in% TRUE,
+      in_strict   = gfw_fishing,
+      in_primary  = (gfw_fishing | added) & !is_marker & !nonfish & !excluded,
+      # gear_class_gfw is GFW's gear only, for the Strict set
+      gear_class_gfw = gear_class_of(`Gear Type`),
+      gear_class  = coalesce(gear_override, gear_class_gfw),
       gear_source = if_else(is.na(gear_override), "gfw", "vessel_gear")) |>
-    select(-cw_from, -cw_to, -g_from, -g_to, -gear_override, -conf_cp)
+    select(-cw_from, -cw_to, -g_from, -g_to, -gear_override)
 }
 
 vp_cls  <- classify(vp, cw, gear)
@@ -1581,7 +1819,7 @@ afe_cls <- classify(afe, cw, gear)
 ```
 
 ```{r}
-set_cols <- c("in_strict", "in_primary", "in_inclusive")
+set_cols <- c("in_strict", "in_primary")
 
 bind_rows(VP = vp_cls, AFE = afe_cls, .id = "dataset") |>
   group_by(dataset) |>
@@ -1604,7 +1842,7 @@ to_long <- function(df) {
     pivot_longer(all_of(set_cols), names_to = "set", values_to = "keep") |>
     filter(keep) |>
     mutate(set = factor(str_remove(set, "in_"),
-                        levels = c("strict", "primary", "inclusive")))
+                        levels = c("strict", "primary")))
 }
 
 stage_by_set <- bind_rows(VP = to_long(vp_cls), AFE = to_long(afe_cls), .id = "dataset") |>
@@ -1622,27 +1860,27 @@ stage_by_set |>
 ### Fishing effort missing for added vessels
 
 GFW computes AFE only for vessels it treats as fishing, so hulls added in
-Primary or Inclusive have presence hours but almost no effort hours. Report
-this as a known undercount. The imputation below applies each stage's
-effort-to-presence ratio (from Strict-set vessels, by gear class) to the added
+Primary have presence hours but almost no effort hours. Report this as a known
+undercount. The imputation below applies each stage's effort-to-presence ratio
+(from GFW FISHING vessels kept in Primary, by gear class) to the added
 vessels' presence hours; use it as a sensitivity check only.
 
 ```{r}
-added <- vp_cls |> filter(added_any, in_inclusive)
+added <- vp_cls |> filter(added, in_primary)
 
+kept_gfw <- function(df) filter(df, in_primary, gfw_fishing)
 ratio <- inner_join(
-  vp_cls  |> filter(in_strict) |> group_by(`Development Stage`, gear_class) |>
+  vp_cls  |> kept_gfw() |> group_by(`Development Stage`, gear_class) |>
     summarise(vp = sum(hours), .groups = "drop"),
-  afe_cls |> filter(in_strict) |> group_by(`Development Stage`, gear_class) |>
+  afe_cls |> kept_gfw() |> group_by(`Development Stage`, gear_class) |>
     summarise(afe = sum(hours), .groups = "drop"),
   by = c("Development Stage", "gear_class")) |>
   mutate(afe_per_vp = afe / vp)
 
 added |>
-  group_by(`Development Stage`, gear_class,
-           set = if_else(added_c, "primary + inclusive", "inclusive only")) |>
+  group_by(`Development Stage`, gear_class) |>
   summarise(vp_hours = sum(hours), n_mmsi = n_distinct(MMSI), .groups = "drop") |>
-  left_join(afe_cls |> filter(added_any) |>
+  left_join(afe_cls |> filter(added, in_primary) |>
               group_by(`Development Stage`, gear_class) |>
               summarise(afe_hours_reported = sum(hours), .groups = "drop"),
             by = c("Development Stage", "gear_class")) |>
@@ -1658,13 +1896,13 @@ Vessels whose GARFO permits combine for-hire with commercial permits
 (`commercial + for-hire`, `for-hire + open-access commercial`) may fish both
 ways, on different trips. A single gear class cannot represent them, so report
 their hours as a separate group and check whether the Stage 2 → 3 change holds
-with them excluded. Only unique, year-overlapping GARFO matches are grouped;
-everything else is `no unique GARFO match`.
+with them excluded. Only unique, year-overlapping GARFO matches that PSIX does
+not contradict are grouped; everything else is `no unique GARFO match`.
 
 ```{r}
 permit_group <- profiles |>
   transmute(MMSI,
-            permit_group = if_else(garfo_match == "unique_years",
+            permit_group = if_else(garfo_match == "unique_years" & !MMSI %in% not_hull,
                                    garfo_permit_type, NA_character_))
 
 bind_rows(VP = to_long(vp_cls), AFE = to_long(afe_cls), .id = "dataset") |>
@@ -1693,7 +1931,7 @@ cell_stage_sets <- function(df, value) {
 vp_cell_stage_sets  <- cell_stage_sets(vp_cls,  "vp_hours")
 afe_cell_stage_sets <- cell_stage_sets(afe_cls, "afe_hours")
 
-stopifnot(nrow(vp_cell_stage_sets) == nrow(grid) * nrow(dev_stages) * 3)
+stopifnot(nrow(vp_cell_stage_sets) == nrow(grid) * nrow(dev_stages) * length(set_cols))
 
 write_csv(vp_cell_stage_sets,  file.path(paths$interim_gfw, "gfw_vp_cell_stage_sets.csv"))
 write_csv(afe_cell_stage_sets, file.path(paths$interim_gfw, "gfw_afe_cell_stage_sets.csv"))
@@ -1724,14 +1962,14 @@ decisions |>
 touched <- function(df) {
   df |>
     filter(!is.na(cw_hull)) |>
-    group_by(cw_hull, cw_excluded, cw_confidence) |>
+    group_by(cw_hull, cw_excluded) |>
     summarise(hours = sum(hours), .groups = "drop")
 }
 
-count(cw, hull_class, activity_excluded, Confidence, name = "rows")
+count(cw, hull_class, activity_excluded, name = "rows")
 
 full_join(touched(vp_cls), touched(afe_cls),
-          by = c("cw_hull", "cw_excluded", "cw_confidence"),
+          by = c("cw_hull", "cw_excluded"),
           suffix = c("_vp", "_afe")) |>
   mutate(share_vp  = round(hours_vp  / total_vp,  4),
          share_afe = round(hours_afe / total_afe, 4))
@@ -1740,10 +1978,13 @@ full_join(touched(vp_cls), touched(afe_cls),
 ### Gear summary for the methods
 
 How much of each set's fishing effort has a resolved gear class, and how much
-of it comes from your gear corrections rather than GFW.
+of it comes from your gear corrections rather than GFW. Strict uses GFW's gear
+(`gear_class_gfw`); Primary uses the corrected `gear_class`.
 
 ```{r}
 to_long(afe_cls) |>
+  mutate(gear_source = if_else(set == "strict", "gfw", gear_source),
+         gear_class  = if_else(set == "strict", gear_class_gfw, gear_class)) |>
   group_by(set, gear_class, gear_source) |>
   summarise(afe_hours = round(sum(hours)), .groups = "drop") |>
   group_by(set) |>

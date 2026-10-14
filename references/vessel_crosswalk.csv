@@ -1,451 +1,501 @@
-MMSI,valid_from,valid_to,Vessel_Name,hull_class,activity_excluded,Operation,Identified_By,Confidence,evidence_ref,gfw_vessel_type,gfw_gear_type,pull_date,Notes
-257394000,,,Cygnus,non_fishing,FALSE,Cargo,manual identification,confirmed,,CARGO,CARGO,2026-10-06,
-259286000,,,Sunnanvik,non_fishing,FALSE,Cargo,manual identification,confirmed,,FISHING,INCONCLUSIVE,2026-10-06,
-338066383,,,NOAA Gloria Michelle,non_fishing,FALSE,Research,known_research_vessel,confirmed,,FISHING,TRAWLERS,2026-10-06,
-338229941,2020-10-28,2020-10-28,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2020-11-24,2020-11-25,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2020-12-19,2020-12-19,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2021-01-13,2021-01-14,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2021-02-11,2021-02-11,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2021-03-18,2021-03-18,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2021-04-14,2021-04-14,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2021-05-17,2021-05-17,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2021-06-17,2021-06-17,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2021-07-14,2021-07-14,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2021-08-17,2021-08-17,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2021-09-16,2021-09-16,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2021-10-15,2021-10-15,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2021-11-20,2021-11-20,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2021-12-10,2021-12-10,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2022-01-24,2022-01-24,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2022-02-21,2022-02-22,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2022-03-16,2022-03-16,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2022-04-13,2022-04-13,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2022-05-19,2022-05-19,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2022-06-15,2022-06-15,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2022-07-20,2022-07-20,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2022-08-19,2022-08-19,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2022-09-13,2022-09-13,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2022-10-27,2022-10-27,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2022-11-09,2022-11-09,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2022-12-20,2022-12-20,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2023-01-19,2023-01-19,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2023-02-12,2023-02-12,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2023-03-22,2023-03-22,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2023-04-14,2023-04-14,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2023-05-18,2023-05-18,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2023-06-16,2023-06-16,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2023-07-10,2023-07-10,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2023-08-23,2023-08-23,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2023-09-21,2023-09-21,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2023-10-19,2023-10-19,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2023-11-13,2023-11-13,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2023-12-08,2023-12-08,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2024-01-24,2024-01-24,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2024-02-12,2024-02-12,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2024-03-13,2024-03-13,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2024-04-17,2024-04-17,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2024-05-24,2024-05-24,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2024-06-25,2024-06-25,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2024-07-25,2024-07-25,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2024-08-12,2024-08-12,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2024-09-09,2024-09-09,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2024-10-20,2024-10-20,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2024-11-07,2024-11-07,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2024-12-04,2024-12-04,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2025-01-11,2025-01-11,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2025-02-11,2025-02-11,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2025-03-15,2025-03-15,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2025-04-10,2025-04-10,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2025-05-07,2025-05-07,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2025-06-13,2025-06-13,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2025-07-14,2025-07-14,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2025-08-08,2025-08-08,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2025-09-04,2025-09-04,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338229941,2026-09-01,,Mister G,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
-338301301,,,BACKLASH,fishing,FALSE,,marinetraffic,probable,MarineTraffic,OTHER,OTHER,2026-10-06,Fishing vessel per MarineTraffic; GFW types it OTHER (no call sign in AIS)
-338328681,2021-05-03,2021-05-13,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338328681,2021-06-01,2021-06-11,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338328681,2021-07-01,2021-07-12,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338328681,2021-08-01,2021-08-10,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338328681,2021-09-03,2021-09-14,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338328681,2021-10-01,2021-10-13,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338328681,2021-11-06,2021-11-17,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338328681,2022-05-06,2022-05-19,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338328681,2022-06-02,2022-06-12,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338328681,2022-07-01,2022-07-11,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338328681,2022-08-04,2022-08-15,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338328681,2022-09-02,2022-09-16,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338328681,2022-10-06,2022-10-16,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338328681,2022-11-03,2022-11-16,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338328681,2023-05-03,2023-05-13,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338328681,2023-05-18,2023-05-18,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2023-05-24,2023-05-24,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2023-05-31,2023-06-12,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338328681,2023-06-19,2023-06-19,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2023-07-01,2023-07-01,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2023-07-05,2023-07-17,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338328681,2023-08-01,2023-08-12,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338328681,2023-08-14,2023-08-14,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2023-09-05,2023-09-18,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338328681,2023-09-20,2023-09-20,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2023-10-03,2023-10-18,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338328681,2023-11-02,2023-11-13,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338328681,2023-11-15,2023-11-15,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2024-05-01,2024-05-13,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338328681,2024-06-01,2024-06-11,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338328681,2024-07-01,2024-07-14,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338328681,2024-08-01,2024-08-13,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338328681,2024-09-04,2024-09-17,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338328681,2024-10-01,2024-10-09,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338328681,2024-11-03,2024-11-10,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338328681,2024-11-14,2024-11-14,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2025-05-04,2025-05-04,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2025-05-07,2025-05-17,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338328681,2025-06-03,2025-06-11,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338328681,2025-06-16,2025-06-16,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2025-07-01,2025-07-05,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: REV; SFW
-338328681,2025-07-08,2025-07-08,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2025-07-10,2025-07-10,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: SFW
-338328681,2025-07-13,2025-07-13,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2025-08-03,2025-08-14,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338328681,2025-09-08,2025-09-19,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338328681,2025-09-24,2025-09-24,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2025-10-03,2025-10-10,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338328681,2025-11-03,2025-11-10,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338328681,2025-11-15,2025-11-15,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2026-05-02,2026-05-02,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2026-05-07,2026-05-07,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2026-05-12,2026-05-12,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2026-06-02,2026-06-02,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2026-06-06,2026-06-06,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2026-06-12,2026-06-12,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2026-07-03,2026-07-03,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2026-07-10,2026-07-10,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2026-07-13,2026-07-13,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2026-08-01,2026-08-01,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2026-08-06,2026-08-06,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2026-08-11,2026-08-11,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338328681,2026-09-01,,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
-338350046,2019-09-01,,Argo,fishing,TRUE,Safety,behavioural_screen,possible,,FISHING,SET_GILLNETS,2026-10-06,
-338389953,2021-05-18,2021-05-20,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2021-06-01,2021-06-03,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2021-06-13,2021-06-15,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2021-06-29,2021-06-30,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2021-10-12,2021-10-13,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2021-11-01,2021-11-02,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2021-11-09,2021-11-10,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2021-11-16,2021-11-17,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2021-11-30,2021-12-01,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2021-12-14,2021-12-15,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2022-04-12,2022-04-13,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2022-04-26,2022-04-27,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2022-05-14,2022-05-14,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: NEP
-338389953,2022-05-16,2022-05-17,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2022-05-25,2022-05-26,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2022-06-01,2022-06-01,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: NEP
-338389953,2022-06-06,2022-06-07,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2022-06-23,2022-06-24,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2022-10-12,2022-10-13,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2022-10-26,2022-10-27,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2022-11-09,2022-11-10,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2022-11-14,2022-11-15,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: NEP
-338389953,2022-11-22,2022-11-23,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2022-12-04,2022-12-05,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2022-12-19,2022-12-20,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2023-05-03,2023-05-04,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: NEP
-338389953,2023-10-30,2023-10-31,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,2 survey trips: SFW
-338389953,2023-11-20,2023-11-21,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: NEP
-338389953,2023-11-26,2023-11-26,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2023-11-30,2023-12-02,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,3 survey trips: SFW
-338389953,2024-04-01,2024-04-01,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2024-04-22,2024-04-23,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: NEP
-338389953,2024-04-29,2024-04-29,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2024-05-22,2024-05-22,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2024-07-02,2024-07-02,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2024-07-31,2024-07-31,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2024-09-30,2024-09-30,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2024-10-08,2024-10-08,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2024-11-20,2024-11-21,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: NEP
-338389953,2024-11-26,2024-11-27,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,2 survey trips: SFW
-338389953,2024-12-19,2024-12-19,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2025-02-05,2025-02-05,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2025-04-21,2025-04-21,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2025-04-24,2025-04-25,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: NEP
-338389953,2025-04-30,2025-05-01,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,2 survey trips: SFW
-338389953,2025-06-08,2025-06-08,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2025-07-10,2025-07-10,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2025-09-09,2025-09-09,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
-338389953,2026-09-01,,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
-338394719,,,PASQUE,fishing,FALSE,,marinetraffic,probable,MarineTraffic,OTHER,OTHER,2026-10-06,"Fishing vessel out of Falmouth, MA per MarineTraffic; GFW types it OTHER (no call sign in AIS)"
-338399049,2021-06-16,2021-06-17,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2021-07-13,2021-07-14,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2021-08-25,2021-08-26,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2021-09-25,2021-09-26,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2021-11-02,2021-11-03,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2021-11-20,2021-11-21,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2021-12-28,2021-12-29,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2022-06-21,2022-06-22,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2022-07-14,2022-07-15,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2022-08-11,2022-08-12,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2022-09-16,2022-09-17,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2022-10-10,2022-10-11,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2022-12-20,2022-12-21,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2023-01-06,2023-01-07,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2023-06-01,2023-06-02,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2023-07-01,2023-07-02,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2023-08-01,2023-08-02,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2023-09-21,2023-09-22,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2023-10-17,2023-10-18,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2023-11-12,2023-11-13,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2023-12-08,2023-12-09,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2024-06-03,2024-06-04,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2024-07-02,2024-07-03,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2024-08-12,2024-08-13,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2024-09-10,2024-09-11,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2024-10-20,2024-10-21,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2024-11-17,2024-11-18,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2024-12-14,2024-12-15,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2025-06-03,2025-06-04,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2025-07-03,2025-07-04,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2025-08-05,2025-08-06,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2025-09-03,2025-09-04,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2025-10-03,2025-10-04,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2025-11-19,2025-11-20,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2025-12-05,2025-12-06,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338399049,2026-09-01,,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
-338402566,2021-05-03,2021-05-13,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2021-06-01,2021-06-11,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2021-07-01,2021-07-12,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2021-08-01,2021-08-10,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2021-09-03,2021-09-14,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2021-10-01,2021-10-13,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2021-11-06,2021-11-17,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2022-05-06,2022-05-19,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2022-06-02,2022-06-12,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2022-07-01,2022-07-11,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2022-08-04,2022-08-15,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2022-09-02,2022-09-16,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2022-10-06,2022-10-16,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2022-11-03,2022-11-15,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2023-05-03,2023-05-13,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2023-06-01,2023-06-11,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2023-07-05,2023-07-17,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2023-08-01,2023-08-12,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2023-09-06,2023-09-18,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2023-10-03,2023-10-17,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2023-11-02,2023-11-13,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2024-05-01,2024-05-12,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2024-06-01,2024-06-10,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2024-07-01,2024-07-14,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2024-08-01,2024-08-13,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2024-09-04,2024-09-16,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2024-10-01,2024-10-09,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2024-11-03,2024-11-10,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2025-05-07,2025-05-17,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2025-06-03,2025-06-11,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2025-07-01,2025-07-10,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2025-08-03,2025-08-13,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2025-09-08,2025-09-18,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2025-10-03,2025-10-10,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2025-11-03,2025-11-10,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
-338402566,2026-09-01,,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
-338405326,2021-05-03,2021-05-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338405326,2021-06-01,2021-06-11,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338405326,2021-07-01,2021-07-12,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338405326,2021-08-01,2021-08-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338405326,2021-09-03,2021-09-14,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338405326,2021-10-01,2021-10-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338405326,2021-11-06,2021-11-17,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338405326,2022-05-06,2022-05-19,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338405326,2022-06-02,2022-06-12,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338405326,2022-07-01,2022-07-11,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338405326,2022-08-04,2022-08-15,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338405326,2022-09-02,2022-09-16,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338405326,2022-10-06,2022-10-16,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338405326,2022-11-03,2022-11-15,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338405326,2023-05-03,2023-05-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
-338405326,2023-05-27,2023-05-27,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2023-05-31,2023-06-12,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338405326,2023-06-17,2023-06-17,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2023-07-01,2023-07-01,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2023-07-05,2023-07-17,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338405326,2023-08-01,2023-08-12,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338405326,2023-08-14,2023-08-14,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2023-09-05,2023-09-18,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338405326,2023-09-20,2023-09-20,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2023-10-03,2023-10-18,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338405326,2023-11-02,2023-11-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338405326,2023-11-16,2023-11-16,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2024-05-01,2024-05-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338405326,2024-06-01,2024-06-11,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338405326,2024-07-01,2024-07-01,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2024-07-08,2024-07-14,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338405326,2024-08-01,2024-08-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338405326,2024-09-04,2024-09-17,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338405326,2024-10-01,2024-10-09,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338405326,2024-11-03,2024-11-10,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338405326,2024-11-14,2024-11-14,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2025-05-04,2025-05-04,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2025-05-07,2025-05-17,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338405326,2025-06-03,2025-06-03,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2025-06-07,2025-06-07,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: SFW
-338405326,2025-06-10,2025-06-11,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: REV; SFW
-338405326,2025-06-16,2025-06-16,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2025-07-01,2025-07-10,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338405326,2025-07-13,2025-07-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2025-08-03,2025-08-14,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338405326,2025-09-08,2025-09-19,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338405326,2025-09-24,2025-09-24,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2025-10-03,2025-10-10,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
-338405326,2025-11-03,2025-11-10,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
-338405326,2025-11-15,2025-11-15,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2026-05-02,2026-05-02,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2026-05-07,2026-05-07,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2026-05-12,2026-05-12,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2026-06-02,2026-06-02,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2026-06-06,2026-06-06,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2026-06-12,2026-06-12,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2026-07-03,2026-07-03,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2026-07-10,2026-07-10,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2026-07-13,2026-07-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2026-08-01,2026-08-01,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2026-08-06,2026-08-06,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2026-08-11,2026-08-11,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
-338405326,2026-09-01,,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
-338442062,2021-05-18,2021-05-20,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2021-06-01,2021-06-03,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2021-06-13,2021-06-15,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2021-06-29,2021-06-30,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2021-10-12,2021-10-13,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2021-11-01,2021-11-02,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2021-11-09,2021-11-10,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2021-11-16,2021-11-17,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2021-11-30,2021-12-01,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2021-12-14,2021-12-15,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2022-04-12,2022-04-13,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2022-04-26,2022-04-27,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2022-05-16,2022-05-17,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2022-05-25,2022-05-26,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2022-06-06,2022-06-07,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2022-06-23,2022-06-24,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2022-10-12,2022-10-13,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2022-10-15,2022-10-16,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2022-10-26,2022-10-27,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2022-11-09,2022-11-10,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2022-11-22,2022-11-23,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2022-12-04,2022-12-05,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2022-12-19,2022-12-20,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
-338442062,2026-09-01,,More Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
-338489747,2023-11-14,2023-11-15,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,2 survey trips: SFW
-338489747,2023-11-20,2023-11-21,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,2 survey trips: SFW
-338489747,2023-12-15,2023-12-16,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,2 survey trips: SFW
-338489747,2024-05-13,2024-05-13,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338489747,2024-06-04,2024-06-04,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338489747,2024-06-28,2024-06-28,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338489747,2024-10-04,2024-10-04,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338489747,2024-10-10,2024-10-10,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338489747,2024-11-07,2024-11-07,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338489747,2024-12-02,2024-12-02,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338489747,2024-12-10,2024-12-10,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338489747,2025-03-19,2025-03-19,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338489747,2025-04-07,2025-04-07,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338489747,2025-04-10,2025-04-10,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338489747,2025-05-30,2025-05-30,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338489747,2025-06-29,2025-06-30,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,2 survey trips: SFW
-338489747,2025-09-03,2025-09-03,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338489747,2025-10-25,2025-10-25,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338489747,2026-03-11,2026-03-11,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338489747,2026-04-07,2026-04-07,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338489747,2026-07-12,2026-07-12,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
-338489747,2026-09-01,,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
-338538875,2019-09-01,,Cailyn and Maren,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,POLE_AND_LINE,2026-10-06,this is Cailyn & Maren II from Orsted list
-366617950,2019-09-01,,Barbara Anne,fishing,TRUE,Survey,orsted_list,confirmed,,FISHING,TRAWLERS,2026-10-06,
-366758680,2022-07-29,2022-07-31,Kathy Marie,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SRW
-366758680,2023-07-06,2023-07-08,Kathy Marie,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SRW
-366758680,2024-07-03,2024-07-05,Kathy Marie,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SRW
-366758680,2026-09-01,,Kathy Marie,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
-366988070,2019-09-01,,Beth Anne,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,TRAWLERS,2026-10-06,
-367044720,2019-09-01,,Madison Kate,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,TRAWLERS,2026-10-06,
-367074530,2019-09-01,,Pamela Ann,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,FISHING,2026-10-06,
-367119340,2023-08-22,2023-08-26,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,5 survey trips: North Control Area; North Control Area / REV; REV; South Control Area; South Control Area / REV
-367119340,2023-11-02,2023-11-06,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,5 survey trips: North Control Area; North Control Area / REV; REV; REV / SRW; SRW
-367119340,2023-11-09,2023-11-11,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,3 survey trips: South Control Area; SRW
-367119340,2024-02-07,2024-02-11,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,5 survey trips: North Control Area; REV / North Control Area; South Control Area; South Control Area / SRW; SRW / REV
-367119340,2024-03-04,2024-03-05,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SRW
-367119340,2024-05-15,2024-05-15,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,1 survey trip: REV
-367119340,2024-05-17,2024-05-22,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,6 survey trips: North Control Area; South Control Area; South Control Area / SRW; SRW / REV
-367119340,2024-05-28,2024-05-29,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SRW
-367119340,2024-08-11,2024-08-16,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,6 survey trips: North Control Area; North Control Area / REV; REV; REV / SRW; South Control Area; South Control Area / SRW
-367119340,2024-08-19,2024-08-20,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SRW
-367119340,2024-12-04,2024-12-04,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,1 survey trip: North Control Area
-367119340,2024-12-07,2024-12-07,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,1 survey trip: REV
-367119340,2024-12-09,2024-12-10,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: South Control Area; SRW
-367119340,2024-12-13,2024-12-16,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,4 survey trips: North Control Area / REV; REV / SRW; South Control Area; SRW
-367119340,2024-12-18,2024-12-18,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,1 survey trip: SRW
-367119340,2025-02-20,2025-02-20,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,1 survey trip: REV
-367119340,2025-02-22,2025-02-26,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,5 survey trips: North Control Area; North Control Area / REV / SRW; South Control Area; South Control Area / North Control Area; SRW
-367119340,2025-03-03,2025-03-03,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,1 survey trip: SRW
-367119340,2025-05-20,2025-05-21,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: North Control Area; REV
-367119340,2025-05-23,2025-05-26,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,4 survey trips: South Control Area; South Control Area / SRW; SRW
-367119340,2025-06-02,2025-06-05,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,4 survey trips: North Control Area; REV; SRW
-367119340,2025-08-11,2025-08-14,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,4 survey trips: North Control Area; REV; SRW
-367119340,2025-09-25,2025-09-29,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,5 survey trips: North Control Area; REV / North Control Area; South Control Area; SRW; SRW / South Control Area
-367119340,2025-11-07,2025-11-10,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,4 survey trips: REV; REV / North Control Area; SRW
-367119340,2025-11-13,2025-11-15,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,3 survey trips: North Control Area; South Control Area; SRW / South Control Area
-367119340,2025-11-20,2025-11-22,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,3 survey trips: North Control Area / SRW; South Control Area; SRW
-367119340,2026-04-08,2026-04-12,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,6 survey trips: North Control Area; REV / North Control Area; South Control Area / SRW; SRW
-367119340,2026-05-08,2026-05-12,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,5 survey trips: North Control Area; North Control Area / REV / SRW; North Control Area / SRW; REV; South Control Area
-367119340,2026-05-14,2026-05-15,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,3 survey trips: South Control Area / SRW; SRW
-367119340,2026-09-01,,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
-367161060,2019-09-01,,Karen Nicole,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,FISHING,2026-10-06,
-367336020,2019-09-01,,Harvester,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,TRAWLERS,2026-10-06,
-367347070,2019-09-01,,Italian Princess,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,TRAWLERS,2026-10-06,
-367371160,2019-09-01,,Italian Princess,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,FISHING,2026-10-06,
-367387310,2019-09-01,,Kathryn Marie,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,FISHING,2026-10-06,
-367411950,2019-09-01,,ESS Pride,fishing,TRUE,Safety,behavioural_screen,possible,,FISHING,TRAWLERS,2026-10-06,
-367478020,2019-09-01,,Archangel,fishing,TRUE,Survey,orsted_list,confirmed,,PASSENGER,PASSENGER,2026-10-06,Orsted charter (removal list) with no dates yet; excluded from the start of Stage 2
-367478020,,2019-08-31,Archangel,fishing,FALSE,,orsted_list,confirmed,,PASSENGER,PASSENGER,2026-10-06,Chartered fishing hull GFW types PASSENGER; counts as fishing outside its charter windows
-367494840,2019-09-01,,Andrea A,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,FISHING,2026-10-06,
-367577710,2019-09-01,,Barbara Ann,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,FISHING,2026-10-06,
-367587070,2019-09-01,,Mister Marco,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,FISHING,2026-10-06,
-367639280,2019-09-01,,Hunter,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,FISHING,2026-10-06,
-367696380,2019-09-01,,Virginia Wave,fishing,TRUE,Safety,marinetraffic,confirmed,,FISHING,TRAWLERS,2026-10-06,
-367717050,2019-09-01,,Provider,fishing,TRUE,Survey,orsted_list,confirmed,,FISHING,TRAWLERS,2026-10-06,
-367723210,2019-09-01,,Saint Angels,fishing,TRUE,Safety,behavioural_screen,probable,,FISHING,FISHING,2026-10-06,
-367751630,2019-09-01,,Fleet King,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,FISHING,2026-10-06,
-368003140,2025-05-14,2025-05-16,Princess Scarlett,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,1 survey trip: SRW
-368003140,2026-05-16,2026-05-18,Princess Scarlett,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,1 survey trip: SRW
-368003140,2026-09-01,,Princess Scarlett,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
-368068580,2019-09-01,,Madison Kate,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,FISHING,2026-10-06,
-368080240,2019-09-01,,Amelia Joyce,fishing,TRUE,Safety,behavioural_screen,probable,,FISHING,FISHING,2026-10-06,
-368082670,2019-09-01,,Patience,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,INCONCLUSIVE,2026-10-06,
-368094740,2019-09-01,,Brittany Eryn,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,FISHING,2026-10-06,
-368128790,2019-09-01,,Gulf Stream,fishing,TRUE,Safety,behavioural_screen,possible,,FISHING,TRAWLERS,2026-10-06,
-368231710,2019-09-01,,Lily M,fishing,TRUE,Safety,behavioural_screen,probable,,FISHING,FISHING,2026-10-06,
-368235570,2019-09-01,,Ocean Queen,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,TRAWLERS,2026-10-06,
-368243330,2019-09-01,,Chatham,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,FISHING,2026-10-06,
-368243930,2019-09-01,,Gabrielle Elizabeth,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,INCONCLUSIVE,2026-10-06,
-368245920,2019-09-01,,New Horizon,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,FISHING,2026-10-06,
-368250590,2019-09-01,,Jack M,fishing,TRUE,Safety,behavioural_screen,probable,,FISHING,TRAWLERS,2026-10-06,
-368280420,2019-09-01,,Edward & Joseph,fishing,TRUE,Safety,behavioural_screen,probable,,FISHING,SET_GILLNETS,2026-10-06,
-368294050,2019-09-01,,Jo Ann V,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,FISHING,2026-10-06,
-368308710,2019-09-01,,Archangel,fishing,TRUE,Survey,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,Orsted charter (removal list) with no dates yet; excluded from the start of Stage 2
-368308710,,2019-08-31,Archangel,fishing,FALSE,,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,Chartered fishing hull GFW types OTHER; counts as fishing outside its charter windows
-368316410,2019-09-01,,Fleet Queen,fishing,TRUE,Safety,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,Orsted charter (removal list) with no dates yet; excluded from the start of Stage 2
-368316410,,2019-08-31,Fleet Queen,fishing,FALSE,,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,Chartered fishing hull GFW types OTHER; counts as fishing outside its charter windows
-368346080,2019-09-01,,Triunfo,fishing,TRUE,Safety,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,Orsted charter (removal list) with no dates yet; excluded from the start of Stage 2
-368346080,,2019-08-31,Triunfo,fishing,FALSE,,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,Chartered fishing hull GFW types OTHER; counts as fishing outside its charter windows
-368361590,2019-09-01,,Tradition,fishing,TRUE,Safety,behavioural_screen,probable,,FISHING,TRAWLERS,2026-10-06,
-368364250,2019-09-01,,Sea Wind,fishing,TRUE,Safety,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,Orsted charter (removal list) with no dates yet; excluded from the start of Stage 2
-368364250,,2019-08-31,Sea Wind,fishing,FALSE,,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,Chartered fishing hull GFW types OTHER; counts as fishing outside its charter windows
-368407550,2025-09-29,2025-09-29,Archangel,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,PASSENGER,PASSENGER,2026-10-06,1 survey trip: SFW
-368407550,2025-09-30,2026-05-25,Archangel,fishing,FALSE,,orsted_list,confirmed,,PASSENGER,PASSENGER,2026-10-06,Chartered fishing hull GFW types PASSENGER; counts as fishing outside its charter windows
-368407550,2026-05-26,2026-05-26,Archangel,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,PASSENGER,PASSENGER,2026-10-06,1 survey trip: SFW
-368407550,2026-05-27,2026-05-28,Archangel,fishing,FALSE,,orsted_list,confirmed,,PASSENGER,PASSENGER,2026-10-06,Chartered fishing hull GFW types PASSENGER; counts as fishing outside its charter windows
-368407550,2026-05-29,2026-05-29,Archangel,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,PASSENGER,PASSENGER,2026-10-06,1 survey trip: SFW
-368407550,2026-05-30,2026-08-31,Archangel,fishing,FALSE,,orsted_list,confirmed,,PASSENGER,PASSENGER,2026-10-06,Chartered fishing hull GFW types PASSENGER; counts as fishing outside its charter windows
-368407550,2026-09-01,,Archangel,fishing,TRUE,Survey,orsted_survey_dates,confirmed,orsted_fv_survey_dates_aug2026.csv,PASSENGER,PASSENGER,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
-368407550,,2025-09-28,Archangel,fishing,FALSE,,orsted_list,confirmed,,PASSENGER,PASSENGER,2026-10-06,Chartered fishing hull GFW types PASSENGER; counts as fishing outside its charter windows
-368411440,,,Celtic,non_fishing,FALSE,Safety,orsted_list,confirmed,,OTHER,OTHER,2026-10-06,"Port tender, not a fishing vessel (analyst knowledge); Orsted safety charter; GFW types it OTHER"
-368411540,2019-09-01,,Mariner,fishing,TRUE,Safety,orsted_list,confirmed,,FISHING,FIXED_GEAR,2026-10-06,
+MMSI,valid_from,valid_to,Vessel_Name,hull_class,activity_excluded,Operation,Identified_By,evidence_ref,gfw_vessel_type,gfw_gear_type,pull_date,Notes
+257394000,,,Cygnus,non_fishing,FALSE,Cargo,manual identification,,CARGO,CARGO,2026-10-06,
+259286000,,,Sunnanvik,non_fishing,FALSE,Cargo,manual identification,,FISHING,INCONCLUSIVE,2026-10-06,
+303235000,,,THE EXPERIENCE,fishing,FALSE,,gfw_registry,GARFO hull 1293567; HMS permit 10187755; ICCAT list; MarineTraffic,OTHER,OTHER,2026-10-06,"typed non-FISHING; US flag, no call sign. On an RFMO vessel list (ICCAT|USA), registry gear PASSENGER|POLE_AND_LINE; a GARFO hull with this name holds an HMS Charter/Headboat permit"
+338066383,,,NOAA Gloria Michelle,non_fishing,FALSE,Research,known_research_vessel,,FISHING,TRAWLERS,2026-10-06,
+338229941,2020-10-28,2020-10-28,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2020-11-24,2020-11-25,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2020-12-19,2020-12-19,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2021-01-13,2021-01-14,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2021-02-11,2021-02-11,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2021-03-18,2021-03-18,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2021-04-14,2021-04-14,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2021-05-17,2021-05-17,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2021-06-17,2021-06-17,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2021-07-14,2021-07-14,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2021-08-17,2021-08-17,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2021-09-16,2021-09-16,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2021-10-15,2021-10-15,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2021-11-20,2021-11-20,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2021-12-10,2021-12-10,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2022-01-24,2022-01-24,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2022-02-21,2022-02-22,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2022-03-16,2022-03-16,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2022-04-13,2022-04-13,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2022-05-19,2022-05-19,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2022-06-15,2022-06-15,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2022-07-20,2022-07-20,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2022-08-19,2022-08-19,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2022-09-13,2022-09-13,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2022-10-27,2022-10-27,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2022-11-09,2022-11-09,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2022-12-20,2022-12-20,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2023-01-19,2023-01-19,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2023-02-12,2023-02-12,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2023-03-22,2023-03-22,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2023-04-14,2023-04-14,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2023-05-18,2023-05-18,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2023-06-16,2023-06-16,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2023-07-10,2023-07-10,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2023-08-23,2023-08-23,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2023-09-21,2023-09-21,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2023-10-19,2023-10-19,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2023-11-13,2023-11-13,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2023-12-08,2023-12-08,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2024-01-24,2024-01-24,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2024-02-12,2024-02-12,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2024-03-13,2024-03-13,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2024-04-17,2024-04-17,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2024-05-24,2024-05-24,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2024-06-25,2024-06-25,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2024-07-25,2024-07-25,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2024-08-12,2024-08-12,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2024-09-09,2024-09-09,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2024-10-20,2024-10-20,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2024-11-07,2024-11-07,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2024-12-04,2024-12-04,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2025-01-11,2025-01-11,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2025-02-11,2025-02-11,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2025-03-15,2025-03-15,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2025-04-10,2025-04-10,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2025-05-07,2025-05-07,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2025-06-13,2025-06-13,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2025-07-14,2025-07-14,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2025-08-08,2025-08-08,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2025-09-04,2025-09-04,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338229941,2026-09-01,,Mister G,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
+338301301,,,BACKLASH,fishing,FALSE,,marinetraffic,MarineTraffic,OTHER,OTHER,2026-10-06,Fishing vessel per MarineTraffic; GFW types it OTHER (no call sign in AIS)
+338305627,,,ENCOURAGER,fishing,FALSE,,garfo_name_match,MT: fixed gear pot boat,OTHER,OTHER,2026-10-06,typed non-FISHING; unique GARFO name match. State-registered hull MS3707BM; cannot be linked to a call sign. GARFO permits: commercial
+338314815,,,TONNO,fishing,FALSE,,garfo_name_match,GARFO hull MS4843BJ; permit 10181283|152689; MT: fishing boat,OTHER,OTHER,2026-10-06,typed non-FISHING; unique GARFO name match. State-registered hull MS4843BJ; cannot be linked to a call sign. GARFO permits: for-hire + open-access commercial
+338328681,2021-05-03,2021-05-13,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338328681,2021-06-01,2021-06-11,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338328681,2021-07-01,2021-07-12,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338328681,2021-08-01,2021-08-10,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338328681,2021-09-03,2021-09-14,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338328681,2021-10-01,2021-10-13,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338328681,2021-11-06,2021-11-17,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338328681,2022-05-06,2022-05-19,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338328681,2022-06-02,2022-06-12,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338328681,2022-07-01,2022-07-11,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338328681,2022-08-04,2022-08-15,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338328681,2022-09-02,2022-09-16,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338328681,2022-10-06,2022-10-16,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338328681,2022-11-03,2022-11-16,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338328681,2023-05-03,2023-05-13,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338328681,2023-05-18,2023-05-18,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2023-05-24,2023-05-24,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2023-05-31,2023-06-12,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338328681,2023-06-19,2023-06-19,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2023-07-01,2023-07-01,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2023-07-05,2023-07-17,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338328681,2023-08-01,2023-08-12,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338328681,2023-08-14,2023-08-14,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2023-09-05,2023-09-18,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338328681,2023-09-20,2023-09-20,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2023-10-03,2023-10-18,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338328681,2023-11-02,2023-11-13,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338328681,2023-11-15,2023-11-15,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2024-05-01,2024-05-13,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338328681,2024-06-01,2024-06-11,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338328681,2024-07-01,2024-07-14,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338328681,2024-08-01,2024-08-13,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338328681,2024-09-04,2024-09-17,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338328681,2024-10-01,2024-10-09,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338328681,2024-11-03,2024-11-10,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338328681,2024-11-14,2024-11-14,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2025-05-04,2025-05-04,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2025-05-07,2025-05-17,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338328681,2025-06-03,2025-06-11,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338328681,2025-06-16,2025-06-16,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2025-07-01,2025-07-05,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: REV; SFW
+338328681,2025-07-08,2025-07-08,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2025-07-10,2025-07-10,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: SFW
+338328681,2025-07-13,2025-07-13,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2025-08-03,2025-08-14,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338328681,2025-09-08,2025-09-19,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338328681,2025-09-24,2025-09-24,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2025-10-03,2025-10-10,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338328681,2025-11-03,2025-11-10,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338328681,2025-11-15,2025-11-15,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2026-05-02,2026-05-02,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2026-05-07,2026-05-07,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2026-05-12,2026-05-12,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2026-06-02,2026-06-02,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2026-06-06,2026-06-06,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2026-06-12,2026-06-12,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2026-07-03,2026-07-03,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2026-07-10,2026-07-10,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2026-07-13,2026-07-13,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2026-08-01,2026-08-01,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2026-08-06,2026-08-06,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2026-08-11,2026-08-11,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338328681,2026-09-01,,Ashley Ann II,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
+338350046,2019-09-01,,Argo,fishing,TRUE,Safety,behavioural_screen,,FISHING,SET_GILLNETS,2026-10-06,
+338377714,,,CHILL / R-TTIME,fishing,FALSE,,garfo_name_match,GARFO hull 1301947; permit 233983; CGMIX PSIX: commercial fishing vessel; MT: fishing boat; Chill name does not come up in MT or CGMIX searches,PASSENGER,PASSENGER,2026-10-06,typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 1301947 in CGMIX PSIX; its call sign should be (none in AIS). GARFO permits: commercial
+338379994,,,CUTTY SHARK,fishing,FALSE,,garfo_name_match,GARFO hull 1093157; permit 10210026; CGMIX PSIX: recreational; MT: fishing boat,PASSENGER,PASSENGER,2026-10-06,typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 1093157 in CGMIX PSIX; its call sign should be (none in AIS). GARFO permits: commercial
+338382398,,,LOW PROFILE,fishing,FALSE,,garfo_name_match,GARFO hull 1094141; permit 10046977|251685; CGMIX PSIX: recreational; MT: fishing boat,PASSENGER,PASSENGER,2026-10-06,typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 1094141 in CGMIX PSIX; its call sign should be (none in AIS). GARFO permits: for-hire + open-access commercial
+338389953,2021-05-18,2021-05-20,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2021-06-01,2021-06-03,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2021-06-13,2021-06-15,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2021-06-29,2021-06-30,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2021-10-12,2021-10-13,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2021-11-01,2021-11-02,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2021-11-09,2021-11-10,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2021-11-16,2021-11-17,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2021-11-30,2021-12-01,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2021-12-14,2021-12-15,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2022-04-12,2022-04-13,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2022-04-26,2022-04-27,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2022-05-14,2022-05-14,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: NEP
+338389953,2022-05-16,2022-05-17,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2022-05-25,2022-05-26,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2022-06-01,2022-06-01,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: NEP
+338389953,2022-06-06,2022-06-07,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2022-06-23,2022-06-24,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2022-10-12,2022-10-13,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2022-10-26,2022-10-27,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2022-11-09,2022-11-10,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2022-11-14,2022-11-15,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: NEP
+338389953,2022-11-22,2022-11-23,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2022-12-04,2022-12-05,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2022-12-19,2022-12-20,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2023-05-03,2023-05-04,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: NEP
+338389953,2023-10-30,2023-10-31,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,2 survey trips: SFW
+338389953,2023-11-20,2023-11-21,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: NEP
+338389953,2023-11-26,2023-11-26,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2023-11-30,2023-12-02,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,3 survey trips: SFW
+338389953,2024-04-01,2024-04-01,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2024-04-22,2024-04-23,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: NEP
+338389953,2024-04-29,2024-04-29,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2024-05-22,2024-05-22,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2024-07-02,2024-07-02,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2024-07-31,2024-07-31,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2024-09-30,2024-09-30,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2024-10-08,2024-10-08,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2024-11-20,2024-11-21,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: NEP
+338389953,2024-11-26,2024-11-27,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,2 survey trips: SFW
+338389953,2024-12-19,2024-12-19,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2025-02-05,2025-02-05,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2025-04-21,2025-04-21,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2025-04-24,2025-04-25,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: NEP
+338389953,2025-04-30,2025-05-01,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,2 survey trips: SFW
+338389953,2025-06-08,2025-06-08,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2025-07-10,2025-07-10,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2025-09-09,2025-09-09,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SFW
+338389953,2026-09-01,,Cailyn & Maren,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
+338394719,,,PASQUE,fishing,FALSE,,marinetraffic,MarineTraffic,OTHER,OTHER,2026-10-06,"Fishing vessel out of Falmouth, MA per MarineTraffic; GFW types it OTHER (no call sign in AIS)"
+338399049,2021-06-16,2021-06-17,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2021-07-13,2021-07-14,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2021-08-25,2021-08-26,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2021-09-25,2021-09-26,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2021-11-02,2021-11-03,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2021-11-20,2021-11-21,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2021-12-28,2021-12-29,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2022-06-21,2022-06-22,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2022-07-14,2022-07-15,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2022-08-11,2022-08-12,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2022-09-16,2022-09-17,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2022-10-10,2022-10-11,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2022-12-20,2022-12-21,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2023-01-06,2023-01-07,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2023-06-01,2023-06-02,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2023-07-01,2023-07-02,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2023-08-01,2023-08-02,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2023-09-21,2023-09-22,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2023-10-17,2023-10-18,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2023-11-12,2023-11-13,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2023-12-08,2023-12-09,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2024-06-03,2024-06-04,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2024-07-02,2024-07-03,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2024-08-12,2024-08-13,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2024-09-10,2024-09-11,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2024-10-20,2024-10-21,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2024-11-17,2024-11-18,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2024-12-14,2024-12-15,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2025-06-03,2025-06-04,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2025-07-03,2025-07-04,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2025-08-05,2025-08-06,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2025-09-03,2025-09-04,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2025-10-03,2025-10-04,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2025-11-19,2025-11-20,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2025-12-05,2025-12-06,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338399049,2026-09-01,,Harvest Moon,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
+338402566,2021-05-03,2021-05-13,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2021-06-01,2021-06-11,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2021-07-01,2021-07-12,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2021-08-01,2021-08-10,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2021-09-03,2021-09-14,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2021-10-01,2021-10-13,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2021-11-06,2021-11-17,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2022-05-06,2022-05-19,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2022-06-02,2022-06-12,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2022-07-01,2022-07-11,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2022-08-04,2022-08-15,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2022-09-02,2022-09-16,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2022-10-06,2022-10-16,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2022-11-03,2022-11-15,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2023-05-03,2023-05-13,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2023-06-01,2023-06-11,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2023-07-05,2023-07-17,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2023-08-01,2023-08-12,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2023-09-06,2023-09-18,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2023-10-03,2023-10-17,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2023-11-02,2023-11-13,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2024-05-01,2024-05-12,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2024-06-01,2024-06-10,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2024-07-01,2024-07-14,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2024-08-01,2024-08-13,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2024-09-04,2024-09-16,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2024-10-01,2024-10-09,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2024-11-03,2024-11-10,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2025-05-07,2025-05-17,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2025-06-03,2025-06-11,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2025-07-01,2025-07-10,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2025-08-03,2025-08-13,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2025-09-08,2025-09-18,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2025-10-03,2025-10-10,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2025-11-03,2025-11-10,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SFW
+338402566,2026-09-01,,Erica Knight,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
+338405326,2021-05-03,2021-05-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338405326,2021-06-01,2021-06-11,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338405326,2021-07-01,2021-07-12,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338405326,2021-08-01,2021-08-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338405326,2021-09-03,2021-09-14,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338405326,2021-10-01,2021-10-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338405326,2021-11-06,2021-11-17,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338405326,2022-05-06,2022-05-19,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338405326,2022-06-02,2022-06-12,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338405326,2022-07-01,2022-07-11,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338405326,2022-08-04,2022-08-15,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338405326,2022-09-02,2022-09-16,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338405326,2022-10-06,2022-10-16,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338405326,2022-11-03,2022-11-15,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338405326,2023-05-03,2023-05-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: SFW
+338405326,2023-05-27,2023-05-27,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2023-05-31,2023-06-12,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338405326,2023-06-17,2023-06-17,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2023-07-01,2023-07-01,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2023-07-05,2023-07-17,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338405326,2023-08-01,2023-08-12,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338405326,2023-08-14,2023-08-14,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2023-09-05,2023-09-18,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338405326,2023-09-20,2023-09-20,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2023-10-03,2023-10-18,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338405326,2023-11-02,2023-11-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338405326,2023-11-16,2023-11-16,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2024-05-01,2024-05-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338405326,2024-06-01,2024-06-11,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338405326,2024-07-01,2024-07-01,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2024-07-08,2024-07-14,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338405326,2024-08-01,2024-08-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338405326,2024-09-04,2024-09-17,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338405326,2024-10-01,2024-10-09,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338405326,2024-11-03,2024-11-10,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338405326,2024-11-14,2024-11-14,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2025-05-04,2025-05-04,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2025-05-07,2025-05-17,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338405326,2025-06-03,2025-06-03,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2025-06-07,2025-06-07,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: SFW
+338405326,2025-06-10,2025-06-11,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,2 survey trips: REV; SFW
+338405326,2025-06-16,2025-06-16,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2025-07-01,2025-07-10,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338405326,2025-07-13,2025-07-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2025-08-03,2025-08-14,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338405326,2025-09-08,2025-09-19,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338405326,2025-09-24,2025-09-24,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2025-10-03,2025-10-10,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,5 survey trips: REV; SFW
+338405326,2025-11-03,2025-11-10,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,4 survey trips: REV; SFW
+338405326,2025-11-15,2025-11-15,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2026-05-02,2026-05-02,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2026-05-07,2026-05-07,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2026-05-12,2026-05-12,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2026-06-02,2026-06-02,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2026-06-06,2026-06-06,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2026-06-12,2026-06-12,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2026-07-03,2026-07-03,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2026-07-10,2026-07-10,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2026-07-13,2026-07-13,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2026-08-01,2026-08-01,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2026-08-06,2026-08-06,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2026-08-11,2026-08-11,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,1 survey trip: REV
+338405326,2026-09-01,,Amelia Anne,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FIXED_GEAR,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
+338433886,,,DAWN PATROL / RECKLESS,fishing,FALSE,,garfo_name_match,MT: fishing yacht (Reckless); USCG no. tracks to Dawn Patrol which is a passenger vessel,PASSENGER,PASSENGER,2026-10-06,typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 1139664 in CGMIX PSIX; its call sign should be (none in AIS). GARFO permits: for-hire
+338442062,2021-05-18,2021-05-20,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2021-06-01,2021-06-03,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2021-06-13,2021-06-15,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2021-06-29,2021-06-30,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2021-10-12,2021-10-13,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2021-11-01,2021-11-02,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2021-11-09,2021-11-10,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2021-11-16,2021-11-17,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2021-11-30,2021-12-01,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2021-12-14,2021-12-15,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2022-04-12,2022-04-13,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2022-04-26,2022-04-27,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2022-05-16,2022-05-17,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2022-05-25,2022-05-26,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2022-06-06,2022-06-07,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2022-06-23,2022-06-24,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2022-10-12,2022-10-13,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2022-10-15,2022-10-16,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2022-10-26,2022-10-27,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2022-11-09,2022-11-10,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2022-11-22,2022-11-23,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2022-12-04,2022-12-05,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2022-12-19,2022-12-20,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,1 survey trip: SFW
+338442062,2026-09-01,,More Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,SET_GILLNETS,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
+338444322,,,JENNIFER LEE,fishing,FALSE,,garfo_name_match,GARFO hull 584634; permit 10022726|211254; CGMIX PSIX: commercial fishing vessel; MT: fishing boat,PASSENGER,PASSENGER,2026-10-06,typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 584634 in CGMIX PSIX; its call sign should be (none in AIS). GARFO permits: for-hire + open-access commercial
+338474887,,,HAYMAKER,fishing,FALSE,,garfo_name_match,GARFO hull 545583; permit 232684; CGMIX PSIX: commercial fishing vessel; MT: fishing boat,PASSENGER,PASSENGER,2026-10-06,typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 545583 in CGMIX PSIX; its call sign should be (none in AIS). GARFO permits: commercial
+338478051,,,REEL EASY,fishing,FALSE,,garfo_name_match,GARFO hull 1068626; permit 10179120|215212; CGMIX PSIX: commercial fishing vessel); MT: fishing boat,OTHER,OTHER,2026-10-06,typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 1068626 in CGMIX PSIX; its call sign should be (none in AIS). GARFO permits: for-hire + open-access commercial
+338482296,,,DISRUPTOR,fishing,FALSE,,garfo_name_match,GARFO hull 1332621; permit 10213901|251923; CGMIX PSIX: commercial fishing vessel; MT: fishing boat,OTHER,OTHER,2026-10-06,typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 1332621 in CGMIX PSIX; its call sign should be (none in AIS). GARFO permits: for-hire + open-access commercial
+338486965,,,CHUMLINE,fishing,FALSE,,garfo_name_match,GARFO hull 1327857; permit 10208775; CGMIX PSIX: commercial fishing vessel; MT: fishing boat,OTHER,OTHER,2026-10-06,typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 1327857 in CGMIX PSIX; its call sign should be (none in AIS). GARFO permits: for-hire + open-access commercial
+338489747,2023-11-14,2023-11-15,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,2 survey trips: SFW
+338489747,2023-11-20,2023-11-21,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,2 survey trips: SFW
+338489747,2023-12-15,2023-12-16,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,2 survey trips: SFW
+338489747,2024-05-13,2024-05-13,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338489747,2024-06-04,2024-06-04,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338489747,2024-06-28,2024-06-28,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338489747,2024-10-04,2024-10-04,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338489747,2024-10-10,2024-10-10,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338489747,2024-11-07,2024-11-07,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338489747,2024-12-02,2024-12-02,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338489747,2024-12-10,2024-12-10,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338489747,2025-03-19,2025-03-19,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338489747,2025-04-07,2025-04-07,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338489747,2025-04-10,2025-04-10,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338489747,2025-05-30,2025-05-30,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338489747,2025-06-29,2025-06-30,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,2 survey trips: SFW
+338489747,2025-09-03,2025-09-03,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338489747,2025-10-25,2025-10-25,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338489747,2026-03-11,2026-03-11,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338489747,2026-04-07,2026-04-07,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338489747,2026-07-12,2026-07-12,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,1 survey trip: SFW
+338489747,2026-09-01,,Sweet Misery,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,POTS_AND_TRAPS,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
+338496083,,,SWORDFIGHT,fishing,FALSE,,garfo_name_match,GARFO hull 1174164; permit 10093703; CGMIX PSIX: commercial fishing vessel; MT: fishing boat,OTHER,OTHER,2026-10-06,typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 1174164 in CGMIX PSIX; its call sign should be (none in AIS). GARFO permits: commercial
+338513773,,,SEAMUS & LIAM III,fishing,FALSE,,garfo_name_match,MT: fixed gear pot boat,OTHER,OTHER,2026-10-06,typed non-FISHING; unique GARFO name match. State-registered hull RI3451U; cannot be linked to a call sign. GARFO permits: commercial
+338517915,,,BEER MONEY,fishing,FALSE,,garfo_name_match,GARFO hull NJ4202HS; permit 153945; rod and reel fishing boat based on activity in vessel presence data,PASSENGER,PASSENGER,2026-10-06,typed non-FISHING; unique GARFO name match. State-registered hull NJ4202HS; cannot be linked to a call sign. GARFO permits: commercial
+338521433,,,OUTKAST,fishing,FALSE,,garfo_name_match,GARFO hull MS8238BX; permit 10229815; rod and reel fishing boat based on activity in vessel presence data,OTHER,OTHER,2026-10-06,typed non-FISHING; unique GARFO name match. State-registered hull MS8238BX; cannot be linked to a call sign. GARFO permits: commercial
+338538875,2019-09-01,,Cailyn and Maren,fishing,TRUE,Safety,orsted_list,,FISHING,POLE_AND_LINE,2026-10-06,this is Cailyn & Maren II from Orsted list
+366617950,2019-09-01,,Barbara Anne,fishing,TRUE,Survey,orsted_list,,FISHING,TRAWLERS,2026-10-06,
+366758680,2022-07-29,2022-07-31,Kathy Marie,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SRW
+366758680,2023-07-06,2023-07-08,Kathy Marie,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SRW
+366758680,2024-07-03,2024-07-05,Kathy Marie,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,1 survey trip: SRW
+366758680,2026-09-01,,Kathy Marie,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,FISHING,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
+366988070,2019-09-01,,Beth Anne,fishing,TRUE,Safety,orsted_list,,FISHING,TRAWLERS,2026-10-06,
+367018850,,,HEL-CAT II,fishing,FALSE,,garfo_name_match,GARFO hull 686254; permit 320735; internet search revealed headboat/party boat,PASSENGER,PASSENGER,2026-10-06,typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 686254 in CGMIX PSIX; its call sign should be WSH5085. GARFO permits: for-hire + open-access commercial
+367044720,2019-09-01,,Madison Kate,fishing,TRUE,Safety,orsted_list,,FISHING,TRAWLERS,2026-10-06,
+367074530,2019-09-01,,Pamela Ann,fishing,TRUE,Safety,orsted_list,,FISHING,FISHING,2026-10-06,
+367119340,2023-08-22,2023-08-26,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,5 survey trips: North Control Area; North Control Area / REV; REV; South Control Area; South Control Area / REV
+367119340,2023-11-02,2023-11-06,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,5 survey trips: North Control Area; North Control Area / REV; REV; REV / SRW; SRW
+367119340,2023-11-09,2023-11-11,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,3 survey trips: South Control Area; SRW
+367119340,2024-02-07,2024-02-11,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,5 survey trips: North Control Area; REV / North Control Area; South Control Area; South Control Area / SRW; SRW / REV
+367119340,2024-03-04,2024-03-05,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SRW
+367119340,2024-05-15,2024-05-15,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,1 survey trip: REV
+367119340,2024-05-17,2024-05-22,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,6 survey trips: North Control Area; South Control Area; South Control Area / SRW; SRW / REV
+367119340,2024-05-28,2024-05-29,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SRW
+367119340,2024-08-11,2024-08-16,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,6 survey trips: North Control Area; North Control Area / REV; REV; REV / SRW; South Control Area; South Control Area / SRW
+367119340,2024-08-19,2024-08-20,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: SRW
+367119340,2024-12-04,2024-12-04,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,1 survey trip: North Control Area
+367119340,2024-12-07,2024-12-07,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,1 survey trip: REV
+367119340,2024-12-09,2024-12-10,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: South Control Area; SRW
+367119340,2024-12-13,2024-12-16,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,4 survey trips: North Control Area / REV; REV / SRW; South Control Area; SRW
+367119340,2024-12-18,2024-12-18,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,1 survey trip: SRW
+367119340,2025-02-20,2025-02-20,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,1 survey trip: REV
+367119340,2025-02-22,2025-02-26,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,5 survey trips: North Control Area; North Control Area / REV / SRW; South Control Area; South Control Area / North Control Area; SRW
+367119340,2025-03-03,2025-03-03,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,1 survey trip: SRW
+367119340,2025-05-20,2025-05-21,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,2 survey trips: North Control Area; REV
+367119340,2025-05-23,2025-05-26,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,4 survey trips: South Control Area; South Control Area / SRW; SRW
+367119340,2025-06-02,2025-06-05,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,4 survey trips: North Control Area; REV; SRW
+367119340,2025-08-11,2025-08-14,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,4 survey trips: North Control Area; REV; SRW
+367119340,2025-09-25,2025-09-29,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,5 survey trips: North Control Area; REV / North Control Area; South Control Area; SRW; SRW / South Control Area
+367119340,2025-11-07,2025-11-10,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,4 survey trips: REV; REV / North Control Area; SRW
+367119340,2025-11-13,2025-11-15,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,3 survey trips: North Control Area; South Control Area; SRW / South Control Area
+367119340,2025-11-20,2025-11-22,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,3 survey trips: North Control Area / SRW; South Control Area; SRW
+367119340,2026-04-08,2026-04-12,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,6 survey trips: North Control Area; REV / North Control Area; South Control Area / SRW; SRW
+367119340,2026-05-08,2026-05-12,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,5 survey trips: North Control Area; North Control Area / REV / SRW; North Control Area / SRW; REV; South Control Area
+367119340,2026-05-14,2026-05-15,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,3 survey trips: South Control Area / SRW; SRW
+367119340,2026-09-01,,Heather Lynn,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
+367161060,2019-09-01,,Karen Nicole,fishing,TRUE,Safety,orsted_list,,FISHING,FISHING,2026-10-06,
+367336020,2019-09-01,,Harvester,fishing,TRUE,Safety,orsted_list,,FISHING,TRAWLERS,2026-10-06,
+367337990,,,VIKING STAR,fishing,FALSE,,gfw_registry_rfmo,GARFO hull 526153; permit 10009008|320278; online search (https://vikingfleet.com/fishing-trips/offshore-fishing-trips/): headboat,PASSENGER,PASSENGER,2026-10-06,"typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 526153 in CGMIX PSIX; its call sign should be WY9034. GARFO permits: commercial + for-hire. On an RFMO vessel list (ICCAT|USA), registry gear PASSENGER; GARFO HMS Charter/Headboat permit: for-hire"
+367347070,2019-09-01,,Italian Princess,fishing,TRUE,Safety,orsted_list,,FISHING,TRAWLERS,2026-10-06,
+367363000,,,OFFSHORE LADY,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,OTHER,OTHER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT|SNP|USA), registry gear PASSENGER; no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)"
+367371160,2019-09-01,,Italian Princess,fishing,TRUE,Safety,orsted_list,,FISHING,FISHING,2026-10-06,
+367387310,2019-09-01,,Kathryn Marie,fishing,TRUE,Safety,orsted_list,,FISHING,FISHING,2026-10-06,
+367411950,2019-09-01,,ESS Pride,fishing,TRUE,Safety,behavioural_screen,,FISHING,TRAWLERS,2026-10-06,
+367450190,,,TAILS OF THE SEA,fishing,FALSE,,garfo_name_match,GARFO hull 1000077; permit 410531; online search (https://www.captjohn.com/about-us/): headboat,PASSENGER,PASSENGER,2026-10-06,typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 1000077 in CGMIX PSIX; its call sign should be WDF4297. GARFO permits: for-hire + open-access commercial
+367478020,2019-09-01,,Archangel,fishing,TRUE,Survey,orsted_list,,PASSENGER,PASSENGER,2026-10-06,Orsted charter (removal list) with no dates yet; excluded from the start of Stage 2
+367478020,,2019-08-31,Archangel,fishing,FALSE,,orsted_list,,PASSENGER,PASSENGER,2026-10-06,Chartered fishing hull GFW types PASSENGER; counts as fishing outside its charter windows
+367494840,2019-09-01,,Andrea A,fishing,TRUE,Safety,orsted_list,,FISHING,FISHING,2026-10-06,
+367554870,,,HELEN H,fishing,FALSE,,gfw_registry_rfmo,GARFO hull 566449; permit 10008997|320648; online search (helen.h.com): headboat,OTHER,OTHER,2026-10-06,"typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 566449 in CGMIX PSIX; its call sign should be WDG6238. GARFO permits: for-hire. On an RFMO vessel list (ICCAT|USA), registry gear PASSENGER; GARFO HMS Charter/Headboat permit: for-hire"
+367577110,,,TUNA MILL 3,fishing,FALSE,,garfo_name_match,GARFO hull 904435; permit 10028900|251381; CGMIX PSIX: commercial fishing vessel; MT: fishing boat,OTHER,OTHER,2026-10-06,typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 904435 in CGMIX PSIX; its call sign should be WDG8400. GARFO permits: for-hire + open-access commercial
+367577710,2019-09-01,,Barbara Ann,fishing,TRUE,Safety,orsted_list,,FISHING,FISHING,2026-10-06,
+367587070,2019-09-01,,Mister Marco,fishing,TRUE,Safety,orsted_list,,FISHING,FISHING,2026-10-06,
+367614540,,,KINGSBURY / TIN MAN'S PRIDE,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,OTHER,OTHER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT|USA), registry gear PASSENGER; no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)"
+367639280,2019-09-01,,Hunter,fishing,TRUE,Safety,orsted_list,,FISHING,FISHING,2026-10-06,
+367661740,,,VIKING STARSHIP,fishing,FALSE,,gfw_registry_rfmo,GARFO hull 585704; permit 10009004|320641; online search (https://vikingfleet.com/fishing-trips/offshore-fishing-trips/): headboat,PASSENGER,PASSENGER,2026-10-06,"typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 585704 in CGMIX PSIX; its call sign should be WDH8814. GARFO permits: for-hire + open-access commercial. On an RFMO vessel list (ICCAT|USA), registry gear PASSENGER; GARFO HMS Charter/Headboat permit: for-hire"
+367693470,,,HATTRICK,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,PASSENGER,PASSENGER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT|USA), registry gear PASSENGER; no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)"
+367696380,2019-09-01,,Virginia Wave,fishing,TRUE,Safety,marinetraffic,,FISHING,TRAWLERS,2026-10-06,
+367705130,,,VIKING SUPERSTAR,fishing,FALSE,,garfo_name_match,GARFO hull 567912; permit 320783; online search (https://vikingfleet.com/): headboat,PASSENGER,PASSENGER,2026-10-06,typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 567912 in CGMIX PSIX; its call sign should be WDI5096. GARFO permits: for-hire + open-access commercial
+367717050,2019-09-01,,Provider,fishing,TRUE,Survey,orsted_list,,FISHING,TRAWLERS,2026-10-06,
+367723210,2019-09-01,,Saint Angels,fishing,TRUE,Safety,behavioural_screen,,FISHING,FISHING,2026-10-06,
+367740580,,,LOUD ENUFF,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,OTHER,OTHER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT|SNP|ICCAT|USA), registry gear PASSENGER; no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)"
+367751630,2019-09-01,,Fleet King,fishing,TRUE,Safety,orsted_list,,FISHING,FISHING,2026-10-06,
+367784850,,,DOUBLE BARREL,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,OTHER,OTHER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT|USA), registry gear PASSENGER; no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)"
+367786280,,,TORTA,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,PASSENGER,PASSENGER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT|USA), registry gear PASSENGER; a GARFO hull with this name holds an HMS Charter/Headboat permit"
+367793740,,,GINA LEA,fishing,FALSE,,gfw_registry,MT: fishing yacht,PASSENGER,PASSENGER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT|USA|TMT_OTHER), registry gear PASSENGER|POLE_AND_LINE; no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)"
+368003140,2025-05-14,2025-05-16,Princess Scarlett,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,1 survey trip: SRW
+368003140,2026-05-16,2026-05-18,Princess Scarlett,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,1 survey trip: SRW
+368003140,2026-09-01,,Princess Scarlett,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,FISHING,TRAWLERS,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
+368004150,,,LUCKY DICK / MARQUESA,fishing,FALSE,,gfw_registry,MT: fishing yacht,OTHER,OTHER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT|USA), registry gear FISHING|PASSENGER; no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)"
+368018870,,,KRISTINA,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,PASSENGER,PASSENGER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT|USA), registry gear PASSENGER; no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)"
+368047780,,,THORFINN,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,OTHER,OTHER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT|ICCAT|USA), registry gear PASSENGER; no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)"
+368048770,,,OWLS NEST,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,OTHER,OTHER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT|SNP|USA), registry gear PASSENGER; no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)"
+368068580,2019-09-01,,Madison Kate,fishing,TRUE,Safety,orsted_list,,FISHING,FISHING,2026-10-06,
+368080240,2019-09-01,,Amelia Joyce,fishing,TRUE,Safety,behavioural_screen,,FISHING,FISHING,2026-10-06,
+368082670,2019-09-01,,Patience,fishing,TRUE,Safety,orsted_list,,FISHING,INCONCLUSIVE,2026-10-06,
+368094740,2019-09-01,,Brittany Eryn,fishing,TRUE,Safety,orsted_list,,FISHING,FISHING,2026-10-06,
+368110450,,,BELLA,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,PASSENGER,PASSENGER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT|SNP|USA|ICCAT|USA), registry gear PASSENGER; a GARFO hull with this name holds an HMS Charter/Headboat permit"
+368123250,,,DAY SEA,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,OTHER,OTHER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT), registry gear PASSENGER; no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)"
+368128790,2019-09-01,,Gulf Stream,fishing,TRUE,Safety,behavioural_screen,,FISHING,TRAWLERS,2026-10-06,
+368150670,,,SPECULATOR,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,PASSENGER,PASSENGER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT|USA), registry gear PASSENGER; a GARFO hull with this name holds an HMS Charter/Headboat permit"
+368161000,,,W()4% W!4%2 2 / WHITE WATER II,fishing,FALSE,,gfw_registry,MT: mobile gear drifting longline; CGMIX PSIX call sign confirmation,GEAR,GEAR,2026-10-06,typed non-FISHING; US flag with call sign
+368186910,,,CITY HANDS,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,OTHER,OTHER,2026-10-06,"typed non-FISHING; US flag, no call sign. On an RFMO vessel list (ICCAT|SNP), registry gear NON_FISHING; a GARFO hull with this name holds an HMS Charter/Headboat permit"
+368222910,,,COOL BREEZE,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,OTHER,OTHER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT), registry gear PASSENGER; no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)"
+368223130,,,SUPER CURRENT,fishing,FALSE,,gfw_registry_rfmo,GARFO hull 556499; permit 10025659|310377; online search (https://islandcurrent.com/): headboat,PASSENGER,PASSENGER,2026-10-06,"typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 556499 in CGMIX PSIX; its call sign should be WDM6205. GARFO permits: for-hire + open-access commercial. On an RFMO vessel list (ICCAT|USA), registry gear PASSENGER; GARFO HMS Charter/Headboat permit: for-hire"
+368231140,,,OFF THE GRID,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,PASSENGER,PASSENGER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT), registry gear PASSENGER; no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)"
+368231710,2019-09-01,,Lily M,fishing,TRUE,Safety,behavioural_screen,,FISHING,FISHING,2026-10-06,
+368235570,2019-09-01,,Ocean Queen,fishing,TRUE,Safety,orsted_list,,FISHING,TRAWLERS,2026-10-06,
+368236160,,,REEL DREAM,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,PASSENGER,PASSENGER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT), registry gear PASSENGER; a GARFO hull with this name holds an HMS Charter/Headboat permit"
+368243330,2019-09-01,,Chatham,fishing,TRUE,Safety,orsted_list,,FISHING,FISHING,2026-10-06,
+368243930,2019-09-01,,Gabrielle Elizabeth,fishing,TRUE,Safety,orsted_list,,FISHING,INCONCLUSIVE,2026-10-06,
+368245920,2019-09-01,,New Horizon,fishing,TRUE,Safety,orsted_list,,FISHING,FISHING,2026-10-06,
+368248420,,,GATOR,fishing,FALSE,,gfw_registry,Marine Traffic (MT): fishing yacht,OTHER,OTHER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT), registry gear PASSENGER|POLE_AND_LINE; no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)"
+368250590,2019-09-01,,Jack M,fishing,TRUE,Safety,behavioural_screen,,FISHING,TRAWLERS,2026-10-06,
+368257490,,,LUCKY FOUR US II,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,PASSENGER,PASSENGER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT), registry gear PASSENGER; no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)"
+368280420,2019-09-01,,Edward & Joseph,fishing,TRUE,Safety,behavioural_screen,,FISHING,SET_GILLNETS,2026-10-06,
+368284230,,,WAVE PAVER,fishing,FALSE,,gfw_registry_rfmo,GARFO hull 1326917; permit 10208299; CGMIX PSIX confirmation,OTHER,OTHER,2026-10-06,"typed non-FISHING; US flag with call sign. To confirm: look up USCG official no. 1326917 in CGMIX PSIX; its call sign should be WDN4790. GARFO permits: for-hire. GARFO name matches 2 hulls; only this one agrees with the registry length. On an RFMO vessel list (ICCAT), registry gear PASSENGER; GARFO HMS Charter/Headboat permit: for-hire"
+368294050,2019-09-01,,Jo Ann V,fishing,TRUE,Safety,orsted_list,,FISHING,FISHING,2026-10-06,
+368308710,2019-09-01,,Archangel,fishing,TRUE,Survey,orsted_list,,OTHER,OTHER,2026-10-06,Orsted charter (removal list) with no dates yet; excluded from the start of Stage 2
+368308710,,2019-08-31,Archangel,fishing,FALSE,,orsted_list,,OTHER,OTHER,2026-10-06,Chartered fishing hull GFW types OTHER; counts as fishing outside its charter windows
+368316410,2019-09-01,,Fleet Queen,fishing,TRUE,Safety,orsted_list,,OTHER,OTHER,2026-10-06,Orsted charter (removal list) with no dates yet; excluded from the start of Stage 2
+368316410,,2019-08-31,Fleet Queen,fishing,FALSE,,orsted_list,,OTHER,OTHER,2026-10-06,Chartered fishing hull GFW types OTHER; counts as fishing outside its charter windows
+368321330,,,PIPE DREAM,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,OTHER,OTHER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT), registry gear PASSENGER; a GARFO hull with this name holds an HMS Charter/Headboat permit"
+368346080,2019-09-01,,Triunfo,fishing,TRUE,Safety,orsted_list,,OTHER,OTHER,2026-10-06,Orsted charter (removal list) with no dates yet; excluded from the start of Stage 2
+368346080,,2019-08-31,Triunfo,fishing,FALSE,,orsted_list,,OTHER,OTHER,2026-10-06,Chartered fishing hull GFW types OTHER; counts as fishing outside its charter windows
+368346520,,,CHECKMATE,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,OTHER,OTHER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT), registry gear PASSENGER; no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)"
+368361590,2019-09-01,,Tradition,fishing,TRUE,Safety,behavioural_screen,,FISHING,TRAWLERS,2026-10-06,
+368364250,2019-09-01,,Sea Wind,fishing,TRUE,Safety,orsted_list,,OTHER,OTHER,2026-10-06,Orsted charter (removal list) with no dates yet; excluded from the start of Stage 2
+368364250,,2019-08-31,Sea Wind,fishing,FALSE,,orsted_list,,OTHER,OTHER,2026-10-06,Chartered fishing hull GFW types OTHER; counts as fishing outside its charter windows
+368378950,,,BEE REEL,fishing,FALSE,,gfw_registry_rfmo,MT: fishing yacht,OTHER,OTHER,2026-10-06,"typed non-FISHING; US flag with call sign. On an RFMO vessel list (ICCAT), registry gear PASSENGER; no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)"
+368407550,2025-09-29,2025-09-29,Archangel,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,PASSENGER,PASSENGER,2026-10-06,1 survey trip: SFW
+368407550,2025-09-30,2026-05-25,Archangel,fishing,FALSE,,orsted_list,,PASSENGER,PASSENGER,2026-10-06,Chartered fishing hull GFW types PASSENGER; counts as fishing outside its charter windows
+368407550,2026-05-26,2026-05-26,Archangel,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,PASSENGER,PASSENGER,2026-10-06,1 survey trip: SFW
+368407550,2026-05-27,2026-05-28,Archangel,fishing,FALSE,,orsted_list,,PASSENGER,PASSENGER,2026-10-06,Chartered fishing hull GFW types PASSENGER; counts as fishing outside its charter windows
+368407550,2026-05-29,2026-05-29,Archangel,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,PASSENGER,PASSENGER,2026-10-06,1 survey trip: SFW
+368407550,2026-05-30,2026-08-31,Archangel,fishing,FALSE,,orsted_list,,PASSENGER,PASSENGER,2026-10-06,Chartered fishing hull GFW types PASSENGER; counts as fishing outside its charter windows
+368407550,2026-09-01,,Archangel,fishing,TRUE,Survey,orsted_survey_dates,orsted_fv_survey_dates_aug2026.csv,PASSENGER,PASSENGER,2026-10-06,survey dates after 2026-08-31 not yet received; excluded until they are
+368407550,,2025-09-28,Archangel,fishing,FALSE,,orsted_list,,PASSENGER,PASSENGER,2026-10-06,Chartered fishing hull GFW types PASSENGER; counts as fishing outside its charter windows
+368411440,,,Celtic,non_fishing,FALSE,Safety,orsted_list,,OTHER,OTHER,2026-10-06,"Port tender, not a fishing vessel (analyst knowledge); Orsted safety charter; GFW types it OTHER"
+368411540,2019-09-01,,Mariner,fishing,TRUE,Safety,orsted_list,,FISHING,FIXED_GEAR,2026-10-06,
+368417430,,,FISH BIZ,fishing,FALSE,,garfo_name_match,GARFO hull 1356393; permit 10229404|234098; CGMIX PSIX: commercial fishing vessel; MT: fishing boat,OTHER,OTHER,2026-10-06,typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 1356393 in CGMIX PSIX; its call sign should be (none in AIS). GARFO permits: commercial + for-hire

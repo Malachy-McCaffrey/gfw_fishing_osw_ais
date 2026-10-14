@@ -5,7 +5,7 @@ date: today
 format: html
 params:
   run_gfw_api: false  # true to look up uncached candidates in the GFW identity API
-  run_psix_api: false # true to look up uncached hull IDs and call signs in USCG CGMIX PSIX
+  run_psix_api: true # true to look up uncached hull IDs and call signs in USCG CGMIX PSIX
   # Path overrides (see r/paths.R); leave blank to use the project paths.
   decisions: ""
   gear: ""
@@ -210,7 +210,7 @@ for the charter (`TRUE`).
 
 | Column | Values |
 |---|---|
-| `MMSI` | 9 digits (any format for `gear_marker`) |
+| `MMSI` | 9 digits; any format for `gear_marker`; other malformed MMSIs exactly as in the GFW pull |
 | `valid_from`, `valid_to` | ISO dates (`YYYY-MM-DD`); blank = open-ended |
 | `hull_class` | `fishing` / `non_fishing` / `gear_marker` / `unknown` |
 | `activity_excluded` | `TRUE` = records in the window are not fishing (charter work) |
@@ -329,13 +329,22 @@ validate_crosswalk <- function(cw) {
     pull(MMSI) |>
     unique()
 
+  bad_mmsi <- cw |>
+    filter(hull_class != "gear_marker", !grepl("^[0-9]{9}$", MMSI),
+           !MMSI %in% gfw_labels$MMSI) |>
+    pull(MMSI) |>
+    unique()
+
   problems <- c(
     if (any(!cw$hull_class %in% c("fishing", "non_fishing", "gear_marker", "unknown")))
       "unknown hull_class",
     if (anyNA(cw$activity_excluded))
       "activity_excluded must be TRUE or FALSE",
-    if (any(cw$hull_class != "gear_marker" & !grepl("^[0-9]{9}$", cw$MMSI)))
-      "MMSI is not 9 digits (allowed only for gear_marker)",
+    # other malformed MMSIs must appear exactly as in the pull, which still
+    # catches MMSIs Excel damaged (scientific notation, dropped leading zeros)
+    if (length(bad_mmsi) > 0)
+      paste0("MMSI is not 9 digits and not in the GFW pull: ",
+             paste(bad_mmsi, collapse = ", ")),
     if (any(cw$valid_from > cw$valid_to, na.rm = TRUE))
       "valid_from after valid_to",
     if (length(overlaps) > 0)

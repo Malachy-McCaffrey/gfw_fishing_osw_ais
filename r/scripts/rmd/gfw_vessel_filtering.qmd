@@ -5,7 +5,7 @@ date: today
 format: html
 params:
   run_gfw_api: false  # true to look up uncached candidates in the GFW identity API
-  run_psix_api: true # true to look up uncached hull IDs and call signs in USCG CGMIX PSIX
+  run_psix_api: false # true to look up uncached hull IDs and call signs in USCG CGMIX PSIX
   # Path overrides (see r/paths.R); leave blank to use the project paths.
   decisions: ""
   gear: ""
@@ -152,8 +152,8 @@ screen <- list(
 
 api_batch_size <- 20 # Vessel IDs per API request
 
-# Last day the Ørsted survey-date files cover. Survey vessels stay excluded,
-# open-ended, from the day after; move this when a new file arrives
+# Last day the Ørsted survey-date files cover; the run stops if a trip ends
+# later. Move this when a new file arrives
 survey_dates_through <- as.Date("2026-08-31")
 ```
 
@@ -232,9 +232,8 @@ website), and record the check in `evidence_ref`. The crosswalk is built as:
   or touch are merged into one window (Departure to Return Date, as given).
   For each survey vessel these windows replace its open-ended removal-list
   row, so its records between surveys -- and before its first listed trip --
-  count as fishing. Because the files do not yet cover the end of the study
-  period, each survey vessel also gets an open-ended exclusion from the day
-  after `survey_dates_through`. Two kinds of vessel keep their removal-list
+  count as fishing, as do its records after the last day the files cover
+  (`survey_dates_through`). Two kinds of vessel keep their removal-list
   row instead: those listed as `Safety`, whose guard and scout work the survey
   files do not date, and any MMSI with a decision.
 - **Precedence.** A decision replaces survey-date and removal-list rows; survey-date
@@ -429,16 +428,7 @@ survey_windows <- survey_trips |>
             Notes = paste0(trips, if_else(trips == 1, " survey trip", " survey trips"),
                            if_else(projects == "", "", paste0(": ", projects))))
 
-# open-ended exclusion after the last day the files cover
-survey_pending <- survey_windows |>
-  distinct(MMSI, Vessel_Name) |>
-  mutate(valid_from = as.character(survey_dates_through + 1),
-         valid_to = NA_character_,
-         evidence_ref = paste(basename(survey_files), collapse = "; "),
-         Notes = paste0("survey dates after ", survey_dates_through,
-                        " not yet received; excluded until they are"))
-
-survey_rows <- bind_rows(survey_windows, survey_pending) |>
+survey_rows <- survey_windows |>
   mutate(hull_class = "fishing", activity_excluded = "TRUE", Operation = "Survey",
          Identified_By = "orsted_survey_dates",
          pull_date = as.character(.env$pull_date)) |>
@@ -958,8 +948,11 @@ The vessels Ørsted confirmed are the best available ground truth. The share
 the screen flags is its recall; vessels it misses show what it cannot see.
 
 ```{r}
+# Ørsted sources: its charter lists and emails, survey-date files and the SFW
+# PSO/PAM report (older rows say orsted_list)
 orsted_charters <- cw |>
-  filter(Identified_By == "orsted_list", activity_excluded) |>
+  filter(str_detect(Identified_By, regex("orsted|PSO PAM", ignore_case = TRUE)),
+         activity_excluded) |>
   distinct(MMSI)
 
 screen_recall <- charter_screen(profiles) |>

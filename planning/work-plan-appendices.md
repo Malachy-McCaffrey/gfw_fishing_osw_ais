@@ -153,6 +153,12 @@ comments are correct; the 31/42/37 set elsewhere in the file is stale.
 | 2 | 2019-09-01 → 2023-03-01 | 43 |
 | 3 | 2023-04-01 → 2026-07-01 | 40 |
 
+*Revised 2026-10-15:* Stage 2 now starts 2020-10-01, when South Fork Wind
+fisheries monitoring began, so Stage 1 runs 2016-01-01 → 2020-09-30 (57
+months) and Stage 2 2020-10-01 → 2023-03-31 (30 months). The per-stage
+numbers in this appendix were computed under the old boundaries. The current
+windows are in `dev_stages` (`r/gfw_helpers.R`).
+
 **Raw external files** (unfiltered — `data/raw/gfw/`)
 
 | | VP | AFE |

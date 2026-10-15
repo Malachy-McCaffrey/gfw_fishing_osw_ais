@@ -7,8 +7,8 @@
 
 dev_stages <- tibble::tribble(
   ~stage,    ~start,       ~end,         ~months, ~description,
-  "Stage 1", "2016-01-01", "2019-08-31", 44L,     "Pre-monitoring baseline",
-  "Stage 2", "2019-09-01", "2023-03-31", 43L,     "Pre-construction monitoring; protected species surveys began 09/2019",
+  "Stage 1", "2016-01-01", "2020-09-30", 57L,     "Pre-monitoring baseline",
+  "Stage 2", "2020-10-01", "2023-03-31", 30L,     "Pre-construction monitoring; SFW fisheries monitoring began 10/2020",
   "Stage 3", "2023-04-01", "2026-09-30", 42L,     "Construction and operation across SFW, RWF and SRW; SFW seabed prep began 04/2023"
 ) |>
   dplyr::mutate(start = as.Date(start), end = as.Date(end))

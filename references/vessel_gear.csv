@@ -687,3 +687,8 @@ accept,2026-10-16,368478540,,,LIGHT & VARIABLE,POLE_AND_LINE,GARFO permit,,PASSE
 accept,2026-10-16,368983000,,,KNOCKOUT,POLE_AND_LINE,GARFO permit,GARFO hull 1242788; permit 242959,OTHER,2026-10-06,GFW gear unresolved
 accept,2026-10-16,369822000,,,WYCHMERE,POLE_AND_LINE,GARFO permit,GARFO hull 1315493; permit 10201931,INCONCLUSIVE,2026-10-06,GFW gear unresolved
 accept,2026-10-16,338130869,,,LAURA PEGGY,FIXED,GFW gear,,SET_GILLNETS,2026-10-06,GFW labels this vessel SET_GILLNETS; added to cover one 1-hour VP record with a blank Gear Type and vessel name
+accept,2026-10-18,338124659,,,PEARL,POLE_AND_LINE,marinetraffic,sportfisher,PASSENGER,2026-10-06,GFW gear unresolved
+accept,2026-10-18,338524196,,,DAWN TREADER,POLE_AND_LINE,marinetraffic,sportfisher,PASSENGER,2026-10-06,GFW gear unresolved
+accept,2026-10-18,338215028,,,DO BUOY,POLE_AND_LINE,marinetraffic,MarineTraffic,GEAR,2026-10-06,Sportfishing boat per MarineTraffic; GFW gear GEAR
+accept,2026-10-18,338376812,,,WASABI II,POLE_AND_LINE,marinetraffic,MarineTraffic,OTHER,2026-10-06,Sportfishing boat per MarineTraffic; GFW gear OTHER
+accept,2026-10-18,338127334,,,FV CODZILLA,POLE_AND_LINE,marinetraffic,MarineTraffic,OTHER,2026-10-06,Sportfishing boat per MarineTraffic; GFW gear OTHER

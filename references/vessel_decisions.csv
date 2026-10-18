@@ -341,7 +341,7 @@ accept,2026-10-16,338177113,,,LAURA LISA,non_fishing,FALSE,,gear review,MT: sail
 accept,2026-10-16,338186921,,,DIRE WOLF,non_fishing,FALSE,,gear review,MT: pleasure craft; AIS vessel not GARFO hull,FISHING,FISHING,2026-10-06,
 accept,2026-10-16,338208974,,,T/T PLASTIC TOY,non_fishing,FALSE,,gear review,tender vessel,FISHING,FISHING,2026-10-06,
 accept,2026-10-16,338229616,,,COSMO,non_fishing,FALSE,,gear review,MT: sailing vessel,FISHING,FISHING,2026-10-06,
-accept,2026-10-16,338237385,,,SUMMER SNOW,non_fishing,FALSE,,gear review,MT: sailing vessel,FISHING,NA,2026-10-06,
+accept,2026-10-16,338237385,,,SUMMER SNOW,non_fishing,FALSE,,gear review,MT: sailing vessel,FISHING,,2026-10-06,
 accept,2026-10-16,338419722,,,COZZIN TROUBLE,non_fishing,FALSE,,gear review,MT: pleasure craft,FISHING,FISHING,2026-10-06,
 accept,2026-10-16,338441081,,,ARCHIMEDES,non_fishing,FALSE,,gear review,no MT or GARFO confirmation,FISHING,FISHING,2026-10-06,
 accept,2026-10-16,338450149,,,BEAU CHE,non_fishing,FALSE,,gear review,MT: sailing vessel,FISHING,FISHING,2026-10-06,
@@ -374,3 +374,13 @@ accept,2026-10-16,368257670,,,I`M SHORE,non_fishing,FALSE,,gear review,MT: pleas
 accept,2026-10-16,368350590,,,SUMMER BREEZE,non_fishing,FALSE,,gear review,MT: sailing vessel,FISHING,INCONCLUSIVE,2026-10-06,
 accept,2026-10-16,368391430,,,SINCERITY,non_fishing,FALSE,,gear review,MT: pleasure craft (motor yacht),FISHING,FISHING,2026-10-06,
 accept,2026-10-16,368393250,,,THOOSA,non_fishing,FALSE,,gear review,MT: sailing vessel,FISHING,FISHING,2026-10-06,
+reject,2026-10-18,368375910,,,PEARL,fishing,FALSE,,garfo_name_match,GARFO hull MS9693BT; permit 153949,PASSENGER,PASSENGER,2026-10-06,typed non-FISHING; unique GARFO name match. State-registered hull MS9693BT; cannot be linked to a call sign. GARFO permits: commercial
+accept,2026-10-18,338124659,,,PEARL,fishing,FALSE,,garfo_name_match,GARFO hull MS9693BT; permit 153949,PASSENGER,PASSENGER,2026-10-06,typed non-FISHING; unique GARFO name match. State-registered hull MS9693BT; cannot be linked to a call sign. GARFO permits: commercial
+reject,2026-10-18,338333283,,,PEARL,fishing,FALSE,,garfo_name_match,GARFO hull MS9693BT; permit 153949,PASSENGER,PASSENGER,2026-10-06,typed non-FISHING; unique GARFO name match. State-registered hull MS9693BT; cannot be linked to a call sign. GARFO permits: commercial
+reject,2026-10-18,338430371,,,PEARL,fishing,FALSE,,garfo_name_match,GARFO hull MS9693BT; permit 153949,PASSENGER,PASSENGER,2026-10-06,typed non-FISHING; unique GARFO name match. State-registered hull MS9693BT; cannot be linked to a call sign. GARFO permits: commercial
+accept,2026-10-18,338524196,,,DAWN TREADER,fishing,FALSE,,garfo_name_match,GARFO hull 1026577; permit 222737,PASSENGER,PASSENGER,2026-10-06,typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 1026577 in CGMIX PSIX; its call sign should be TREADER. GARFO permits: commercial. PSIX not yet looked up (run with run_psix_api: true)
+reject,2026-10-18,367797170,,,DAWN TREADER,fishing,FALSE,,garfo_name_match,GARFO hull 1026577; permit 222737,PASSENGER,PASSENGER,2026-10-06,typed non-FISHING; unique GARFO name match. To confirm: look up USCG official no. 1026577 in CGMIX PSIX; its call sign should be WDN5851. GARFO permits: commercial. PSIX not yet looked up (run with run_psix_api: true)
+accept,2026-10-18,338202768,,,PELICAN II,non_fishing,FALSE,,marinetraffic,MT: sailing vessel,PASSENGER,PASSENGER,2026-10-06,"typed PASSENGER, with AFE hours; sailing vessel per MarineTraffic"
+accept,2026-10-18,338215028,,,DO BUOY,fishing,FALSE,,marinetraffic,MT: sportfishing boat,GEAR,GEAR,2026-10-06,typed GEAR; sportfishing boat per MarineTraffic
+accept,2026-10-18,338376812,,,WASABI II,fishing,FALSE,,marinetraffic,MT: sportfishing boat,OTHER,OTHER,2026-10-06,typed OTHER; sportfishing boat per MarineTraffic
+accept,2026-10-18,338127334,,,FV CODZILLA,fishing,FALSE,,marinetraffic,MT: sportfishing boat,OTHER,OTHER,2026-10-06,typed OTHER; sportfishing boat per MarineTraffic

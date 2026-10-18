@@ -10,8 +10,8 @@ Geospatial analysis and statistical modeling workflows to quantify AIS vessel pr
 
 | Path | Role |
 |---|---|
-| `r/scripts/rmd/gfw_vp_afe_dataPull_090126.Rmd` | The data pull. Queries the GFW 4Wings API, filters, assigns development stages, writes the analysis CSVs. Active. |
-| `r/` | Future home of the R-only analysis workflow, beyond the data pull above. |
+| `r/01_pull_gfw.qmd` | The data pull. Queries the GFW 4Wings API and writes the raw extracts. Active. |
+| `r/` | The active R workflow, numbered in run order: `00_setup.R`, `01_pull_gfw.qmd`, `02_build_grid.qmd`, `03_classify_vessels.qmd`. `_quarto.yml` sets the render order; `paths.R` and `gfw_helpers.R` are sourced by every qmd. |
 | `references/` | Data dictionary and the vessel removal list — shared by the R pull and the archived Python analysis. |
 | `data/shp/` | Committed spatial inputs — analysis grid, AOI, wind-project footprints. |
 | `archive/` | **The complete, frozen Python implementation and its written output** — analysis package, tests, scripts, notebooks, and the rendered Quarto reports. Superseded, not deleted; see `archive/README.md`. |
@@ -40,7 +40,7 @@ analysis and are optional — skip them unless you specifically need to re-rende
 GFW_TOKEN=your_token_here
 ```
 
-`r/scripts/gfw_api_access_token.R` opens that file for editing. It also carries an `install.packages("gfwr")` call, which `renv::restore()` in the next step makes unnecessary.
+`r/00_setup.R` opens that file for editing. It also carries an `install.packages("gfwr")` call, which `renv::restore()` in the next step makes unnecessary.
 
 **2. Restore the R environment.** From the repository root, in R:
 
@@ -50,7 +50,7 @@ renv::restore()
 
 `renv` activates itself through the committed `.Rprofile`, so opening the project in R or RStudio is enough to pick it up.
 
-**3. Run the data pull.** Knit `r/scripts/rmd/gfw_vp_afe_dataPull_090126.Rmd` **with the repository root as the working directory** — every path in it is repo-relative. It queries the API in eleven calendar-year calls per dataset, creates its own output directories, and writes the analysis CSVs into `data/processed/gfw/`.
+**3. Run the data pull.** Render `r/01_pull_gfw.qmd` **with the repository root as the working directory** — every path in it is repo-relative. It queries the API in eleven calendar-year calls per dataset, creates its own output directories, and writes the analysis CSVs into `data/processed/gfw/`.
 
 **4. Install the archived Python environment.**
 
@@ -81,7 +81,7 @@ runs the same command on every push.
 
 ## Notes on reproducibility
 
-- **Paths resolve from the repository root**, located by walking up to `pyproject.toml`. Nothing needs editing to run on another machine, and there are no absolute paths in `archive/python/src`, `r/scripts` or `archive/reports`.
+- **Paths resolve from the repository root**, located by walking up to `pyproject.toml`. Nothing needs editing to run on another machine, and there are no absolute paths in `archive/python/src`, `r/` or `archive/reports`.
 - **Permutation-based statistics are seeded** (`config.RANDOM_SEED`), so Local Moran's I results are stable across runs. Gi\* uses analytic p-values and is deterministic by construction. The archived arcpy workflow set no seed and could not be reproduced.
 - **The vessel removal list is a single tracked file**, `references/vessel_removals.csv`, read by both the R pull and the archived Python analysis and schema-validated on load in each. Adding or reclassifying a vessel is a one-row edit; nothing vessel-specific is hard-coded in either language.
 - **No arcpy.** The analysis runs entirely on open-source geospatial tooling, so it reproduces without an ArcGIS licence.

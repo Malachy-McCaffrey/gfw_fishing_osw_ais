@@ -20,7 +20,7 @@ knitr::opts_knit$set(root.dir = root)
 ## Objective
 
 Reproduce Global Fishing Watch's 0.01° grid for the vessel presence (VP) and
-apparent fishing effort (AFE) records pulled in `gfw_vp_afe_datapull.qmd`,
+apparent fishing effort (AFE) records pulled in `01_pull_gfw.qmd`,
 reproject it to WGS 84 / UTM zone 19N (EPSG:32619), and attach the data to it
 for aggregation and spatial analysis.
 
@@ -31,8 +31,8 @@ The aggregate tables built here describe the **raw, unfiltered** GFW records in
 type and apply no vessel removals or fishing-hour threshold. They are **not**
 fishing-vessel totals and should not be analysed as such.
 
-The data have not yet been re-processed because GFW's vessel classifications
-produce both false negatives and false positives:
+GFW's vessel classifications produce both false negatives and false
+positives, so the raw data cannot be filtered on GFW's labels alone:
 
 - **False negatives:** fishing vessels typed as `OTHER`, `GEAR`, or
   `PASSENGER` (e.g. FV JULIE G), so filtering on `Vessel Type == "FISHING"`
@@ -40,9 +40,25 @@ produce both false negatives and false positives:
 - **False positives:** non-fishing vessels typed as `FISHING` (e.g. CYGNUS), so
   the same filter keeps non-fishing activity.
 
-Both problems affect VP and AFE; `gfw_vessel_filtering.qmd` addresses them.
+Both problems affect VP and AFE. `03_classify_vessels.qmd` corrects them and
+writes the fishing-vessel aggregates to `data/interim/gfw/` for two analysis
+sets, **Strict** (GFW's `FISHING` records, unchanged) and **Primary** (the
+verified classification, the headline analysis), each with a `set` column:
+
+| Fishing-vessel tables (VP and AFE) | One row per |
+|---|---|
+| `gfw_{vp,afe}_cell_stage_sets.csv` | cell × stage × set |
+| `gfw_{vp,afe}_cell_month_sets.csv` | cell × month × set |
+| `gfw_{vp,afe}_cell_stage_gear_sets.csv` | cell × stage × set × gear class |
+| `gfw_{vp,afe}_cell_month_gear_sets.csv` | cell × month × set × gear class |
+
+**Use those tables for fishing analysis.** They share this script's grid and
+zero-filled layout. The record-level data behind them, with the set flags and
+gear class on every record, is in
+`data/processed/gfw/gfw_{vp,afe}_id_classified.csv`.
+
 The grid itself does not depend on that work, because it is built from the
-cells present in the raw VP data.
+cells present in the raw VP data, so run this script first.
 
 ## Plan
 

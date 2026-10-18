@@ -345,7 +345,7 @@ write_csv(gfw_vp_id, paths$raw_vp) # 446646 obs
 
 write_csv(gfw_afe_id, paths$raw_afe) # 68185 obs
 
-# record when this pull was made, for gfw_vessel_filtering.qmd
+# record when this pull was made, for 03_classify_vessels.qmd
 write_csv(tibble(pull_date   = Sys.Date(),
                  query_start = start_16,
                  query_end   = end_26,

@@ -2,11 +2,11 @@
 # moving or renaming a folder is a one-line change here.
 #
 # A qmd can override any entry through a Quarto parameter of the same name,
-# e.g. `quarto render gfw_fishnet_grid.qmd -P interim:scratch/interim`, which
+# e.g. `quarto render 02_build_grid.qmd -P interim:scratch/interim`, which
 # lets a test run write somewhere other than the real data folders.
 
 gfw_paths <- list(
-  # GFW 4Wings pulls (gfw_vp_afe_datapull.qmd)
+  # GFW 4Wings pulls (01_pull_gfw.qmd)
   raw_gfw       = "data/raw/gfw",
   raw_vp        = "data/raw/gfw/gfw_vp_id.csv",
   raw_afe       = "data/raw/gfw/gfw_afe_id.csv",
@@ -20,7 +20,7 @@ gfw_paths <- list(
   fishnet       = "data/sf/fishnet",
   grid          = "data/sf/fishnet/gfw_grid_utm19n.gpkg",
 
-  # vessel classification (gfw_vessel_filtering.qmd)
+  # vessel classification (03_classify_vessels.qmd)
   evidence      = "data/raw/vessel_evidence",            # GFW identity API cache
   registries    = "data/raw/vessel_evidence/registries", # GARFO permit lists, read only
   review        = "data/processed/vessel_review",        # generated review sheet

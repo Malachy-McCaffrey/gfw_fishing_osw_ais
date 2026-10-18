@@ -1,0 +1,18 @@
+# R workflow, rendered in run order with `quarto render r/` from the repo root.
+#
+# 01_pull_gfw.qmd is left out: it queries the GFW API and overwrites the raw
+# extracts, so render it on its own (`quarto render r/01_pull_gfw.qmd`) only
+# when a new pull is intended.
+#
+# Each qmd's setup chunk sets the knitr root to the repo root, so the paths in
+# r/paths.R resolve however the qmd is run. execute-dir is left at its default
+# because `project` would mean r/, not the repo root.
+#
+# No freeze: the qmds read data and references/ CSVs that Quarto does not
+# track, so a frozen document would not re-run when a decision file changes.
+
+project:
+  type: default
+  render:
+    - 02_build_grid.qmd
+    - 03_classify_vessels.qmd

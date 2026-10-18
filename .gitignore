@@ -104,3 +104,6 @@ data/**/*.json
 
 # Personal scratch work (exploratory scripts and figures) - not tracked
 r/scratchpad/
+
+# Quarto project cache (r/_quarto.yml)
+.quarto/

@@ -34,7 +34,7 @@ Unfiltered API output, 18 columns. One row = one vessel × one 0.01° cell × on
 
 Written by the pull alongside the raw files: `pull_date` (the day the pull
 ran), `query_start` / `query_end` (the date range requested) and `vp_rows` /
-`afe_rows`. `gfw_vessel_filtering.qmd` reads `pull_date` from it; for pulls
+`afe_rows`. `03_classify_vessels.qmd` reads `pull_date` from it; for pulls
 made before the file existed it falls back to the raw VP file's modification
 date, with a warning.
 
@@ -43,7 +43,7 @@ date, with a warning.
 Cleaned per-stage files — what the analysis actually reads. Same schema minus
 `Entry`/`Exit Timestamp`, `IMO`, `CallSign`, and the transmission dates (12 columns).
 
-Filtering already applied by the R pipeline (`gfw_vp_afe_dataPull_090126.Rmd:494-535`):
+Filtering applied by the earlier R pull (`gfw_vp_afe_dataPull_090126.Rmd`, since superseded by `r/03_classify_vessels.qmd`):
 
 - VP only: restricted to `Vessel Type == "FISHING"`
 - Both: 34 named Ørsted survey/safety vessels removed for Stages 2–3 only
@@ -79,7 +79,7 @@ attribute, so this is a lookup, not an inference.
 
 | Field | Description |
 |---|---|
-| `cell_id` | `"ix_iy"`, where `ix = round(Lon / 0.01)` and `iy = round(Lat / 0.01)` from GFW's lower-left coordinates (`gfw_fishnet_grid.qmd`); the join key throughout. The archived Python pipeline used a zero-based positional index into the old centroid-based grid instead. |
+| `cell_id` | `"ix_iy"`, where `ix = round(Lon / 0.01)` and `iy = round(Lat / 0.01)` from GFW's lower-left coordinates (`02_build_grid.qmd`); the join key throughout. The archived Python pipeline used a zero-based positional index into the old centroid-based grid instead. |
 | `SumVesselHrs` / `SumFishingHrs` | Total hours in the cell for that stage and gear class |
 | `SumVesselCount` | Distinct **MMSIs** |
 | `SumVesselIdCount` | Distinct Vessel IDs — sensitivity column only |
@@ -162,7 +162,7 @@ digits, duplicate MMSI, unknown `Scope` or `Confidence` values, a `Date_Added`
 that is not ISO. `load_removal_list()` logs the breakdown by scope and
 confidence on every read; the list currently holds 45 vessels.
 
-In `gfw_vessel_filtering.qmd`, a `stages_2_3` vessel's open-ended exclusion
+In `03_classify_vessels.qmd`, a `stages_2_3` vessel's open-ended exclusion
 is replaced by its actual survey windows when it appears in the Ørsted
 survey-date files; see [Ørsted survey dates](#orsted-survey-dates).
 
@@ -170,7 +170,7 @@ survey-date files; see [Ørsted survey dates](#orsted-survey-dates).
 
 ## Vessel classification files
 
-Used by `r/scripts/rmd/gfw_vessel_filtering.qmd`.
+Used by `r/03_classify_vessels.qmd`.
 
 | File | Tracked | Role |
 |---|---|---|
@@ -199,7 +199,7 @@ trip, 595 trips from 2020-10-28 to 2026-08-11.
 The file also has blank spacer rows and two empty trailing columns, which are
 ignored.
 
-How `gfw_vessel_filtering.qmd` uses it:
+How `03_classify_vessels.qmd` uses it:
 
 - Each trip becomes part of a crosswalk window for its MMSI (`hull_class =
   fishing`, `activity_excluded = TRUE`, `Operation = Survey`, `Identified_By =
@@ -229,7 +229,7 @@ How `gfw_vessel_filtering.qmd` uses it:
 
 ## Provenance
 
-Source CSVs regenerate from `r/scripts/rmd/gfw_vp_afe_dataPull_090126.Rmd` with a
+Source CSVs regenerate from `r/01_pull_gfw.qmd` with a
 valid `GFW_TOKEN`, via `gfwr` v3.0:
 
 ```r

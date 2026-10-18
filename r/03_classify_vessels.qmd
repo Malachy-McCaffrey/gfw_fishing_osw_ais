@@ -111,7 +111,7 @@ source("r/gfw_helpers.R")
 # session, so the header is read from this file directly instead
 qparams <- if (isTRUE(getOption("knitr.in.progress"))) params else {
   hdr <- knitr::knit_params(readLines(
-    file.path(root, "r/scripts/rmd/gfw_vessel_filtering.qmd"), warn = FALSE))
+    file.path(root, "r/03_classify_vessels.qmd"), warn = FALSE))
   lapply(hdr, function(p) p$value)
 }
 paths       <- gfw_paths_with(qparams)
@@ -124,7 +124,7 @@ message("USCG PSIX lookups are ", if (run_psix_api) "ON" else "OFF")
 ## Parameters
 
 ```{r}
-# Date of the raw pull, recorded by gfw_vp_afe_datapull.qmd in pull_info.csv.
+# Date of the raw pull, recorded by 01_pull_gfw.qmd in pull_info.csv.
 # Pulls made before that file existed fall back to the raw VP file's
 # modification date, with a warning.
 pull_date <- if (file.exists(paths$pull_info)) {
@@ -1916,27 +1916,68 @@ bind_rows(VP = to_long(vp_cls), AFE = to_long(afe_cls), .id = "dataset") |>
               values_fill = 0)
 ```
 
-### Cell × stage tables by set
+### Cell tables by set
 
-Same zero-filled layout as `gfw_fishnet_grid.qmd`, with a `set` column, ready
-for the spatial analysis.
+Same zero-filled layout as `02_build_grid.qmd`, with a `set` column, ready
+for the spatial analysis. Each table is zero-filled across every grid cell,
+every development stage or every month of the record, both sets and, in the
+gear tables, all four gear classes:
+
+| File (`data/interim/gfw/`, VP and AFE) | One row per |
+|---|---|
+| `gfw_{vp,afe}_cell_stage_sets.csv` | cell × stage × set |
+| `gfw_{vp,afe}_cell_month_sets.csv` | cell × month × set |
+| `gfw_{vp,afe}_cell_stage_gear_sets.csv` | cell × stage × set × gear class |
+| `gfw_{vp,afe}_cell_month_gear_sets.csv` | cell × month × set × gear class |
+
+The gear tables use the same gear as the gear summary below: GFW's gear
+(`gear_class_gfw`) for Strict, the corrected `gear_class` for Primary.
+`n_mmsi` counts vessels within each row, so it does not sum across gear
+classes or months to a vessel total.
 
 ```{r}
-cell_stage_sets <- function(df, value) {
-  to_long(df) |>
-    group_by(cell_id, `Development Stage`, set) |>
+months       <- seq(min(vp$`Year Month`), max(vp$`Year Month`), by = "month")
+gear_classes <- c("MOBILE", "FIXED", "POLE_AND_LINE", "UNRESOLVED")
+time_levels  <- list(`Development Stage` = dev_stages$stage, `Year Month` = months)
+
+cell_sets <- function(df, value, time, by_gear = FALSE) {
+  long <- to_long(df) |>
+    mutate(gear_class = if_else(set == "strict", gear_class_gfw, gear_class))
+  stopifnot("gear class outside the four analysis classes" =
+              all(long$gear_class %in% gear_classes),
+            "time value outside the zero-fill levels" =
+              all(long[[time]] %in% time_levels[[time]]))
+
+  keys   <- c("cell_id", time, "set", if (by_gear) "gear_class")
+  levels <- c(list(cell_id = grid$cell_id), time_levels[time],
+              list(set = levels(long$set)),
+              if (by_gear) list(gear_class = gear_classes))
+
+  out <- long |>
+    group_by(across(all_of(keys))) |>
     summarise("{value}" := sum(hours), n_mmsi = n_distinct(MMSI), .groups = "drop") |>
-    complete(cell_id = grid$cell_id, `Development Stage`, set,
-             fill = set_names(list(0, 0L), c(value, "n_mmsi")))
+    complete(!!!levels, fill = set_names(list(0, 0L), c(value, "n_mmsi")))
+
+  stopifnot("zero-filled table has the wrong number of rows" =
+              nrow(out) == prod(lengths(levels)),
+            "hours lost in aggregation" =
+              isTRUE(all.equal(sum(out[[value]]), sum(long$hours))))
+  out
 }
 
-vp_cell_stage_sets  <- cell_stage_sets(vp_cls,  "vp_hours")
-afe_cell_stage_sets <- cell_stage_sets(afe_cls, "afe_hours")
+cell_tables <- list(
+  cell_stage_sets      = list(time = "Development Stage", by_gear = FALSE),
+  cell_month_sets      = list(time = "Year Month",        by_gear = FALSE),
+  cell_stage_gear_sets = list(time = "Development Stage", by_gear = TRUE),
+  cell_month_gear_sets = list(time = "Year Month",        by_gear = TRUE))
 
-stopifnot(nrow(vp_cell_stage_sets) == nrow(grid) * nrow(dev_stages) * length(set_cols))
-
-write_csv(vp_cell_stage_sets,  file.path(paths$interim_gfw, "gfw_vp_cell_stage_sets.csv"))
-write_csv(afe_cell_stage_sets, file.path(paths$interim_gfw, "gfw_afe_cell_stage_sets.csv"))
+for (tbl in names(cell_tables)) {
+  spec <- cell_tables[[tbl]]
+  write_csv(cell_sets(vp_cls, "vp_hours", spec$time, spec$by_gear),
+            file.path(paths$interim_gfw, paste0("gfw_vp_", tbl, ".csv")))
+  write_csv(cell_sets(afe_cls, "afe_hours", spec$time, spec$by_gear),
+            file.path(paths$interim_gfw, paste0("gfw_afe_", tbl, ".csv")))
+}
 ```
 
 ## Phase 7: Repeatability checks

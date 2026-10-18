@@ -1,0 +1,389 @@
+---
+title: "Vessel Review Decisions: How They Reach the Analysis Sets"
+author: "Malachy McCaffrey"
+date: today
+format:
+  html:
+    toc: true
+    embed-resources: true
+---
+
+<style>
+:root { --mermaid-font-family: Arial, Helvetica, sans-serif; }
+.cell-output-display svg, pre.mermaid svg { max-width: 100% !important; height: auto; }
+.cell-output-display .edgeLabel, .cell-output-display .edgeLabel p,
+.cell-output-display .cluster-label, .cell-output-display .cluster-label p { color: #1f2933 !important; }
+.cell-output-display .edgeLabel, .cell-output-display .edgeLabel p, .cell-output-display .labelBkg { background-color: #ffffff !important; }
+</style>
+
+How a row you mark in `vessel_review.csv` or `gear_review.csv` travels
+through the input files to the crosswalk, and from there to the Primary
+analysis set. It also shows how the crosswalk gets its charter windows from
+the removal list and Ørsted's survey dates. The logic is that of
+`r/03_review_vessels.qmd` (Phase 1 `collect_marked()` and the crosswalk
+build, Phase 4 PSIX checks) and `r/04_classify_aggregate.qmd` (`classify()`);
+the shared functions are in `r/vessel_helpers.R`.
+
+Two analysis sets are compared:
+
+- **Strict** is the unprocessed GFW data: every record GFW types
+  `Vessel Type == FISHING`, with GFW's gear. Nothing in this document changes
+  it.
+- **Primary** is the processed data: Strict with the crosswalk applied
+  (verified non-fishing hulls, charter and survey windows and gear markers
+  removed; verified fishing hulls GFW missed added) and your gear corrections.
+
+Every crosswalk row counts as verified, so the difference between the two sets
+is the effect of the processing.
+
+Colours in the charts: [red]{style="background:#fde4e2;padding:0 4px"} records
+removed from Primary, [green]{style="background:#dff3e6;padding:0 4px"}
+records added to Primary, [grey]{style="background:#eef0f2;padding:0 4px"} no
+change to Primary.
+
+An **override** is a decision whose `hull_class` disagrees with GFW's
+`Vessel Type`: `fishing` on a vessel GFW types PASSENGER, OTHER, etc., or
+`non_fishing` / `gear_marker` on a vessel GFW types FISHING. Inside the row's
+window, your `hull_class` replaces GFW's type when deciding Primary
+membership.
+
+## 1. Overview
+
+```{mermaid}
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial, Helvetica, sans-serif","fontSize":"15px","primaryColor":"#e8f0fb","primaryBorderColor":"#4a6fa5","primaryTextColor":"#1f2933","lineColor":"#6b7785","clusterBkg":"#f6f8fa","clusterBorder":"#b8c2cc","edgeLabelBackground":"#ffffff"},"flowchart":{"htmlLabels":true,"padding":14,"nodeSpacing":18,"rankSpacing":36,"wrappingWidth":300,"subGraphTitleMargin":{"top":6,"bottom":10}}}}%%
+flowchart TD
+  subgraph S["Review sheets (regenerated)"]
+    direction LR
+    VR["vessel_review.csv<br/>hull and activity"]
+    GR["gear_review.csv<br/>gear"]
+  end
+  subgraph I["Inputs you own"]
+    direction LR
+    VD["vessel_decisions.csv"]
+    SD["Ørsted survey<br/>dates + names"]
+    RL["vessel_removals.csv"]
+    VG["vessel_gear.csv"]
+  end
+  VR -- "accept / reject rows,<br/>collected next run" --> VD
+  GR -- "accept / reject rows,<br/>collected next run" --> VG
+  VD -- "1: accept rows" --> CW["vessel_crosswalk.csv<br/>generated: do not edit"]
+  SD -- "2: survey<br/>windows" --> CW
+  RL -- "3: rest of<br/>the list" --> CW
+  RAW(["GFW VP and AFE records"]) -- "Vessel Type<br/>== FISHING" --> ST["Strict set<br/>GFW's gear"]
+  RAW --> CL(["classify(): each AIS record,<br/>matched by MMSI and date"])
+  CW -- "hull_class overrides GFW<br/>Vessel Type inside the window" --> CL
+  VG -- "accept rows" --> GC
+  CL --> PR["Primary set"]
+  CL --> GC["gear_class of each<br/>Primary record"]
+  classDef rm fill:#fde4e2,stroke:#b03a2e,color:#1f2933
+  classDef add fill:#dff3e6,stroke:#2e7d4f,color:#1f2933
+  classDef keep fill:#eef0f2,stroke:#8a96a3,color:#1f2933
+  classDef file fill:#ffffff,stroke:#4a6fa5,color:#1f2933
+  class VR,GR,RL,SD,VD,VG,CW file
+  style S fill:#f6f8fa,stroke:#b8c2cc,color:#1f2933
+  style I fill:#f6f8fa,stroke:#b8c2cc,color:#1f2933
+```
+
+- A row with a **blank** `decision` is ignored and is regenerated on the next
+  sheet. Only `accept` and `reject` are collected; `decided_on` defaults to
+  the run date.
+- Collection is **by MMSI, once**. If the MMSI is already in the input file,
+  the sheet row is skipped with a warning. To change a decision afterwards,
+  edit `vessel_decisions.csv` or `vessel_gear.csv` directly.
+- The crosswalk and the sets are rebuilt from the input files on **every**
+  run, so a change takes effect only after a full run from the top.
+- **Precedence, per MMSI:** (1) if it has any decision, only its decision
+  rows are used; otherwise (2) if it has survey dates, its survey windows;
+  otherwise (3) its removal-list row. The sources are never mixed for one
+  MMSI.
+- Hull/activity (crosswalk) and gear (`vessel_gear.csv`) are independent:
+  fixing a vessel's gear never changes whether it is in Primary, and vice
+  versa.
+- If you edit a sheet in Excel, import it with every column as Text and save
+  as CSV UTF-8. Opened directly, Excel rewrites dates (`2026-10-06` →
+  `10/6/2026`) and the crosswalk validation stops the run.
+
+## 2. Charter windows: removal list and survey dates
+
+Ørsted's charter vessels reach the crosswalk without a review sheet. Their
+rows come from `vessel_removals.csv` and from Ørsted's survey trip lists
+(`references/orsted_fv_survey_dates_*.csv`). The vessel names in those lists
+are matched to MMSIs through `references/orsted_survey_vessels.csv`.
+
+```{mermaid}
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial, Helvetica, sans-serif","fontSize":"15px","primaryColor":"#e8f0fb","primaryBorderColor":"#4a6fa5","primaryTextColor":"#1f2933","lineColor":"#6b7785","clusterBkg":"#f6f8fa","clusterBorder":"#b8c2cc","edgeLabelBackground":"#ffffff"},"flowchart":{"htmlLabels":true,"padding":14,"nodeSpacing":18,"rankSpacing":36,"wrappingWidth":300,"subGraphTitleMargin":{"top":6,"bottom":10}}}}%%
+flowchart TD
+  M(["MMSI on the removal list<br/>or in a survey file"]) --> Q1{"Has a<br/>decision?"}
+  Q1 -- "yes" --> X1["Its decision rows only<br/>(section 3)"]
+  Q1 -- "no" --> Q2{"Has survey<br/>trips?"}
+  Q2 -- "yes" --> Q3{"Operation"}
+  Q3 -- "Survey, or not<br/>on the list" --> SW["One excluded window per<br/>run of overlapping or<br/>consecutive trips"]
+  SW --> SG["Before, between and after<br/>trips: no row, GFW's<br/>label stands"]
+  Q3 -- "Safety" --> Q4
+  Q2 -- "no" --> Q4{"Scope"}
+  Q4 -- "stages_2_3" --> RS["fishing hull, excluded<br/>from 2020-10-01,<br/>open-ended"]
+  Q4 -- "all_stages" --> RA["non_fishing hull,<br/>every date"]
+  classDef rm fill:#fde4e2,stroke:#b03a2e,color:#1f2933
+  classDef add fill:#dff3e6,stroke:#2e7d4f,color:#1f2933
+  classDef keep fill:#eef0f2,stroke:#8a96a3,color:#1f2933
+  class SW,RS,RA rm
+  class SG keep
+```
+
+- **Every removal-list row applies** unless the MMSI has a decision. The nine
+  Safety vessels the behavioural screen found (e.g. ESS Pride, Amelia Joyce)
+  are off the list and rejected in `vessel_decisions.csv`, so their activity
+  stays in Primary. The list's `Confidence` column is kept
+  only for the archived Python code; the R workflow ignores it.
+- **Survey windows** are charter exclusions (`hull_class = fishing`,
+  `activity_excluded = TRUE`, `Identified_By = orsted_survey_dates`), using
+  the file's Departure and Return Dates as given.
+- **Survey work only.** The files do not date guard or scout work, so
+  `Safety` vessels keep their open-ended removal-list row even when they
+  appear in a survey file.
+- **Coverage.** The files currently run through `survey_dates_through`
+  (2026-08-31, set in `r/vessel_helpers.R`), and the run stops if a trip ends
+  after that date. The analysis window ends on the same day
+  (`analysis_end` in `r/gfw_helpers.R`), so no record falls after the files'
+  coverage. If the window is ever extended past it, later surveys would count
+  as fishing until their dates arrive.
+- **Between windows a vessel has no crosswalk row**, so GFW's label decides.
+  A vessel GFW types FISHING goes back into Primary. A chartered fishing hull
+  that GFW types PASSENGER or OTHER is not in Primary, because nothing
+  overrides its type there.
+- **Counting such a hull as fishing between windows** takes decision rows,
+  e.g. the Archangels, Fleet Queen, Triunfo and Sea Wind:
+  - `activity_excluded = FALSE` rows for the gaps;
+  - `TRUE` rows for the charter windows, copied from the survey file or the
+    removal list.
+
+  Its decisions then replace its survey and removal-list rows, so later
+  survey files no longer update it: add new trips to its decision rows by
+  hand.
+
+## 3. vessel_review.csv: one row's path
+
+### 3a. Checking a row
+
+Each row is a suggestion, not a classification. An accepted row goes straight
+into Primary, so accept only after a check shows that **the AIS vessel (the
+MMSI)** is what the suggestion says, and record the check in `evidence_ref`
+(e.g. `MT: fishing yacht`, `CGMIX PSIX: commercial fishing vessel; MT: fishing
+boat`, `online search (operator website): headboat`).
+
+- **MarineTraffic MMSI search.** The photo and vessel type show what the AIS
+  vessel is. Sport and recreational fishing boats are often typed PLEASURE
+  CRAFT there; the photo tells a sport fisher from a motor yacht or sailboat.
+  If the MMSI search does not agree with the evidence, reject the row.
+- **CGMIX PSIX.** A numeric GARFO hull ID is a USCG official number. PSIX
+  gives that hull's call sign and service type, and the AIS call sign's
+  official number. A PSIX lookup of the **hull** alone shows only that the
+  GARFO hull is a fishing vessel, not that this MMSI is that hull (SEA PEARL:
+  the hull is a commercial lobster boat, the MMSI a sailboat).
+- **Operator website** for headboats and charter boats: a whale-watch boat and
+  a headboat are both inspected passenger vessels in PSIX.
+
+The sheet does the PSIX part for you (run with `run_psix_api: true`; lookups
+are cached). For a GARFO name match, `psix_link` records the outcome, and the
+Notes and the `psix_hull` / `psix_ais_call_sign` columns give what PSIX
+returned:
+
+| `psix_link` | Meaning | Effect on the sheet |
+|---|---|---|
+| `match` | The AIS call sign belongs to the GARFO hull | Hull identity confirmed; check that the service type and the photo fit |
+| `ais_is_other_hull` | The AIS call sign belongs to a different official number | GARFO match not used; with no other evidence the vessel leaves the sheet |
+| `call_sign_differs` | The hull's call sign differs from the AIS call sign | Note only: the call sign may have changed, or the MMSI may be another boat with the name; check on MarineTraffic |
+| `hull_has_cs_ais_none` | The hull has a call sign but AIS broadcasts none | Check on MarineTraffic that the MMSI is that hull |
+| `hull_not_found`, `no_link` | Nothing to compare | Check on MarineTraffic |
+| `not_queried` | Not yet looked up | Run with `run_psix_api: true` |
+
+A `match` with a non-fishing service type (research, towing, freight) is
+treated like a mismatch. A GARFO match PSIX contradicts also gives no gear
+hint on the gear sheet and no permit group.
+
+### 3b. Is the row collected, and when does it apply?
+
+```{mermaid}
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial, Helvetica, sans-serif","fontSize":"15px","primaryColor":"#e8f0fb","primaryBorderColor":"#4a6fa5","primaryTextColor":"#1f2933","lineColor":"#6b7785","clusterBkg":"#f6f8fa","clusterBorder":"#b8c2cc","edgeLabelBackground":"#ffffff"},"flowchart":{"htmlLabels":true,"padding":14,"nodeSpacing":18,"rankSpacing":36,"wrappingWidth":300,"subGraphTitleMargin":{"top":6,"bottom":10}}}}%%
+flowchart TD
+  A(["vessel_review.csv row"]) --> D{"decision"}
+  D -- "blank" --> D0["Not collected;<br/>reappears<br/>next run"]
+  D -- "reject" --> R1["Saved to<br/>vessel_decisions.csv;<br/>GFW's label stands"]
+  D -- "accept" --> C1["Saved to<br/>vessel_decisions.csv<br/>and vessel_crosswalk.csv"]
+  C1 --> W{"valid_from /<br/>valid_to"}
+  W -- "both blank" --> W1["Applies to every date"]
+  W -- "dates set" --> W2["Inside the window only;<br/>outside it, GFW's<br/>label stands"]
+  W1 --> N(["Go to 3c or 3d: hull_class"])
+  W2 --> N
+  classDef rm fill:#fde4e2,stroke:#b03a2e,color:#1f2933
+  classDef add fill:#dff3e6,stroke:#2e7d4f,color:#1f2933
+  classDef keep fill:#eef0f2,stroke:#8a96a3,color:#1f2933
+  classDef file fill:#ffffff,stroke:#4a6fa5,color:#1f2933
+  class D0,R1 keep
+```
+
+- For a charter vessel, an `accept` row **replaces** its removal-list and
+  survey-date rows (section 2), and a `reject` row drops them, returning the
+  vessel to GFW's label.
+- A `reject` row creates no crosswalk row, and the vessel drops off future
+  review sheets.
+- Windows for one MMSI must not overlap.
+
+#### When to accept, reject or leave blank
+
+**Accept** when a check confirms the suggestion for this MMSI (section 3a).
+
+**Reject** when GFW's own label should stand:
+
+- the check shows the suggestion is wrong, e.g. a suggested missed fishing
+  vessel is a sailboat, motor yacht, ferry or tug, or the AIS vessel is not
+  the GARFO hull;
+- the suggestion **cannot be verified**: no MarineTraffic photo, no PSIX link
+  and nothing else ties the MMSI to the evidence (e.g. "Presumed match with
+  vessel on ICCAT list. No MarineTraffic or CGMIX PSIX confirmation"). Say so
+  in `evidence_ref`.
+
+A reject adds no crosswalk row, so the vessel's records keep GFW's label.
+
+Don't reject in these cases:
+
+| Situation | Instead |
+|---|---|
+| The suggestion is close but wrong: the vessel needs a change, just not the suggested one | Edit the row (`hull_class`, windows) and **accept** it |
+| You haven't checked it yet | Leave `decision` **blank**; the row comes back next run |
+| A charter vessel (removal list or survey file) | Edit its rows and **accept**, or edit `vessel_decisions.csv` directly. A reject also removes its charter exclusion, so its charter activity would count as fishing in Primary |
+
+A decision is collected once per MMSI. To undo it, for example when new
+evidence turns up for a vessel rejected as unverifiable, change or delete its
+row in `references/vessel_decisions.csv`, then run from the top.
+
+### 3c. hull_class = non_fishing, gear_marker or unknown
+
+```{mermaid}
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial, Helvetica, sans-serif","fontSize":"15px","primaryColor":"#e8f0fb","primaryBorderColor":"#4a6fa5","primaryTextColor":"#1f2933","lineColor":"#6b7785","clusterBkg":"#f6f8fa","clusterBorder":"#b8c2cc","edgeLabelBackground":"#ffffff"},"flowchart":{"htmlLabels":true,"padding":14,"nodeSpacing":18,"rankSpacing":36,"wrappingWidth":300,"subGraphTitleMargin":{"top":6,"bottom":10}}}}%%
+flowchart LR
+  H{"hull_class"}
+  H -- "gear_marker" --> HM["Removed from Primary<br/>(any GFW type)"]
+  H -- "unknown" --> HU["No change:<br/>GFW's label stands"]
+  H -- "non_fishing" --> GT{"GFW<br/>Vessel Type"}
+  GT -- "other type<br/>(agrees with GFW)" --> GT0["Already outside<br/>Primary: no change"]
+  GT -- "FISHING<br/>(override)" --> NF1["Removed from Primary"]
+  classDef rm fill:#fde4e2,stroke:#b03a2e,color:#1f2933
+  classDef add fill:#dff3e6,stroke:#2e7d4f,color:#1f2933
+  classDef keep fill:#eef0f2,stroke:#8a96a3,color:#1f2933
+  class HM,NF1 rm
+  class HU,GT0 keep
+```
+
+### 3d. hull_class = fishing
+
+```{mermaid}
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial, Helvetica, sans-serif","fontSize":"15px","primaryColor":"#e8f0fb","primaryBorderColor":"#4a6fa5","primaryTextColor":"#1f2933","lineColor":"#6b7785","clusterBkg":"#f6f8fa","clusterBorder":"#b8c2cc","edgeLabelBackground":"#ffffff"},"flowchart":{"htmlLabels":true,"padding":14,"nodeSpacing":18,"rankSpacing":36,"wrappingWidth":300,"subGraphTitleMargin":{"top":6,"bottom":10}}}}%%
+flowchart LR
+  GT{"GFW<br/>Vessel Type"}
+  GT -- "FISHING<br/>(agrees with GFW)" --> AF{"activity_<br/>excluded"}
+  AF -- "FALSE" --> F0["Already in Primary:<br/>no change"]
+  AF -- "TRUE" --> F1["Window's records<br/>removed from Primary"]
+  GT -- "other type<br/>(override)" --> AO{"activity_<br/>excluded"}
+  AO -- "FALSE" --> O1["Added to Primary"]
+  AO -- "TRUE" --> O3["Window not added:<br/>outside Primary"]
+  classDef rm fill:#fde4e2,stroke:#b03a2e,color:#1f2933
+  classDef add fill:#dff3e6,stroke:#2e7d4f,color:#1f2933
+  classDef keep fill:#eef0f2,stroke:#8a96a3,color:#1f2933
+  class F1 rm
+  class O1 add
+  class F0,O3 keep
+```
+
+- `hull_class` is your override of GFW's `Vessel Type`. It overrides when
+  the two disagree: `fishing` on a vessel GFW types PASSENGER, OTHER, etc.
+  adds its records; `non_fishing` on a vessel GFW types FISHING removes them.
+  When they agree, the hull alone changes nothing.
+- The override applies only to the row's window (all dates if
+  `valid_from`/`valid_to` are blank). It never rewrites the `Vessel Type`
+  column: GFW's label stays in the data and in the crosswalk, and only
+  `in_primary` changes.
+- `in_strict` never changes: it is `Vessel Type == FISHING`.
+
+## 4. gear_review.csv: one row's path
+
+```{mermaid}
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial, Helvetica, sans-serif","fontSize":"15px","primaryColor":"#e8f0fb","primaryBorderColor":"#4a6fa5","primaryTextColor":"#1f2933","lineColor":"#6b7785","clusterBkg":"#f6f8fa","clusterBorder":"#b8c2cc","edgeLabelBackground":"#ffffff"},"flowchart":{"htmlLabels":true,"padding":14,"nodeSpacing":18,"rankSpacing":36,"wrappingWidth":300,"subGraphTitleMargin":{"top":6,"bottom":10}}}}%%
+flowchart TD
+  A(["gear_review.csv row"]) --> D{"decision"}
+  D -- "blank" --> D0["Not collected;<br/>reappears<br/>next run"]
+  D -- "reject" --> R1["Saved to<br/>vessel_gear.csv;<br/>GFW's gear kept"]
+  D -- "accept" --> C1["Saved to vessel_gear.csv"]
+  C1 --> W{"valid_from /<br/>valid_to"}
+  W -- "both blank" --> W1["Every record of the vessel"]
+  W -- "dates set" --> W2["Inside the window only;<br/>others keep GFW's gear"]
+  W1 --> G{"gear_class"}
+  W2 --> G
+  G -- "MOBILE, FIXED,<br/>POLE_AND_LINE or<br/>UNRESOLVED" --> G1["Becomes the record's gear_class<br/>(gear_source = vessel_gear)"]
+  G1 --> G2["Hours move to that gear class<br/>in Primary; Strict keeps<br/>GFW's gear (gear_class_gfw)<br/>Set membership unchanged"]
+  classDef rm fill:#fde4e2,stroke:#b03a2e,color:#1f2933
+  classDef add fill:#dff3e6,stroke:#2e7d4f,color:#1f2933
+  classDef keep fill:#eef0f2,stroke:#8a96a3,color:#1f2933
+  classDef file fill:#ffffff,stroke:#4a6fa5,color:#1f2933
+  class D0,R1,G2 keep
+```
+
+- A `reject` row overrides nothing, and the vessel drops off future gear
+  sheets.
+- Gear windows for one MMSI must not overlap.
+- **Reject** when GFW's gear for the vessel is correct: it keeps GFW's gear
+  class. If the suggested gear class is wrong but GFW's is wrong too, enter
+  the right `gear_class` and **accept** instead. Leave `decision` blank if
+  you haven't decided; the row comes back next run.
+- A suggested gear class from GARFO permits (`garfo_hint`) is left out when
+  PSIX shows the AIS vessel is not the GARFO hull (e.g. DAWN PATROL /
+  RECKLESS).
+- To undo a gear reject, change or delete its row in
+  `references/vessel_gear.csv`, then run from the top.
+
+## 5. Lookup: crosswalk row → set membership
+
+For a record whose date falls inside the row's window. A record with no
+matching row keeps GFW's label: in both sets if GFW types it FISHING, in
+neither otherwise.
+
+| `hull_class` | `activity_excluded` | GFW type | Overrides GFW? | Strict | Primary |
+|---|---|---|---|:-:|:-:|
+| `fishing` | `FALSE` | FISHING | no | ✔ | ✔ |
+| `fishing` | `TRUE` | FISHING | no | ✔ | ✘ |
+| `fishing` | `FALSE` | not FISHING | **to fishing** | – | **+** |
+| `fishing` | `TRUE` | not FISHING | **to fishing** | – | – |
+| `non_fishing` | any | FISHING | **to non-fishing** | ✔ | ✘ |
+| `non_fishing` | any | not FISHING | no | – | – |
+| `gear_marker` | any | FISHING | **to non-fishing** | ✔ | ✘ |
+| `gear_marker` | any | not FISHING | no | – | – |
+| `unknown` | any | FISHING | no | ✔ | ✔ |
+| `unknown` | any | not FISHING | no | – | – |
+
+✔ kept · **+** added (an override to fishing) · ✘ removed · – not in the set
+
+In words:
+
+- **Strict** is GFW's FISHING records, unprocessed: no crosswalk row and no
+  gear correction changes it.
+- **Primary** removes the crosswalk's non-fishing hulls, gear markers and
+  charter and survey windows, adds the fishing hulls GFW missed, and uses
+  your gear corrections.
+
+## 6. Common cases
+
+| Situation | What to enter |
+|---|---|
+| **Override to fishing:** a vessel GFW types OTHER/PASSENGER is a fishing boat (e.g. *Pasque*) | `accept`, `hull_class = fishing`, `activity_excluded = FALSE`, windows blank, and the check in `evidence_ref`. It enters Primary. Set its gear on the gear sheet next run (or in `vessel_gear.csv`). |
+| A suggested fishing vessel you cannot verify | `reject`, with `evidence_ref` saying what was checked (e.g. "No MarineTraffic or CGMIX PSIX confirmation"). |
+| A fishing vessel chartered for survey/safety work | `accept`, `hull_class = fishing`, `activity_excluded = TRUE`, `valid_from`/`valid_to` = charter dates. Its records outside the window stay fishing. |
+| A missed fishing vessel that also took a charter | Two rows for the MMSI in `vessel_decisions.csv`, with non-overlapping windows: one `activity_excluded = FALSE`, one `TRUE` for the charter. Both rows have `hull_class = fishing`. The charter window stays out of Primary. |
+| Give a removal-list vessel its real charter dates | Survey dates come from Ørsted's survey files automatically (section 2). For other charter dates (e.g. guard work), add decision rows for the MMSI with the dates; they replace its removal-list and survey rows (the removal-list row runs from the start of Stage 2, open-ended). |
+| New survey dates delivered | Add the file to `references/` as `orsted_fv_survey_dates_<month><year>.csv`. Map any new vessel name in `orsted_survey_vessels.csv`. Move `survey_dates_through` to the last day the files cover, then run from the top. Vessels with decision rows (e.g. Archangel 368407550) are not updated: add their new trips to `vessel_decisions.csv` by hand. |
+| A chartered fishing hull GFW types PASSENGER/OTHER should count as fishing between charters | Decision rows covering every date: `activity_excluded = TRUE` for each charter window and `FALSE` for the gaps, all `hull_class = fishing`. The gaps enter Primary. |
+| A removal-list vessel is not a fishing vessel (e.g. Celtic, a port tender) | `accept`, `hull_class = non_fishing`, windows blank; set its `Scope` to `all_stages` in `vessel_removals.csv` so the list agrees. |
+| **Override to non-fishing:** a FISHING-typed vessel that is really a research/survey ship | `accept`, `hull_class = non_fishing`: removed from Primary. |
+| An AIS net buoy | `accept`, `hull_class = gear_marker`: removed from Primary. |
+| GFW's label is right after all | `reject`: no crosswalk row, and the vessel drops off future sheets. Not for charter vessels (see *When to accept, reject or leave blank* in section 3). |
+| GFW's gear is wrong | Gear sheet: `accept` with the right `gear_class`; add a window if the gear changed over time. |
+| Change a decision already collected | Edit the row in `references/vessel_decisions.csv` or `references/vessel_gear.csv`, then run from the top. |

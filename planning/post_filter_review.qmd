@@ -1,0 +1,459 @@
+---
+title: "Post-filter review: reproducibility, workflow status, and next steps"
+author: "Malachy McCaffrey"
+date: 2026-10-17
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    embed-resources: true
+---
+
+## Purpose
+
+This is a checkpoint between the vessel classification and the downstream
+analysis. It has three parts:
+
+1. A **review of reproducibility** in the active workflow (everything outside
+   `archive/`), with recommendations ranked by how much they matter.
+2. A **step-by-step record of what has been done** so far, with the headline
+   numbers from the current outputs.
+3. **Suggestions for the next phase**, plus the decisions that need making
+   before the analysis design is fixed.
+
+Numbers come from the outputs on disk as of 2026-10-17, which were built from
+the 2026-10-06 GFW pull and the decision files at commit `ed7932a` plus the
+uncommitted edits to the fishnet and filtering qmds. This file has no
+executable chunks, so it renders without the data.
+
+::: {.callout-note}
+This file sits in `r/scratchpad/`, which is gitignored. If collaborators should
+see it, move it somewhere tracked (e.g. `docs/`) or copy the parts that matter
+into the README.
+:::
+
+## Where things stand
+
+| | Value |
+|---|---|
+| GFW pull | 2026-10-06; query 2016-01-01 to 2026-10-01 (exclusive) |
+| Raw VP | 446,646 records · 13,983 MMSIs · 728,085 h |
+| Raw AFE | 68,185 records · 445 MMSIs · 100,662 h |
+| Analysis grid | 3,376 cells at 0.01°, lower-left anchored, EPSG:32619 |
+| Development stages | S1 2016-01 to 2020-09 (57 mo) · S2 2020-10 to 2023-03 (30 mo) · S3 2023-04 to 2026-09 (42 mo) |
+| Removal list | 45 vessels: 41 charter (28 safety, 13 survey), 4 non-fishing all stages |
+| Vessel decisions | 375 (238 accept, 137 reject) |
+| Gear decisions | 688 (644 corrections, 44 confirmed GFW gear) |
+| Crosswalk | 627 rows over 244 MMSIs: 417 activity-excluded windows (389 from survey dates), 148 fishing windows, 52 non-fishing, 3 gear markers, 7 unknown |
+| Fishing MMSIs (VP) | Strict 1,301 · Primary 1,384 (142 hulls added that GFW missed) |
+| Unresolved gear in Primary | 0 h |
+| Review sheets | Both empty: every candidate has a decision |
+
+**Hours by set and stage**
+
+| | Stage 1 | Stage 2 | Stage 3 |
+|---|---:|---:|---:|
+| VP Strict | 35,564 | 25,864 | 113,864 |
+| VP Primary | 35,849 | 23,699 | 44,398 |
+| VP Primary per month | 629 | 790 | 1,057 |
+| AFE Strict | 10,998 | 9,318 | 79,963 |
+| AFE Primary | 11,107 | 8,041 | 15,272 |
+| AFE Primary per month | 195 | 268 | 364 |
+
+**Primary hours by gear class**
+
+| | VP Fixed | VP Mobile | VP Pole & line | AFE Fixed | AFE Mobile | AFE Pole & line |
+|---|---:|---:|---:|---:|---:|---:|
+| Stage 1 | 5,290 | 27,826 | 2,733 | 1,261 | 9,213 | 633 |
+| Stage 2 | 4,713 | 16,765 | 2,221 | 997 | 6,388 | 656 |
+| Stage 3 | 12,221 | 27,060 | 5,117 | 3,051 | 11,479 | 742 |
+
+The single most important result so far: **in Stage 3, 61% of Strict VP and 81%
+of Strict AFE is charter, survey or non-fishing activity.** Any analysis built
+on GFW's `FISHING` label alone would have reported a roughly five-fold rise in
+fishing effort during construction. Most of that rise was the projects' own
+contracted fishing hulls. That makes the Strict vs Primary comparison a result
+worth reporting in its own right, not just a sensitivity check.
+
+## What has been done, step by step
+
+```{mermaid}
+flowchart LR
+  A[GFW 4Wings API<br/>gfw_vp_afe_datapull.qmd] --> B[data/raw/gfw<br/>vp_id, afe_id, pull_info]
+  B --> C[gfw_fishnet_grid.qmd]
+  C --> D[data/sf/fishnet<br/>gfw_grid_utm19n.gpkg]
+  C --> E[data/interim/gfw<br/>raw *_id_cell_* tables]
+  B --> F[gfw_vessel_filtering.qmd]
+  D --> F
+  R[references/<br/>removals, survey dates,<br/>decisions, gear] --> F
+  G[GARFO permits, GFW identity API,<br/>USCG PSIX cache] --> F
+  F --> H[references/vessel_crosswalk.csv]
+  F --> I[data/processed/gfw<br/>*_id_classified.csv]
+  F --> J[data/interim/gfw<br/>*_cell_*_sets.csv]
+  F --> K[data/processed/vessel_review<br/>review sheets]
+  K -. analyst review .-> R
+```
+
+### Step 0: Environment and access
+
+- Moved active development from Python to R; archived the Python analysis,
+  still runnable via `uv`, under `archive/`.
+- Locked R 4.5.2 and 129 packages, including `gfwr` 3.0, in `renv.lock`. The
+  GFW token is read from `GFW_TOKEN` in a gitignored `.Renviron`.
+- Put the shared code in `r/paths.R` (every path, overridable per render by a
+  Quarto parameter) and `r/gfw_helpers.R` (the one definition of the
+  development stages, `read_gfw()`, the gear-class map).
+
+### Step 1: Data pull (`gfw_vp_afe_datapull.qmd`)
+
+- Queried 4Wings vessel presence and apparent fishing effort at 0.01°, daily,
+  grouped by Vessel ID, inside the Ørsted AOI. One request per calendar year,
+  2016 to 2026-09-30.
+- Wrote `data/raw/gfw/gfw_{vp,afe}_id.csv` and `pull_info.csv` (pull date,
+  query window, row counts).
+
+### Step 2: Analysis grid (`gfw_fishnet_grid.qmd`)
+
+- Rebuilt GFW's grid from the data rather than drawing a new fishnet. Lat/Lon
+  are the **lower-left** corner and are snapped with `round()` to integer
+  `cell_id`s.
+- Reprojected the cells to UTM 19N as parallelograms, so hours are never
+  redistributed. Added `area_km2`, `aoi_frac` and `aoi_class`.
+- Decided how to treat cells at the AOI edge: data cells outside the AOI are
+  kept and flagged; AOI-touching cells with no records are excluded.
+- Joined records to cells with a **table join on `cell_id`**. Spatial joins were
+  shown to double-count by up to 2.19×.
+- Built queen-contiguity neighbours, with a check that no cell is an island.
+- Wrote the grid, plus raw-data (all vessel types) cell × stage and cell × month
+  tables.
+
+### Step 3: Development stages
+
+- Moved the start of Stage 2 to 2020-10-01, when SFW fisheries monitoring
+  began, which gives stages of 57, 30 and 42 months.
+
+### Step 4: Vessel classification (`gfw_vessel_filtering.qmd`)
+
+1. **Crosswalk design.** Hull identity (is it a fishing vessel?) is separated
+   from activity (is it fishing right now?). Activity carries date windows,
+   and gear is kept in a file of its own.
+2. **Removal list and survey dates.** The 45 Ørsted and known vessels come in
+   through `vessel_removals.csv`. Ørsted's survey-trip files replace the
+   open-ended charter exclusions for survey vessels with 389 dated windows.
+   Safety vessels keep their open-ended Stage 2–3 exclusion.
+3. **Screening.** Four candidate lists: missed fishing vessels, charter
+   activity (burst, or a rise in lease share), non-fishing vessels typed
+   FISHING, and gear markers / malformed MMSIs. The charter screen's recall is
+   measured against Ørsted's confirmed vessels.
+4. **Evidence.** GARFO permit lists matched by name, with tests for
+   uniqueness, year overlap and length. GFW identity API registry records,
+   cached. USCG PSIX call-sign and official-number checks, cached.
+5. **Manual review.** Every row was checked against MarineTraffic and PSIX and
+   recorded in `vessel_decisions.csv` (375 rows) and `vessel_gear.csv` (688
+   rows). Both review sheets are now empty.
+6. **Classification.** Each record is matched to at most one crosswalk row and
+   one gear row by MMSI and date. Two sets are defined: **Strict** (GFW
+   `FISHING`) and **Primary** (verified).
+7. **Accounting.** Stage totals by set; imputed AFE for the added hulls, which
+   GFW gives almost no effort; for-hire + commercial vessels as a separate
+   group; the residual unreviewed VP as a bound on missed fishing.
+8. **Outputs.** Record-level `*_id_classified.csv` and eight zero-filled cell
+   tables (VP/AFE × stage/month × with/without gear), each with a `set` column.
+9. **Repeatability checks.** GFW label drift since each decision was made, and
+   crosswalk and gear summaries for the methods.
+
+## Reproducibility review
+
+Ranked by impact. **Blocking** means a collaborator cannot rerun the workflow
+from a clone. **High** means the results could quietly change or be wrong.
+**Medium** and **Low** cover clarity and upkeep.
+
+### Blocking
+
+**B1. The data pull no longer runs end to end.**
+`gfw_vp_afe_datapull.qmd` uses `gfw_vp_fv` (lines 474, 489, 629), which is
+never created. The earlier `Vessel Type == "FISHING"` step was removed, so the
+render stops at *Remove vessels*. Everything from there down (MMSI removals,
+the hard-coded cargo MMSIs, dropping columns by position, the stage subsets,
+the `gfw_vp*_fv_sub.csv` exports) is now superseded by
+`gfw_vessel_filtering.qmd`.
+*Recommendation:* cut the pull back to **pull → bind → write raw → write
+`pull_info`**. Move the sniff-test plots to the classification or exploration
+step, and delete the old filtering and exports so there is only one place
+vessels get removed. This also fixes the YAML (`output: word_document` is
+R Markdown syntax; Quarto needs `format:`) and lets the eleven copy-pasted
+calls become a loop over years.
+
+**B2. The classification qmd needs files a collaborator does not have.**
+To render `gfw_vessel_filtering.qmd` you need the GARFO permit files
+(`data/raw/vessel_evidence/registries/`), the GFW identity and PSIX caches, and
+the raw pull. All of these are gitignored. Phases 2–4 (screen, evidence,
+review sheet) are needed to *make* decisions, but Phase 5 (classify) needs only
+the raw pull and the tracked `references/` files.
+*Recommendation:* split the file in two:
+
+- **Vessel review** (Phases 1–4 and 7): needs the evidence; only the analyst
+  runs it.
+- **Classify and aggregate** (Phase 1 crosswalk build, Phase 5, Phase 6): needs
+  only the raw pull, the grid and `references/`. Anyone with the raw data can
+  reproduce the analysis tables without GARFO access or an API token.
+
+**B3. The raw GFW pull cannot be regenerated identically.**
+4Wings results change between pulls: GFW reprocesses data and relabels vessels
+(CYGNUS changed from FISHING to CARGO), and AIS reception changes. A fresh pull
+gives different records, so the decision files will no longer match them.
+*Recommendation:* treat the 2026-10-06 pull as the canonical input. Archive
+it, with the GARFO files if their terms allow, in a citable DOI-backed store
+(Zenodo, OSF or URI's institutional repository; GFW data are CC BY-SA 4.0,
+which permits this with attribution). Record SHA-256 checksums and the 4Wings
+dataset versions (e.g. `public-global-presence:v3.0`) in `pull_info.csv`, and
+have every downstream qmd check the checksum before it runs.
+
+### High
+
+**H1. Survey-vessel records after 2026-08-31 count as fishing.**
+`survey_dates_through` is 2026-08-31, but the pull runs to 2026-09-30, and the
+last listed survey trip ends 2026-08-11. By design, survey vessels' records
+after the files' coverage are kept as fishing. That puts **180 VP h from 7
+survey vessels in September 2026 into Primary, 13% of that month's Primary
+VP.** If those vessels were surveying in September, Stage 3 is inflated near
+the leases.
+*Recommendation:* either get September survey dates from Ørsted, or end the
+analysis window at 2026-08-31, i.e. end Stage 3 there. The second is the
+cleaner choice: every stage then ends where a vessel's activity is known.
+
+**H2. Rendering the classification qmd edits tracked input files.**
+`collect_marked()` writes reviewed rows back into `vessel_decisions.csv` and
+`vessel_gear.csv`, and fills in `decided_on` with `Sys.Date()`. Each run also
+rewrites `references/vessel_crosswalk.csv`. The review sheets are empty now,
+so a render leaves the inputs alone, but a collaborator rendering with a stale
+sheet would change them. Once the B2 split is made, only the review qmd should
+write to `references/`; the classify qmd should only read.
+
+**H3. Nothing checks the R workflow automatically.**
+CI runs pytest on the archived Python only.
+*Recommendation:* add a small `testthat` suite for `stage_of()`,
+`read_gfw()` snapping (with the float32 cases such as `41.0699999`) and
+`gear_class_of()`. Add a validation script that checks the schema of every
+`references/*.csv` (MMSI format, ISO dates, no overlapping windows, allowed
+values), runnable without any data. Then add an R job to
+`.github/workflows/tests.yml` (`r-lib/actions/setup-r` +
+`setup-renv`). `testthat` is already in `renv.lock` as a dependency, but it
+would need to become a direct one, so check before adding it.
+
+**H4. No single entry point or run order.**
+The order is pull → grid → classify, but it lives only in prose, and the grid
+qmd has to run before the classification qmd reads the grid.
+*Recommendation:* add a Quarto project file, `r/_quarto.yml`, with
+`execute-dir: project` and an explicit `render:` list in order (see
+[the proposed structure](#qmd-names)). Then `quarto render r/` runs the whole
+pipeline, and the root-finding `setup` chunk each qmd copies becomes
+unnecessary. Exclude the pull from the default render list, since it needs the
+API.
+
+### Medium
+
+**M1. The README and data dictionary are stale.** The README names
+`gfw_vp_afe_dataPull_090126.Rmd` and `data/shp/`, describes a 3,375-cell grid
+(it now has 3,376), and stops at step 3 (the data pull). The data dictionary
+still documents `gfw_{vp,afe}{1,2,3}_*_sub.csv` and Python functions
+(`aggregate.summarize_stage`, `io.load_removal_list()`) as the current code.
+Neither describes the classified files, the `*_sets` cell tables, or the
+Strict/Primary sets. Rewrite both after the renames.
+
+**M2. Design documents live in an ignored folder.** The filtering qmd points
+readers to `r/scratchpad/vessel_filtering_plan.qmd`, and the fishnet qmd to
+`r/scratchpad/gridcell_decision.R`. Both are gitignored, so collaborators get
+dead references. Promote the ones that justify methods
+(`vessel_filtering_plan.qmd`, `vessel_decision_flow.qmd`,
+`gridcell_decision.R`) to a tracked `docs/` or `r/notes/` folder.
+
+**M3. The planning file is tracked although it says it is private.**
+`planning/work-plan-appendices.md` says it is gitignored, but no `planning/`
+rule exists and the file is in git. It also contains an absolute local path
+(`C:\Users\mmccaffrey17\.claude\plans\...`). Either add `planning/` to
+`.gitignore` and `git rm --cached` it, or accept that it is public and remove
+the path.
+
+**M4. Line endings.** Git warns that LF will become CRLF in the qmds and in
+`vessel_crosswalk.csv`. Mixed line endings in the decision CSVs make diffs
+noisy and can hide real changes. Add a `.gitattributes` (`* text=auto`,
+`*.csv text eol=lf`, `*.qmd text eol=lf`).
+
+**M5. Leftover scripts with broken paths.** `gfw_wind_infra.Rmd` and
+`gfw_wind_points.R` read `sar_fixed_infrastructure_202511.csv` and
+`shapefiles/aoi.shp`, neither of which exists. They also contain two bugs:
+`filter(label == c("wind", "noise"))` recycles the vector instead of matching
+either value (use `%in%`), and `gfw_wind_points.R` passes `coords = c("lat",
+"lon")`, which swaps x and y. Either fix them and fold them into the
+proposed `05` infrastructure step, or move them to `archive/`.
+
+**M6. The token helper fights renv.** `gfw_api_access_token.R` calls
+`install.packages("gfwr")`, which installs outside the lockfile. Replace it
+with a 3-line setup note (`usethis::edit_r_environ(scope = "project")`, then
+`renv::restore()`).
+
+**M7. The pull does not use the stage-boundary definitions.** The year
+variables (an unused 2015 pair, `end_26 = '2026-10-01'`) are hand-typed. Derive
+the query window from `dev_stages` in `gfw_helpers.R`, so that moving a stage
+boundary or the end date is a one-line change, and so B1's loop is short.
+
+### Low
+
+- Delete or fill the empty `models/` directory, and remove the stray
+  `Rplots.pdf` at the root (ignored, but clutter).
+- `references/SFW PSO PAM Report 2024.pdf` is cited as evidence but is not
+  tracked (`*.pdf` is ignored). Say in the data dictionary where to get it.
+- The fishnet qmd writes into the tracked `data/sf/fishnet/` and into
+  `data/interim/gfw/` without `dir.create()`. On a fresh clone the interim
+  write fails.
+- The raw `gfw_*_id_cell_*` tables (all vessel types) are probably not needed
+  downstream. If they are kept only as a check, say so, or write them under a
+  `diagnostics/` subfolder so nobody mistakes them for analysis inputs.
+- Two R versions are installed (4.5.2 and 4.6.1); the lockfile pins 4.5.2.
+  Note this in the README so collaborators do not restore under 4.6.
+- Add a `sessionInfo()` / `renv::diagnostics()` chunk at the end of each qmd.
+
+## Proposed qmd names and structure {#qmd-names}
+
+Number the files in run order, use verbs that say what each one does, and keep
+history with `git mv`:
+
+| Current | Proposed | Notes |
+|---|---|---|
+| `r/scripts/gfw_api_access_token.R` | `r/00_setup.R` | Token setup and `renv::restore()`; no `install.packages` |
+| `r/scripts/rmd/gfw_vp_afe_datapull.qmd` | `r/01_pull_gfw.qmd` | Cut back to the pull only (B1); needs the API |
+| `r/scripts/rmd/gfw_fishnet_grid.qmd` | `r/02_build_grid.qmd` | Unchanged apart from the name |
+| `r/scripts/rmd/gfw_vessel_filtering.qmd` (Phases 1–4, 7) | `r/03_review_vessels.qmd` | Analyst only; needs the evidence; writes `references/` |
+| `r/scripts/rmd/gfw_vessel_filtering.qmd` (Phases 1, 5–6) | `r/04_classify_aggregate.qmd` | Reads `references/`; writes the classified and cell tables |
+| `r/scripts/rmd/gfw_wind_infra.Rmd` + `gfw_wind_points.R` | `r/05_wind_infrastructure.qmd`, or `archive/` | Only if turbine locations are needed (see below) |
+| *(new)* | `r/06_explore.qmd` | Descriptives and sniff tests moved from the pull |
+| *(new)* | `r/07_…qmd` onward | Downstream analysis |
+| `r/paths.R`, `r/gfw_helpers.R` | `r/R/paths.R`, `r/R/helpers.R` | Optional: keeps sourced code apart from documents |
+
+Things a rename has to update:
+
+- **The filtering qmd's own filename is hard-coded** at line 114
+  (`knitr::knit_params(readLines(... "r/scripts/rmd/gfw_vessel_filtering.qmd"))`),
+  so interactive runs break after a rename unless that line changes too. Use
+  the Quarto project's `execute-dir` (H4) or `knitr::current_input()` instead
+  of a literal path.
+- Comments in `r/paths.R` (lines 5, 9, 23), cross-references in prose in the
+  fishnet and filtering qmds, `references/data_dictionary.md` (6 places), and
+  the README.
+- Keep the root-finding `setup` chunk: `execute-dir: project` would make the
+  working directory `r/` (the project root), not the repo root that
+  `r/paths.R` expects. *(Corrected 2026-10-17 while implementing.)*
+
+A minimal `r/_quarto.yml`:
+
+```yaml
+project:
+  type: default
+  render:                # run order; 01 is left out because it needs the API
+    - 02_build_grid.qmd
+    - 03_review_vessels.qmd
+    - 04_classify_aggregate.qmd
+    - 06_explore.qmd
+```
+
+No `freeze`: the qmds read data and `references/` CSVs that Quarto does not
+track, so a frozen document would not re-run when a decision file changes.
+
+### Suggested order of work
+
+These changes touch several files, so here is an order that keeps every commit
+runnable:
+
+1. Add `.gitattributes`, sort out `planning/` (M3, M4).
+2. Record checksums and the dataset version for the 2026-10-06 pull; archive
+   it (B3).
+3. Rename the files with `git mv`, add `_quarto.yml`, update the
+   references (H4, renames).
+4. Cut the pull back (B1, M7) and split the classification qmd (B2, H2).
+5. Decide the end date and survey-date coverage (H1), re-render, and diff the
+   outputs against today's numbers in [Where things stand](#where-things-stand).
+6. Add the R tests, reference validation and CI (H3).
+7. Rewrite the README and data dictionary (M1, M2).
+
+## Moving forward
+
+### Decisions to make before choosing the analysis
+
+1. **The end of the analysis window** (H1): 2026-08-31, or get September
+   survey dates.
+2. **The stage 3 definition.** Stage 3 combines SFW construction (2023-04),
+   SFW in operation (from early 2024), and RWF and SRW construction. A single
+   42-month stage averages over very different disturbances. Options: split it
+   into 3a construction / 3b operation; model time per project; or use
+   monthly data with project-specific event dates instead of stages.
+3. **The unit of inference.** Cell × stage (simple, 3 time steps, the archived
+   hotspot work) or cell × month (seasonality, more power, needs a model for
+   temporal autocorrelation). The month tables already exist, so this is a
+   modelling choice rather than a data choice.
+4. **What counts as a control.** The AOI is only about 3,000 km² and contains
+   the leases. Without a reference area, a regional trend cannot be told apart
+   from a project effect.
+
+### Analysis cautions the numbers already show
+
+- **Compare rates, not totals.** The stages last 57, 30 and 42 months. Primary
+  VP per month *rose* in each stage (629 → 790 → 1,057), but that does not
+  separate a project effect from regional trends or better AIS coverage.
+- **AIS coverage and uptake change over time.** Raw VP records (all vessel
+  types) rose from 34,505 in 2023 to 94,193 in 2025. Some of the Stage 3 increase is likely
+  more small vessels carrying AIS and better satellite reception, not more
+  fishing. Normalise by an external reference: GFW effort in a nearby
+  comparable area, or the ratio of fishing to all-vessel presence per month.
+- **AFE for the 142 added hulls is near zero by construction.** Report AFE
+  results with and without the imputed effort (Phase 6).
+- **Strict vs Primary is a result.** The 81% of Stage 3 AFE that Primary
+  removes is the main methodological contribution. Report it as such, with the
+  charter-screen recall.
+- **Edge cells.** Data cells outside the AOI are flagged. Run the main model
+  with and without them.
+
+### Recommended analysis designs
+
+From simplest to most informative. These can be built one after another.
+
+1. **Descriptives (`06_explore.qmd`).** Monthly time series of Primary VP and
+   AFE by gear class, inside vs outside the leases, plus maps per stage of
+   hours per km² per month. This shows quickly whether there is any signal
+   worth modelling.
+2. **Before–after–gradient (BAG).** Use distance from the nearest lease
+   boundary, in bands of e.g. 0–2, 2–5, 5–10, >10 km, as the within-AOI
+   control. The effect is the stage × distance-band interaction. It matches
+   the data well, because effects of wind farms on fisheries are usually
+   strongest within a few km and fade with distance, and it avoids needing an
+   outside control area.
+3. **A spatial-temporal count model on cell × month.** Hours are
+   zero-inflated, continuous and right-skewed, so a Tweedie GLMM or a hurdle
+   model (presence × positive hours) is the natural family. For example, with
+   `glmmTMB` or `mgcv`: `hours ~ stage * dist_band + gear + s(month, bs = "cc")
+   + s(x, y) + offset(log(area_km2))`, run separately for fixed and mobile
+   gear, since their responses to turbines are expected to differ (mobile gear
+   avoids the arrays; fixed gear may stay in or move into them). `mgcv` is
+   already in `renv.lock`; `glmmTMB` would be a new dependency.
+4. **Hotspot analysis per stage (Gi\*, Local Moran's I)** with the queen
+   weights already built, to keep continuity with the archived thesis work.
+   Good for maps; weaker for inference than (2) or (3).
+
+Every model should run on **Strict vs Primary**, **with vs without edge
+cells**, **with vs without dual-permitted vessels**, and **AFE with vs without
+imputation**. The tables already carry `set` and the needed flags, so these
+sensitivity checks are cheap.
+
+### Data that could strengthen the analysis
+
+- **Turbine and cable locations, with installation dates** (BOEM or Ørsted
+  construction schedules), for a per-turbine, time-varying distance covariate.
+  This is the purpose behind the wind-infrastructure scripts (M5).
+- **A reference area** outside the AOI, from the same 4Wings API at the same
+  resolution, for regional trend normalisation. This would mean a new pull and
+  a larger, recorded query.
+- **VTR or Fisheries Monitoring Plan data from SFW**, if available, to check
+  AIS coverage against reported trips by gear.
+- **NOAA landings by port** (Point Judith, New Bedford, Montauk) as an
+  independent check on regional trends.

@@ -1,8 +1,8 @@
-# Work plan — appendices (private)
+# Work plan — appendices
 
 Implementation bookkeeping split out of `reports/00-work-plan.qmd` on 2026-09-02.
-**This file is gitignored** (`planning/` rule in `.gitignore`). It is working reference,
-not part of the published record.
+It is working reference, tracked in git with the rest of `planning/`, but not
+part of the published analysis record.
 
 **Archived 2026-10-03:** `python/` and `reports/` moved to `archive/python/` and
 `archive/reports/`. Every `python/...` and `reports/...` path below predates that
@@ -10,7 +10,8 @@ move and is stale by one `archive/` prefix.
 
 Companion documents:
 - `reports/00-work-plan.qmd` — the substantive plan (context, findings, decisions, phases)
-- `C:\Users\mmccaffrey17\.claude\plans\fancy-brewing-seahorse.md` — the original approved plan
+- `vessel_filtering_plan.qmd`, `vessel_decision_flow.qmd` and `gridcell_decision.R`
+  (this folder) — the design record for the R vessel classification and grid
 
 ---
 

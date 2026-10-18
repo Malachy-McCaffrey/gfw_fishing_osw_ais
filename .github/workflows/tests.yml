@@ -27,3 +27,28 @@ jobs:
       # and the pure functions still runs.
       - name: Run tests
         run: uv run python -m pytest -q
+
+  # The R workflow's helpers and the tracked references/ files. Like pytest,
+  # this needs no GFW data, so it runs on a bare clone.
+  r-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # the version renv.lock was made with
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.5.2"
+          use-public-rspm: true
+
+      # system libraries for sf (GDAL, GEOS, PROJ, udunits)
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgdal-dev libgeos-dev libproj-dev libudunits2-dev
+
+      # restores renv.lock, cached between runs
+      - uses: r-lib/actions/setup-renv@v2
+
+      - name: Run R tests
+        run: Rscript -e 'testthat::test_dir("r/tests/testthat", stop_on_failure = TRUE)'

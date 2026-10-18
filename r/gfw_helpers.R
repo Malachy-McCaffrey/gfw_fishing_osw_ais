@@ -9,7 +9,7 @@ dev_stages <- tibble::tribble(
   ~stage,    ~start,       ~end,         ~months, ~description,
   "Stage 1", "2016-01-01", "2020-09-30", 57L,     "Pre-monitoring baseline",
   "Stage 2", "2020-10-01", "2023-03-31", 30L,     "Pre-construction monitoring; SFW fisheries monitoring began 10/2020",
-  "Stage 3", "2023-04-01", "2026-09-30", 42L,     "Construction and operation across SFW, RWF and SRW; SFW seabed prep began 04/2023"
+  "Stage 3", "2023-04-01", "2026-08-31", 41L,     "Construction and operation across SFW, RWF and SRW; SFW seabed prep began 04/2023"
 ) |>
   dplyr::mutate(start = as.Date(start), end = as.Date(end))
 
@@ -20,6 +20,24 @@ stage_of <- function(date) {
     out[hit] <- dev_stages$stage[i]
   }
   out
+}
+
+# Analysis window ----------------------------------------------------------
+# The stages span the analysis window. The pull runs past its end (to
+# 2026-09-30), but the window stops at 2026-08-31, the last day the Ørsted
+# survey-date files cover: after it, survey trips are undated and would count
+# as fishing. Every qmd drops records outside the window after reading them.
+
+analysis_start <- min(dev_stages$start)
+analysis_end   <- max(dev_stages$end)
+
+in_analysis_window <- function(d) {
+  keep <- !is.na(d$date) & d$date >= analysis_start & d$date <= analysis_end
+  if (any(!keep)) {
+    message("Dropped ", sum(!keep), " records outside the analysis window (",
+            analysis_start, " to ", analysis_end, ")")
+  }
+  d[keep, ]
 }
 
 # GFW records --------------------------------------------------------------

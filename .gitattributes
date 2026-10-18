@@ -1,0 +1,22 @@
+# Line endings. Text files are stored with LF in git; these types are also
+# checked out with LF on every platform, so a CSV edited on Windows does not
+# show as a whole-file change. data/ is left to git's defaults: nothing here
+# changes how its files are stored.
+* text=auto
+
+*.R     text eol=lf
+*.qmd   text eol=lf
+*.Rmd   text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.toml  text eol=lf
+*.cff   text eol=lf
+*.lock  text eol=lf
+references/*.csv text eol=lf
+
+# binary, never converted
+*.pdf  binary
+*.png  binary
+*.tif  binary
+*.gpkg binary

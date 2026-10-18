@@ -40,10 +40,11 @@ positives, so the raw data cannot be filtered on GFW's labels alone:
 - **False positives:** non-fishing vessels typed as `FISHING` (e.g. CYGNUS), so
   the same filter keeps non-fishing activity.
 
-Both problems affect VP and AFE. `03_classify_vessels.qmd` corrects them and
-writes the fishing-vessel aggregates to `data/interim/gfw/` for two analysis
-sets, **Strict** (GFW's `FISHING` records, unchanged) and **Primary** (the
-verified classification, the headline analysis), each with a `set` column:
+Both problems affect VP and AFE. `03_review_vessels.qmd` and
+`04_classify_aggregate.qmd` correct them, and 04 writes the fishing-vessel
+aggregates to `data/interim/gfw/` for two analysis sets, **Strict** (GFW's
+`FISHING` records, unchanged) and **Primary** (the verified classification,
+the headline analysis), each with a `set` column:
 
 | Fishing-vessel tables (VP and AFE) | One row per |
 |---|---|
@@ -103,7 +104,7 @@ The mirror-image pattern (extra cells to the NE, missing cells to the SW) is
 consistent with GFW selecting cells for a `USER_SHAPEFILE` region by a rule
 that differs from the lower-left labelling. The counts for this pull are
 reported under *Grid-cell decision checks*; diagnostics are in
-`r/scratchpad/gridcell_decision.R`.
+`planning/gridcell_decision.R`.
 
 ### Why a table join, not a spatial join
 
@@ -143,13 +144,22 @@ crs_utm <- 32619 # WGS 84 / UTM zone 19N
 
 ## Read raw data and snap to cell indices
 
+The grid is built from every record in the pull. The aggregates use only the
+records inside the analysis window (`analysis_start` to `analysis_end` in
+`r/gfw_helpers.R`), so a cell holding only post-window records stays in the
+grid and is zero-filled.
+
 ```{r}
-vp  <- read_gfw(paths$raw_vp)
-afe <- read_gfw(paths$raw_afe)
+vp_pull  <- read_gfw(paths$raw_vp)
+afe_pull <- read_gfw(paths$raw_afe)
 
 # every coordinate must sit on the 0.01 lattice
-snap_err <- with(bind_rows(vp, afe), max(abs(Lon / 0.01 - ix), abs(Lat / 0.01 - iy)))
+snap_err <- with(bind_rows(vp_pull, afe_pull), max(abs(Lon / 0.01 - ix), abs(Lat / 0.01 - iy)))
 stopifnot("coordinates are not on the 0.01 degree lattice" = snap_err < 0.01)
+
+# records inside the analysis window, for the aggregates
+vp  <- in_analysis_window(vp_pull)
+afe <- in_analysis_window(afe_pull)
 
 # every record needs a development stage (r/gfw_helpers.R)
 stopifnot("records with no development stage" =
@@ -159,10 +169,10 @@ stopifnot("records with no development stage" =
 ## Grid cells from the VP data
 
 ```{r}
-cells <- distinct(vp, cell_id, ix, iy)
+cells <- distinct(vp_pull, cell_id, ix, iy)
 
 stopifnot("AFE has cells absent from the VP grid" =
-            all(afe$cell_id %in% cells$cell_id))
+            all(afe_pull$cell_id %in% cells$cell_id))
 ```
 
 ## Build cell polygons from the lower-left corner
@@ -344,12 +354,27 @@ stopifnot("grid has cells with no neighbours" = all(card(nb) > 0))
 ```{r}
 # grid (supersedes archive/fishnet/Orsted_sqGrid_utm19n.shp, which was built
 # treating Lat/Lon as centroids)
+dir.create(paths$fishnet, recursive = TRUE, showWarnings = FALSE)
 st_write(grid_utm, file.path(paths$fishnet, basename(paths$grid)), delete_dsn = TRUE)
 
 # raw-data aggregates (all vessel types); file names keep the raw "_id" suffix
 # so they are not mistaken for fishing-vessel totals
+dir.create(paths$interim_gfw, recursive = TRUE, showWarnings = FALSE)
 write_csv(vp_cell_stage,  file.path(paths$interim_gfw, "gfw_vp_id_cell_stage.csv"))
 write_csv(afe_cell_stage, file.path(paths$interim_gfw, "gfw_afe_id_cell_stage.csv"))
 write_csv(vp_cell_month,  file.path(paths$interim_gfw, "gfw_vp_id_cell_month.csv"))
 write_csv(afe_cell_month, file.path(paths$interim_gfw, "gfw_afe_id_cell_month.csv"))
+```
+
+## Session info
+
+The R and package versions this render ran with, and renv's report on the
+project library against `renv.lock`.
+
+```{r}
+sessionInfo()
+```
+
+```{r}
+renv::diagnostics()
 ```

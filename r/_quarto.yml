@@ -4,6 +4,10 @@
 # extracts, so render it on its own (`quarto render r/01_pull_gfw.qmd`) only
 # when a new pull is intended.
 #
+# 03_review_vessels.qmd needs the GARFO permit lists and the API caches in
+# data/raw/vessel_evidence/. Without them, render 02 and 04 only:
+#   quarto render r/02_build_grid.qmd && quarto render r/04_classify_aggregate.qmd
+#
 # Each qmd's setup chunk sets the knitr root to the repo root, so the paths in
 # r/paths.R resolve however the qmd is run. execute-dir is left at its default
 # because `project` would mean r/, not the repo root.
@@ -15,4 +19,5 @@ project:
   type: default
   render:
     - 02_build_grid.qmd
-    - 03_classify_vessels.qmd
+    - 03_review_vessels.qmd
+    - 04_classify_aggregate.qmd

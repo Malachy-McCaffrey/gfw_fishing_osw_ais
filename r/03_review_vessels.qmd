@@ -1,5 +1,5 @@
 ---
-title: "MM GFW Vessel Classification: False Positives and False Negatives"
+title: "MM GFW Vessel Review: False Positives and False Negatives"
 author: "Malachy McCaffrey"
 date: today
 format: html
@@ -10,10 +10,9 @@ params:
   decisions: ""
   gear: ""
   crosswalk: ""
+  permit_groups: ""
   review: ""
   evidence: ""
-  processed_gfw: ""
-  interim_gfw: ""
 ---
 
 ```{r setup, include=FALSE}
@@ -28,15 +27,21 @@ knitr::opts_knit$set(root.dir = root)
 ## Objective
 
 Identify and account for vessels that GFW misclassifies in the raw VP and AFE
-pulls, following the hybrid approach in `r/scratchpad/vessel_filtering_plan.qmd`:
+pulls, following the hybrid approach in `planning/vessel_filtering_plan.qmd`:
 
 - a **decisions file** (`references/vessel_decisions.csv`, tracked in git) is
   the only file edited by hand; together with `references/vessel_removals.csv`
   it generates the **MMSI crosswalk** that classifies every record
 - a **screen** of the raw data produces review lists
 - the **GFW vessel-identity API** and **NOAA GARFO permit lists** supply evidence
-- **two analysis sets** compare GFW's unprocessed labels (Strict) with the
-  verified classification (Primary)
+
+This is the analyst's step: it needs the GARFO permit lists and the API
+caches, which are not in git, and it is the only step that writes to
+`references/`. `04_classify_aggregate.qmd` then applies the crosswalk to every
+record and builds the two analysis sets, **Strict** (GFW's unprocessed labels)
+and **Primary** (the verified classification), from tracked files alone.
+Re-render this file before 04 whenever an input in `references/` changes;
+04 stops if the crosswalk is out of date.
 
 Two separate problems are handled:
 
@@ -61,6 +66,7 @@ on the raw pull, the GARFO files, the API cache and these files:
 | `references/vessel_gear.csv` | Your gear corrections (input, edited by hand) |
 | `references/garfo_permit_codes.csv` | GARFO permit code meanings (input) |
 | `references/vessel_crosswalk.csv` | Generated each run from the removals, survey dates and decisions -- do not edit |
+| `references/vessel_permit_groups.csv` | Generated each run: GARFO permit group per MMSI, for 04's dual-permit check -- do not edit |
 | `data/processed/vessel_review/vessel_review.csv` | Generated each run: hull/activity candidates, evidence and a suggested decision |
 | `data/processed/vessel_review/gear_review.csv` | Generated each run: fishing vessels whose gear needs checking, with a suggested gear class |
 
@@ -105,13 +111,14 @@ library(gfwr)
 
 source("r/paths.R")
 source("r/gfw_helpers.R")
+source("r/vessel_helpers.R")
 
 # Quarto parameters (header); `params` is read-only while rendering. Run chunk
 # by chunk (Positron, RStudio), `params` is missing or left over from another
 # session, so the header is read from this file directly instead
 qparams <- if (isTRUE(getOption("knitr.in.progress"))) params else {
   hdr <- knitr::knit_params(readLines(
-    file.path(root, "r/03_classify_vessels.qmd"), warn = FALSE))
+    file.path(root, "r/03_review_vessels.qmd"), warn = FALSE))
   lapply(hdr, function(p) p$value)
 }
 paths       <- gfw_paths_with(qparams)
@@ -124,17 +131,8 @@ message("USCG PSIX lookups are ", if (run_psix_api) "ON" else "OFF")
 ## Parameters
 
 ```{r}
-# Date of the raw pull, recorded by 01_pull_gfw.qmd in pull_info.csv.
-# Pulls made before that file existed fall back to the raw VP file's
-# modification date, with a warning.
-pull_date <- if (file.exists(paths$pull_info)) {
-  as.Date(read_csv(paths$pull_info, col_types = cols(.default = col_character()))$pull_date[1])
-} else {
-  warning(paths$pull_info, " not found; using the modification date of ", paths$raw_vp,
-          " as the pull date", call. = FALSE)
-  # local date; as.Date() on a time would use UTC and can shift the day
-  as.Date(format(file.mtime(paths$raw_vp), "%Y-%m-%d"))
-}
+# date of the raw pull (pull_info.csv, written by 01_pull_gfw.qmd)
+pull_date <- read_pull_date(paths)
 pull_date
 
 # screening thresholds -- record any change in the methods
@@ -152,18 +150,19 @@ screen <- list(
 
 api_batch_size <- 20 # Vessel IDs per API request
 
-# Last day the Ørsted survey-date files cover; the run stops if a trip ends
-# later. Move this when a new file arrives
-survey_dates_through <- as.Date("2026-08-31")
+# last day the Ørsted survey-date files cover (r/vessel_helpers.R); move it
+# there when a new file arrives
+survey_dates_through
 ```
 
 ## Read raw data
 
 ```{r}
 # read_gfw() (r/gfw_helpers.R) types the hours, derives Year Month and
-# Development Stage, and snaps Lat/Lon to the 0.01 degree cell_id
-vp  <- read_gfw(paths$raw_vp)
-afe <- read_gfw(paths$raw_afe)
+# Development Stage, and snaps Lat/Lon to the 0.01 degree cell_id; records
+# after analysis_end are dropped
+vp  <- read_gfw(paths$raw_vp)  |> in_analysis_window()
+afe <- read_gfw(paths$raw_afe) |> in_analysis_window()
 
 stopifnot("records with no development stage" =
             !anyNA(vp$`Development Stage`) && !anyNA(afe$`Development Stage`))
@@ -174,13 +173,7 @@ total_afe <- sum(afe$hours)
 
 ```{r}
 # GFW labels per MMSI as of this pull (most frequent, in case of a split)
-gfw_labels <- bind_rows(vp, afe) |>
-  filter(!is.na(MMSI)) |>
-  count(MMSI, `Vessel Type`, `Gear Type`) |>
-  group_by(MMSI) |>
-  slice_max(n, n = 1, with_ties = FALSE) |>
-  ungroup() |>
-  select(MMSI, gfw_vessel_type = `Vessel Type`, gfw_gear_type = `Gear Type`)
+gfw_labels <- gfw_labels_of(vp, afe)
 ```
 
 ```{r}
@@ -232,8 +225,9 @@ website), and record the check in `evidence_ref`. The crosswalk is built as:
   or touch are merged into one window (Departure to Return Date, as given).
   For each survey vessel these windows replace its open-ended removal-list
   row, so its records between surveys -- and before its first listed trip --
-  count as fishing, as do its records after the last day the files cover
-  (`survey_dates_through`). Two kinds of vessel keep their removal-list
+  count as fishing. The files cover trips through `survey_dates_through`
+  (2026-08-31), which is also where the analysis window ends, so no survey
+  vessel's records fall after the files' coverage. Two kinds of vessel keep their removal-list
   row instead: those listed as `Safety`, whose guard and scout work the survey
   files do not date, and any MMSI with a decision.
 - **Precedence.** A decision replaces survey-date and removal-list rows; survey-date
@@ -250,22 +244,6 @@ Gear is not part of the crosswalk. It is corrected separately in
 vessel's gear never touches its hull or charter treatment.
 
 ```{r}
-cw_cols <- c("MMSI", "valid_from", "valid_to", "Vessel_Name", "hull_class",
-             "activity_excluded", "Operation", "Identified_By",
-             "evidence_ref", "gfw_vessel_type", "gfw_gear_type",
-             "pull_date", "Notes")
-decision_cols <- c("decision", "decided_on", cw_cols)
-
-gear_cols <- c("decision", "decided_on", "MMSI", "valid_from", "valid_to",
-               "Vessel_Name", "gear_class", "basis", "evidence_ref",
-               "gfw_gear_type", "pull_date", "Notes")
-
-read_chr <- function(path) {
-  read_csv(path, col_types = cols(.default = col_character()), na = c("", "NA"))
-}
-
-empty_tbl <- function(cols) as_tibble(set_names(rep(list(character()), length(cols)), cols))
-
 # Copies rows marked accept/reject in a generated review sheet into its input
 # file, skipping MMSIs the input file already has, and returns the input file.
 collect_marked <- function(sheet, input, cols) {
@@ -316,149 +294,10 @@ count(gear_inputs, decision)
 ### Build and validate the crosswalk
 
 ```{r}
-lo_date <- as.Date("1900-01-01") # stand-ins for open-ended windows
-hi_date <- as.Date("2100-12-31")
-
-validate_crosswalk <- function(cw) {
-  overlaps <- cw |>
-    mutate(f = coalesce(valid_from, lo_date), t = coalesce(valid_to, hi_date)) |>
-    arrange(MMSI, f) |>
-    group_by(MMSI) |>
-    filter(lead(f) <= t | lag(t) >= f) |>
-    pull(MMSI) |>
-    unique()
-
-  bad_mmsi <- cw |>
-    filter(hull_class != "gear_marker", !grepl("^[0-9]{9}$", MMSI),
-           !MMSI %in% gfw_labels$MMSI) |>
-    pull(MMSI) |>
-    unique()
-
-  problems <- c(
-    if (any(!cw$hull_class %in% c("fishing", "non_fishing", "gear_marker", "unknown")))
-      "unknown hull_class",
-    if (anyNA(cw$activity_excluded))
-      "activity_excluded must be TRUE or FALSE",
-    # other malformed MMSIs must appear exactly as in the pull, which still
-    # catches MMSIs Excel damaged (scientific notation, dropped leading zeros)
-    if (length(bad_mmsi) > 0)
-      paste0("MMSI is not 9 digits and not in the GFW pull: ",
-             paste(bad_mmsi, collapse = ", ")),
-    if (any(cw$valid_from > cw$valid_to, na.rm = TRUE))
-      "valid_from after valid_to",
-    if (length(overlaps) > 0)
-      paste0("overlapping windows for MMSI: ", paste(overlaps, collapse = ", "))
-  )
-
-  if (length(problems) > 0) {
-    stop("Invalid crosswalk (check ", paths$decisions, "):\n  - ",
-         paste(problems, collapse = "\n  - "), call. = FALSE)
-  }
-  invisible(cw)
-}
-
-stage2_start <- as.character(dev_stages$start[dev_stages$stage == "Stage 2"])
-
-removal_list <- read_chr(paths$removals)
-
-# Ørsted survey trips. Names vary across rows ("F/V Heather Lynn",
-# "Cailyn and Maren"), so they are upper-cased, stripped of an F/V prefix and
-# matched to orsted_survey_vessels.csv
-norm_survey_name <- function(x) str_squish(str_remove(toupper(x), "^F/?V\\s+"))
-
-survey_names <- read_chr(paths$survey_vessels)
-survey_files <- Sys.glob(paths$survey_dates)
-
-survey_trips <- survey_files |>
-  map(\(p) read_csv(p, col_types = cols(.default = col_character()),
-                    col_select = c(Project, `Departure Date`, `Return Date`, Vessel),
-                    name_repair = "unique_quiet") |>
-        mutate(source_file = basename(p))) |>
-  list_rbind() |>
-  filter(!is.na(Vessel)) |>              # the files carry blank spacer rows
-  mutate(Vessel = str_split(Vessel, ",\\s*")) |> # some rows list two vessels
-  unnest(Vessel) |>
-  mutate(survey_name = norm_survey_name(Vessel),
-         dep = as.Date(`Departure Date`, optional = TRUE),
-         ret = as.Date(`Return Date`, optional = TRUE)) |>
-  left_join(select(survey_names, survey_name, MMSI, Vessel_Name), by = "survey_name")
-
-survey_problems <- c(
-  if (anyNA(survey_trips$MMSI))
-    paste0("vessel names not in ", paths$survey_vessels, ": ",
-           paste(unique(survey_trips$Vessel[is.na(survey_trips$MMSI)]), collapse = ", ")),
-  if (anyNA(survey_trips$dep) || anyNA(survey_trips$ret))
-    "a Departure or Return Date is not an ISO date (YYYY-MM-DD)",
-  if (any(survey_trips$ret < survey_trips$dep, na.rm = TRUE))
-    "a Return Date is before its Departure Date",
-  if (any(survey_trips$ret > survey_dates_through, na.rm = TRUE))
-    paste0("trips end after survey_dates_through (", survey_dates_through,
-           "); move it in the Parameters chunk")
-)
-if (length(survey_problems) > 0) {
-  stop("Invalid survey dates:\n  - ", paste(survey_problems, collapse = "\n  - "), call. = FALSE)
-}
-
-# survey vessels whose removal-list row is replaced: not Safety vessels (their
-# guard/scout dates are not in the files) and not vessels with a decision
-safety_mmsi <- removal_list$MMSI[removal_list$Operation %in% "Safety"]
-survey_mmsi <- setdiff(unique(survey_trips$MMSI), c(decisions$MMSI, safety_mmsi))
-
-kept_open <- intersect(unique(survey_trips$MMSI), safety_mmsi)
-if (length(kept_open) > 0) {
-  message("Survey dates not applied to Safety vessels (removal-list row kept): ",
-          paste(kept_open, collapse = ", "))
-}
-
-# one window per run of overlapping or touching trips
-survey_windows <- survey_trips |>
-  filter(MMSI %in% survey_mmsi) |>
-  arrange(MMSI, dep) |>
-  group_by(MMSI, Vessel_Name) |>
-  mutate(window = cumsum(as.numeric(dep) >
-                           lag(cummax(as.numeric(ret)), default = -Inf) + 1)) |>
-  group_by(MMSI, Vessel_Name, window) |>
-  summarise(valid_from = min(dep), valid_to = max(ret), trips = n(),
-            projects = paste(sort(unique(na.omit(Project))), collapse = "; "),
-            evidence_ref = paste(sort(unique(source_file)), collapse = "; "),
-            .groups = "drop") |>
-  transmute(MMSI, Vessel_Name,
-            valid_from = as.character(valid_from), valid_to = as.character(valid_to),
-            evidence_ref,
-            Notes = paste0(trips, if_else(trips == 1, " survey trip", " survey trips"),
-                           if_else(projects == "", "", paste0(": ", projects))))
-
-survey_rows <- survey_windows |>
-  mutate(hull_class = "fishing", activity_excluded = "TRUE", Operation = "Survey",
-         Identified_By = "orsted_survey_dates",
-         pull_date = as.character(.env$pull_date)) |>
-  left_join(gfw_labels, by = "MMSI")
-
-removal_rows <- removal_list |>
-  filter(!MMSI %in% decisions$MMSI, !MMSI %in% survey_mmsi) |>
-  transmute(MMSI, Vessel_Name,
-            valid_from = if_else(Scope == "stages_2_3", stage2_start, NA_character_),
-            valid_to   = NA_character_,
-            hull_class = if_else(Scope == "stages_2_3", "fishing", "non_fishing"),
-            activity_excluded = if_else(Scope == "stages_2_3", "TRUE", "FALSE"),
-            Operation, Identified_By,
-            evidence_ref = NA_character_,
-            # the pull the crosswalk was built against (pull_info.csv)
-            pull_date = as.character(.env$pull_date),
-            Notes) |>
-  # GFW's labels for these vessels in that pull
-  left_join(gfw_labels, by = "MMSI")
-
-cw_out <- bind_rows(removal_rows, survey_rows,
-                    decisions |> filter(decision == "accept") |> select(all_of(cw_cols))) |>
-  select(all_of(cw_cols)) |>
-  arrange(MMSI, valid_from)
-
-cw <- cw_out |>
-  mutate(valid_from = as.Date(valid_from),
-         valid_to   = as.Date(valid_to),
-         activity_excluded = as.logical(activity_excluded)) |>
-  validate_crosswalk()
+# removal list, survey dates and accepted decisions -> crosswalk
+# (build_crosswalk() in r/vessel_helpers.R; 04 rebuilds it the same way)
+cw_out <- build_crosswalk(paths, decisions, gfw_labels, pull_date)
+cw     <- type_crosswalk(cw_out, gfw_labels, source = paths$decisions)
 
 write_csv(cw_out, paths$crosswalk, na = "")
 
@@ -477,30 +316,8 @@ gear class is then the accepted correction if there is one, otherwise GFW's
 `Gear Type` through the gear map in `r/gfw_helpers.R`.
 
 ```{r}
-gear <- gear_inputs |>
-  filter(decision == "accept") |>
-  mutate(valid_from = as.Date(valid_from), valid_to = as.Date(valid_to))
+gear <- validate_gear(gear_inputs, source = paths$gear)
 
-gear_overlaps <- gear |>
-  mutate(f = coalesce(valid_from, lo_date), t = coalesce(valid_to, hi_date)) |>
-  arrange(MMSI, f) |>
-  group_by(MMSI) |>
-  filter(lead(f) <= t | lag(t) >= f) |>
-  pull(MMSI) |>
-  unique()
-
-gear_problems <- c(
-  if (any(!gear$gear_class %in% c("MOBILE", "FIXED", "POLE_AND_LINE", "UNRESOLVED")))
-    "gear_class must be MOBILE, FIXED, POLE_AND_LINE or UNRESOLVED",
-  if (any(gear$valid_from > gear$valid_to, na.rm = TRUE))
-    "valid_from after valid_to",
-  if (length(gear_overlaps) > 0)
-    paste0("overlapping windows for MMSI: ", paste(gear_overlaps, collapse = ", "))
-)
-if (length(gear_problems) > 0) {
-  stop("Invalid ", paths$gear, ":\n  - ", paste(gear_problems, collapse = "\n  - "),
-       call. = FALSE)
-}
 
 count(gear, gear_class, basis)
 ```
@@ -1760,227 +1577,32 @@ write_csv(gear_review, gear_review_path, na = "")
 count(gear_review, basis, gear_class)
 ```
 
-## Phase 5: Classify every record
-
-Each record is matched to at most one crosswalk row by MMSI and date. Records
-with no row keep GFW's label. Two analysis sets follow:
-
-| Set | Records kept |
-|---|---|
-| **Strict** | GFW `Vessel Type == FISHING`, nothing else applied: the unprocessed GFW data |
-| **Primary** | Strict, minus the crosswalk's non-fishing hulls, charter and survey windows (removal list, survey dates and accepted decisions) and gear markers, plus the fishing hulls GFW missed (accepted decisions) |
-
-Every crosswalk row counts as verified, so the difference between the two
-sets is the effect of the processing.
-
-Each record's `gear_class` is the accepted correction in `vessel_gear.csv`
-whose window contains its date, otherwise GFW's `Gear Type` through the gear
-map; `gear_source` says which. `gear_class_gfw` keeps GFW's gear for the
-Strict set.
-
-```{r}
-classify <- function(df, cw, gear) {
-  cw_join <- cw |>
-    transmute(MMSI,
-              cw_from = coalesce(valid_from, lo_date),
-              cw_to   = coalesce(valid_to, hi_date),
-              cw_hull = hull_class,
-              cw_excluded = activity_excluded,
-              cw_identified_by = Identified_By)
-
-  gear_join <- gear |>
-    transmute(MMSI,
-              g_from = coalesce(valid_from, lo_date),
-              g_to   = coalesce(valid_to, hi_date),
-              gear_override = gear_class)
-
-  out <- df |>
-    left_join(cw_join, by = join_by(MMSI, between(date, cw_from, cw_to))) |>
-    left_join(gear_join, by = join_by(MMSI, between(date, g_from, g_to)))
-
-  stopifnot("a record matched more than one crosswalk or gear row" = nrow(out) == nrow(df))
-
-  out |>
-    mutate(
-      gfw_fishing = `Vessel Type` %in% "FISHING",
-      is_marker   = cw_hull %in% "gear_marker",
-      nonfish     = cw_hull %in% "non_fishing",
-      added       = cw_hull %in% "fishing" & !gfw_fishing,
-      excluded    = cw_excluded %in% TRUE,
-      in_strict   = gfw_fishing,
-      in_primary  = (gfw_fishing | added) & !is_marker & !nonfish & !excluded,
-      # gear_class_gfw is GFW's gear only, for the Strict set
-      gear_class_gfw = gear_class_of(`Gear Type`),
-      gear_class  = coalesce(gear_override, gear_class_gfw),
-      gear_source = if_else(is.na(gear_override), "gfw", "vessel_gear")) |>
-    select(-cw_from, -cw_to, -g_from, -g_to, -gear_override)
-}
-
-vp_cls  <- classify(vp, cw, gear)
-afe_cls <- classify(afe, cw, gear)
-```
-
-```{r}
-set_cols <- c("in_strict", "in_primary")
-
-bind_rows(VP = vp_cls, AFE = afe_cls, .id = "dataset") |>
-  group_by(dataset) |>
-  summarise(across(all_of(set_cols), \(x) sum(hours[x])),
-            total = sum(hours), .groups = "drop")
-```
-
-```{r}
-write_csv(vp_cls,  file.path(paths$processed_gfw, "gfw_vp_id_classified.csv"),  na = "")
-write_csv(afe_cls, file.path(paths$processed_gfw, "gfw_afe_id_classified.csv"), na = "")
-```
-
-## Phase 6: Account for what is left
-
-### Stage totals and Stage 2 → 3 change by set
-
-```{r}
-to_long <- function(df) {
-  df |>
-    pivot_longer(all_of(set_cols), names_to = "set", values_to = "keep") |>
-    filter(keep) |>
-    mutate(set = factor(str_remove(set, "in_"),
-                        levels = c("strict", "primary")))
-}
-
-stage_by_set <- bind_rows(VP = to_long(vp_cls), AFE = to_long(afe_cls), .id = "dataset") |>
-  group_by(dataset, set, `Development Stage`) |>
-  summarise(hours = sum(hours), n_mmsi = n_distinct(MMSI), .groups = "drop")
-
-stage_by_set
-
-stage_by_set |>
-  select(-n_mmsi) |>
-  pivot_wider(names_from = `Development Stage`, values_from = hours) |>
-  mutate(change_s2_s3_pct = round(100 * (`Stage 3` - `Stage 2`) / `Stage 2`, 1))
-```
-
-### Fishing effort missing for added vessels
-
-GFW computes AFE only for vessels it treats as fishing, so hulls added in
-Primary have presence hours but almost no effort hours. Report this as a known
-undercount. The imputation below applies each stage's effort-to-presence ratio
-(from GFW FISHING vessels kept in Primary, by gear class) to the added
-vessels' presence hours; use it as a sensitivity check only.
-
-```{r}
-added <- vp_cls |> filter(added, in_primary)
-
-kept_gfw <- function(df) filter(df, in_primary, gfw_fishing)
-ratio <- inner_join(
-  vp_cls  |> kept_gfw() |> group_by(`Development Stage`, gear_class) |>
-    summarise(vp = sum(hours), .groups = "drop"),
-  afe_cls |> kept_gfw() |> group_by(`Development Stage`, gear_class) |>
-    summarise(afe = sum(hours), .groups = "drop"),
-  by = c("Development Stage", "gear_class")) |>
-  mutate(afe_per_vp = afe / vp)
-
-added |>
-  group_by(`Development Stage`, gear_class) |>
-  summarise(vp_hours = sum(hours), n_mmsi = n_distinct(MMSI), .groups = "drop") |>
-  left_join(afe_cls |> filter(added, in_primary) |>
-              group_by(`Development Stage`, gear_class) |>
-              summarise(afe_hours_reported = sum(hours), .groups = "drop"),
-            by = c("Development Stage", "gear_class")) |>
-  left_join(select(ratio, `Development Stage`, gear_class, afe_per_vp),
-            by = c("Development Stage", "gear_class")) |>
-  mutate(afe_hours_reported = coalesce(afe_hours_reported, 0),
-         afe_hours_imputed  = vp_hours * afe_per_vp)
-```
-
-### Dual-permitted vessels
+## Phase 5: Permit groups for the analysis
 
 Vessels whose GARFO permits combine for-hire with commercial permits
 (`commercial + for-hire`, `for-hire + open-access commercial`) may fish both
-ways, on different trips. A single gear class cannot represent them, so report
-their hours as a separate group and check whether the Stage 2 → 3 change holds
-with them excluded. Only unique, year-overlapping GARFO matches that PSIX does
-not contradict are grouped; everything else is `no unique GARFO match`.
+ways, on different trips. A single gear class cannot represent them, so
+`04_classify_aggregate.qmd` reports their hours as a separate group and checks
+whether the Stage 2 → 3 change holds without them. Only unique,
+year-overlapping GARFO matches that PSIX does not contradict get a group; every
+other MMSI is `no unique GARFO match` in 04.
+
+The groups are written to `references/vessel_permit_groups.csv` so that 04 can
+run without the GARFO files. Only the MMSI and the permit group are written;
+no GARFO hull, permit number or owner field leaves this step.
 
 ```{r}
-permit_group <- profiles |>
-  transmute(MMSI,
-            permit_group = if_else(garfo_match == "unique_years" & !MMSI %in% not_hull,
-                                   garfo_permit_type, NA_character_))
+permit_groups <- profiles |>
+  filter(garfo_match == "unique_years", !MMSI %in% not_hull) |>
+  transmute(MMSI, permit_group = garfo_permit_type, pull_date = as.character(pull_date)) |>
+  arrange(MMSI)
 
-bind_rows(VP = to_long(vp_cls), AFE = to_long(afe_cls), .id = "dataset") |>
-  left_join(permit_group, by = "MMSI") |>
-  mutate(permit_group = coalesce(permit_group, "no unique GARFO match")) |>
-  group_by(dataset, set, permit_group, `Development Stage`) |>
-  summarise(hours = sum(hours), n_mmsi = n_distinct(MMSI), .groups = "drop") |>
-  pivot_wider(names_from = `Development Stage`, values_from = c(hours, n_mmsi),
-              values_fill = 0)
+write_csv(permit_groups, paths$permit_groups, na = "")
+
+count(permit_groups, permit_group)
 ```
 
-### Cell tables by set
-
-Same zero-filled layout as `02_build_grid.qmd`, with a `set` column, ready
-for the spatial analysis. Each table is zero-filled across every grid cell,
-every development stage or every month of the record, both sets and, in the
-gear tables, all four gear classes:
-
-| File (`data/interim/gfw/`, VP and AFE) | One row per |
-|---|---|
-| `gfw_{vp,afe}_cell_stage_sets.csv` | cell × stage × set |
-| `gfw_{vp,afe}_cell_month_sets.csv` | cell × month × set |
-| `gfw_{vp,afe}_cell_stage_gear_sets.csv` | cell × stage × set × gear class |
-| `gfw_{vp,afe}_cell_month_gear_sets.csv` | cell × month × set × gear class |
-
-The gear tables use the same gear as the gear summary below: GFW's gear
-(`gear_class_gfw`) for Strict, the corrected `gear_class` for Primary.
-`n_mmsi` counts vessels within each row, so it does not sum across gear
-classes or months to a vessel total.
-
-```{r}
-months       <- seq(min(vp$`Year Month`), max(vp$`Year Month`), by = "month")
-gear_classes <- c("MOBILE", "FIXED", "POLE_AND_LINE", "UNRESOLVED")
-time_levels  <- list(`Development Stage` = dev_stages$stage, `Year Month` = months)
-
-cell_sets <- function(df, value, time, by_gear = FALSE) {
-  long <- to_long(df) |>
-    mutate(gear_class = if_else(set == "strict", gear_class_gfw, gear_class))
-  stopifnot("gear class outside the four analysis classes" =
-              all(long$gear_class %in% gear_classes),
-            "time value outside the zero-fill levels" =
-              all(long[[time]] %in% time_levels[[time]]))
-
-  keys   <- c("cell_id", time, "set", if (by_gear) "gear_class")
-  levels <- c(list(cell_id = grid$cell_id), time_levels[time],
-              list(set = levels(long$set)),
-              if (by_gear) list(gear_class = gear_classes))
-
-  out <- long |>
-    group_by(across(all_of(keys))) |>
-    summarise("{value}" := sum(hours), n_mmsi = n_distinct(MMSI), .groups = "drop") |>
-    complete(!!!levels, fill = set_names(list(0, 0L), c(value, "n_mmsi")))
-
-  stopifnot("zero-filled table has the wrong number of rows" =
-              nrow(out) == prod(lengths(levels)),
-            "hours lost in aggregation" =
-              isTRUE(all.equal(sum(out[[value]]), sum(long$hours))))
-  out
-}
-
-cell_tables <- list(
-  cell_stage_sets      = list(time = "Development Stage", by_gear = FALSE),
-  cell_month_sets      = list(time = "Year Month",        by_gear = FALSE),
-  cell_stage_gear_sets = list(time = "Development Stage", by_gear = TRUE),
-  cell_month_gear_sets = list(time = "Year Month",        by_gear = TRUE))
-
-for (tbl in names(cell_tables)) {
-  spec <- cell_tables[[tbl]]
-  write_csv(cell_sets(vp_cls, "vp_hours", spec$time, spec$by_gear),
-            file.path(paths$interim_gfw, paste0("gfw_vp_", tbl, ".csv")))
-  write_csv(cell_sets(afe_cls, "afe_hours", spec$time, spec$by_gear),
-            file.path(paths$interim_gfw, paste0("gfw_afe_", tbl, ".csv")))
-}
-```
-
-## Phase 7: Repeatability checks
+## Phase 6: Repeatability checks
 
 ### GFW label drift
 
@@ -1999,38 +1621,15 @@ decisions |>
            gfw_gear_type_recorded != gfw_gear_type_current)
 ```
 
-### Crosswalk summary for the methods
+## Session info
+
+The R and package versions this render ran with, and renv's report on the
+project library against `renv.lock`.
 
 ```{r}
-touched <- function(df) {
-  df |>
-    filter(!is.na(cw_hull)) |>
-    group_by(cw_hull, cw_excluded) |>
-    summarise(hours = sum(hours), .groups = "drop")
-}
-
-count(cw, hull_class, activity_excluded, name = "rows")
-
-full_join(touched(vp_cls), touched(afe_cls),
-          by = c("cw_hull", "cw_excluded"),
-          suffix = c("_vp", "_afe")) |>
-  mutate(share_vp  = round(hours_vp  / total_vp,  4),
-         share_afe = round(hours_afe / total_afe, 4))
+sessionInfo()
 ```
 
-### Gear summary for the methods
-
-How much of each set's fishing effort has a resolved gear class, and how much
-of it comes from your gear corrections rather than GFW. Strict uses GFW's gear
-(`gear_class_gfw`); Primary uses the corrected `gear_class`.
-
 ```{r}
-to_long(afe_cls) |>
-  mutate(gear_source = if_else(set == "strict", "gfw", gear_source),
-         gear_class  = if_else(set == "strict", gear_class_gfw, gear_class)) |>
-  group_by(set, gear_class, gear_source) |>
-  summarise(afe_hours = round(sum(hours)), .groups = "drop") |>
-  group_by(set) |>
-  mutate(share = round(afe_hours / sum(afe_hours), 3)) |>
-  ungroup()
+renv::diagnostics()
 ```

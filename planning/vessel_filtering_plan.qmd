@@ -1,0 +1,398 @@
+---
+title: "Plan: Correcting Vessel Misclassification in the GFW Data"
+author: "Malachy McCaffrey"
+date: 2026-10-08
+format: html
+---
+
+::: {.callout-note}
+**Historical plan, written 2026-10-08.** It is kept as the design record and
+is not updated. File names predate the October 2026 renames:
+`r/scripts/rmd/gfw_vessel_filtering.qmd` became `r/03_review_vessels.qmd`
+and `r/04_classify_aggregate.qmd`, and `r/scripts/rmd/gfw_fishnet_grid.qmd`
+became `r/02_build_grid.qmd`. The profiling scripts it cites
+(`vclass.R`, `vclass2.R`, `rmprof.R`) were exploratory and are not tracked.
+:::
+
+## What the raw data show
+
+Figures below come from the raw pull (`data/raw/gfw/gfw_vp_id.csv`,
+`gfw_afe_id.csv`, data through 2026-09-30) and `references/vessel_removals.csv`
+(55 vessels). Profiling scripts: `r/scratchpad/vclass.R`, `vclass2.R`,
+`rmprof.R`.
+
+**The removal list is the biggest single correction.** The 55 vessels in
+`references/vessel_removals.csv` hold **69,465 of the 100,662
+apparent-fishing-effort (AFE) hours, or 69%**, and 90,882 vessel-presence (VP)
+hours in Stage 3. They look very different from the rest of the fishing fleet:
+
+| Group | Vessels | Median hours per active day | Median % of hours inside the lease areas | Median share of hours in Stage 3 |
+|---|---|---|---|---|
+| Fishing fleet, not on the list | 1,253 | 2.0 | 2.9 | 0.34 |
+| `orsted_list` | 42 | 7.3 | 50.7 | 0.98 |
+| `behavioural_screen` | 9 | 5.6 | 33.7 | 0.84 |
+
+Most of the false positives are real fishing boats doing guard or survey work,
+which GFW's model reads as fishing.
+
+**False positives and false negatives are two different problems, and they need
+different fixes:**
+
+- **Hull identity**: is this vessel a fishing vessel at all? NOAA *Gloria
+  Michelle* (a research ship) and *Sunnanvik* (cargo) are typed FISHING. Going
+  the other way, *Fleet Queen*, *Triunfo*, *Sea Wind*, *Celtic* and both
+  *Archangel*s are typed OTHER or PASSENGER even though Ørsted lists them as
+  chartered fishing vessels. F/V *Julie G* is typed OTHER.
+- **Activity**: is a real fishing boat fishing at this moment? This covers every
+  charter vessel. It depends on dates, which the current `Scope` column only
+  approximates by stage.
+
+**The fishing-effort data can't recover missed fishing vessels.** GFW only
+calculates fishing effort for vessels it already treats as fishing. Of the
+12,683 vessels in the VP data not typed FISHING, only 14 appear in the AFE file
+at all. So relabelling a missed fishing vessel adds its presence hours, but its
+fishing-effort hours were never calculated. That gap has to be reported as an
+undercount, or bounded, not fixed by relabelling.
+
+**The OTHER category is mostly offshore wind work.** Its share of VP hours jumps
+from about 28% before 2023 to 63–71% after, and its biggest vessels are
+construction and crew-transfer ships (*Eco Edison*, *Seajacks Scylla*,
+*Bokalift*, *Windserve*). Missed fishing vessels are probably a small share of
+hours but could matter for vessel counts. Hours are very concentrated: 36
+vessels account for 50% of the non-FISHING hours, and 280 for 80%, so a
+hours-ordered review is feasible.
+
+**GFW's labels change between pulls.** The comments in the data-pull qmd say
+CYGNUS (MMSI `257394000`) was typed FISHING/INCONCLUSIVE. In the current raw
+data it's typed CARGO, yet it still has 96 h of AFE. Any classification
+therefore needs to record which pull it was based on.
+
+**ONWA33NT looks like AIS-equipped fishing gear, not a vessel.** It appears
+under three non-standard 8-digit MMSIs (`91800312`, `91800534`, `91800557`),
+and the call-sign field holds battery levels (`20%`, `90%`, `40%`). That
+pattern matches net-marker buoys. There are 10 non-9-digit MMSIs like this in
+total, with very few hours. Treat them as a separate "gear marker" class rather
+than as missed fishing vessels.
+
+**Name matching barely helps.** Searching non-FISHING vessels for names starting
+"F/V" finds 3 vessels with 5 hours. And names collide: CYGNUS covers 9 MMSIs
+across three vessel types.
+
+## How the approaches compare
+
+| Approach | Catches false positives | Catches false negatives | Strengths | Weaknesses |
+|---|---|---|---|---|
+| **A. GFW `Vessel Type` as-is** (current) | No | No | Simple; GFW's own label | Gets both directions wrong; changes between pulls |
+| **B. Name rules** | Poorly | Poorly | Cheap | Already shown to fail: the TRADITION and CYGNUS name collisions, and "F/V" names catch only 5 h |
+| **C. MMSI crosswalk**: one row per MMSI with an analyst classification (extends `vessel_removals.csv`) | Yes | Yes | Transparent and auditable; R and Python share it; records evidence and confidence per vessel; can carry date windows | Only as good as the evidence behind each row; manual work; an MMSI can be reused by a different hull |
+| **D. GFW vessel-identity API** (gfwr's vessel-info functions) | Partly | Partly | Can be scripted; shows registry vs. AIS-model disagreement by source and year | GFW's label is built from these same sources, so it won't catch vessels missing from every registry |
+| **E. NOAA GARFO permit lists**, linked by vessel name (they carry no MMSI or call sign) | Weakly | Yes, as leads | Independent evidence; a federal permit is close to proof of a fishing hull; permit codes separate commercial from for-hire and hint at gear | Name is the only link and names collide: only a third of US vessels GFW types FISHING match uniquely, so it misses many; a name match is never confirmation on its own |
+| **F. Behavioural screen** (lease concentration, onset timing, hours per day, burst length) | **Strongest for charter work** | Weak | Uses only data already in hand; flagged 9 vessels Ørsted's list missed; a strict version flags 9 more unlisted vessels | Misses a vessel with a fishing history that took a charter (*Virginia Wave*); proves behaviour, not identity |
+| **G. Machine-learning classifier** | Maybe | Maybe | Scales | Only 55 confirmed vessels to learn from; the data are cell-days without speed or heading; hard to defend in a thesis; risks just relearning GFW's labels |
+| **H. Sensitivity bounds** | Accounts for, doesn't identify | Accounts for, doesn't identify | Makes the uncertainty explicit | Needed whatever else is chosen |
+
+**Recommendation: a hybrid of C, D, E, F and H.**
+
+- The **MMSI crosswalk (C) is the single record of each decision**. It's the
+  right backbone, but only as the place decisions are recorded. On its own it
+  doesn't find anything.
+- **Registries and the GFW identity API (D and E) supply evidence about which
+  vessels are fishing hulls.** These mainly catch false negatives.
+- **The behavioural screen (F) supplies evidence about charter activity.** It
+  mainly catches false positives in activity.
+- **Sensitivity bounds (H) carry whatever stays unresolved into the results.**
+
+Skip the machine-learning classifier for now.
+
+The archived "crosswalk" (`archive/reports/00b-plan-revisions.qmd`; deferred,
+111 AFE and 404 VP MMSIs) only filled in gear type for fishing vessels whose
+GFW gear label was unresolved. This plan widens it to fishing status, activity
+windows and gear class in one table.
+
+## The plan
+
+### Phase 1: Design the crosswalk
+
+Create `references/vessel_crosswalk.csv`, one row per MMSI per validity period,
+with these columns:
+
+- **Identity:** `MMSI`, `valid_from`, `valid_to`, `Vessel_Name`
+- **What GFW said:** `gfw_vessel_type` and `gfw_gear_type` as of the pull
+- **Analyst classification:** `hull_class` (`fishing` / `non_fishing` /
+   `unknown`)
+- **Activity exclusion:** an exclusion with its own date range and `Operation`
+  (safety, survey, research, cargo)
+- **Evidence:** `Identified_By`, `Confidence`, `evidence_ref`, `pull_date`
+
+**`evidence_ref`** records the specific piece of evidence behind a decision,
+so it can be checked later. It appears in `vessel_decisions.csv`,
+`vessel_gear.csv` and the crosswalk. Where `Identified_By` says what kind of
+source it was (e.g. `gfw_registry`, `garfo_name_match`, `orsted_list`) and
+`Confidence` says how strong the evidence is, `evidence_ref` says exactly
+where to find it. It is pre-filled for GARFO matches (e.g. `GARFO hull
+RI5599X; permit 153035`); otherwise it is filled in at decision time -- a
+CGMIX PSIX lookup (official number, call sign, date checked), a reference to
+Ørsted's vessel spreadsheet, a MarineTraffic page, a news article, or a note
+that the decision rests on the analyst's own knowledge. The workflow never
+reads it when assigning sets or gear; it is the audit trail that lets a
+reviewer trace why a vessel was reclassified, and the place to cite the
+outside confirmation that justifies marking a decision `confirmed`.
+
+The crosswalk is **generated on every run** from two tracked inputs, so it can
+always be rebuilt exactly: `references/vessel_removals.csv` and
+`references/vessel_decisions.csv`, the only file edited by hand (crosswalk
+columns plus `decision` and `decided_on`). A decision for a removal-list MMSI
+replaces that vessel's removal-list row. Review decisions are marked in a
+generated review sheet and copied into the decisions file at the start of the
+next run.
+
+**Gear is corrected separately**, in `references/vessel_gear.csv` (tracked,
+edited by hand): one row per MMSI per window with a `gear_class` (MOBILE /
+FIXED / POLE_AND_LINE / UNRESOLVED) and its `basis`, overriding GFW's gear for
+that vessel's records. Keeping it out of the crosswalk means a charter
+vessel's gear can be fixed without touching its exclusion. A generated gear
+review sheet lists every removal-list fishing vessel, plus fishing vessels
+with unresolved GFW gear (FISHING, INCONCLUSIVE, OTHER; 62% of fishing-vessel
+effort in the 2026-10-06 pull) or GARFO permits that disagree with GFW's gear,
+with a suggested gear class from GARFO permits or GFW registry gear. This
+is the MMSI → gear crosswalk the archived plan deferred to the thesis.
+
+The removal-list vessels enter the crosswalk as:
+
+- **Charter vessels:** `hull_class = fishing` plus an activity exclusion,
+  replacing `stages_2_3` with real dates where Ørsted's spreadsheet gives them.
+- **Not fishing hulls** (NOAA *Gloria Michelle*, *Cygnus*, *Sunnanvik*):
+  `hull_class = non_fishing`.
+
+Replacing stage scopes with dates matters. *Provider* loses 4,046 Stage 2 hours
+under the current rule, and *Ashley Ann II* keeps a fishing-like profile all
+the way through (5.3 h/day, 22% in leases). Some of what's being removed is
+probably real fishing.
+
+### Phase 2: Build a screening script
+
+An R script under `r/scripts/` works out one profile per MMSI from the raw
+data: hours by stage, active days, hours per day, % of hours in the leases,
+first and last date, AFE-to-VP ratio, flag, call-sign format and MMSI format.
+It then outputs three ranked review lists:
+
+1. **Possible missed fishing vessels:** non-FISHING, US-flag or with a call
+   sign, not obviously construction or transit, ordered by hours.
+2. **Possible charter activity:** FISHING-typed vessels matching the lease-burst
+   pattern (starting from the 9 unlisted vessels flagged in `rmprof.R`).
+3. **Possible non-fishing vessels typed FISHING:** a research or cargo name,
+   foreign flag with a short burst, or high hours per day with no lease focus.
+
+### Phase 3: Gather external evidence
+
+Ideally by script:
+
+- the GFW vessel-identity API for each candidate, saving registry gear, ship
+  type and length by source and year
+- NOAA GARFO permit lists, linked by vessel name (see below)
+- MarineTraffic or news reports only for vessels still unresolved
+
+#### GARFO name matching
+
+The GARFO permit lists (`data/raw/vessel_evidence/registries/`: annual permit
+files for 2016–2026 and a 2026 HMS/tuna file) identify vessels only by vessel
+name, permit number and hull ID. None of these appears in AIS, so the vessel
+name is the only link. Only vessel fields are read; owner names, telephone
+numbers and addresses are never loaded.
+
+1. **Normalise names** on both sides: upper case, "&" to AND, drop an F/V
+   prefix, strip punctuation and spaces. Skip placeholders (UNNAMED, SKIFF,
+   NONAME, NONE) and names under three characters.
+2. **Grade each match** for every US-flag or unflagged MMSI:
+   - `unique_years`: one GARFO hull and one MMSI share the name, and a permit
+     year falls within the MMSI's AIS activity
+   - `unique_no_year_overlap`: unique, but no permit year overlaps
+   - `ambiguous`: the name belongs to several hulls or several MMSIs
+   - `none`
+3. **Check length** once the GFW API has run: GARFO length against the GFW
+   registry length (within 15%). Agreement upgrades the match; disagreement
+   rejects it.
+4. **Read the permit codes** through `references/garfo_permit_codes.csv`, which
+   maps every fishery-and-code pair to a permit type (commercial, for-hire,
+   recreational, unknown), an optional gear hint, whether a commercial permit
+   is open access and, if so, whether it is for a directed fishery, with a
+   description and NOAA source for each mapping. Category 2 is charter/party
+   in every fishery that has one and tilefish 3 is the private recreational
+   permit; otherwise codes are fishery-specific (e.g. squid/mackerel/butterfish
+   3 = incidental catch, 4 = Atlantic mackerel open access).
+   Recreational-only matches are not treated as fishing vessels; for-hire-only
+   matches suggest `POLE_AND_LINE`, trap permits `FIXED`, dredge and trawl
+   permits `MOBILE`.
+
+   **Open-access rule.** Open-access commercial permits are easy to obtain,
+   so for-hire vessels often hold several without fishing commercially. But
+   some (spiny dogfish, bluefish, tilefish, Handgear B, HMS General) authorise
+   directed commercial fishing, and NOAA allows dual-permitted vessels to run
+   charter and commercial trips on different days. Ignoring open-access
+   permits outright would have relabelled 6,586 of the 8,481 permit-years
+   holding both for-hire and commercial permits as for-hire, 93% of them
+   holding a directed open-access permit. Instead:
+
+   - A vessel with for-hire plus only open-access commercial permits gets its
+     own type, `for-hire + open-access commercial`, rather than being folded
+     into either `for-hire` or `commercial + for-hire`.
+   - With 5 or more open-access commercial permits (the bundle party boats
+     typically hold), `POLE_AND_LINE` is suggested, flagged as possible.
+   - With fewer, the gear class is left blank and the note lists the directed
+     open-access permits, because the vessel may fish commercially on some
+     trips.
+   - Any limited-access commercial permit keeps the vessel `commercial +
+     for-hire`, with the gear class left blank.
+   - An HMS charter/headboat permit endorsed for commercial sale
+     (`CML CHB ENDORSEMENT = Y`) counts as an open-access commercial permit.
+
+   A vessel gets one gear class, so a dual-permitted vessel is misclassified
+   for some of its trips whichever class is chosen. Phase 6 reports
+   dual-permitted vessels as a separate group, to check whether the Stage
+   2 → 3 change holds without them.
+5. **Confirm by hull ID** for the matches that matter. Numeric hull IDs are
+   USCG official numbers: look one up in the USCG PSIX search on CGMIX and
+   check that its call sign matches the AIS call sign. State-registered hull
+   IDs cannot be linked this way.
+
+How well this works, from the raw pull: 33% of US vessels GFW types FISHING
+match uniquely with overlapping permit years, 39% are ambiguous and 23% do not
+match. Among US vessels GFW types non-FISHING, 152 (1.9%) match uniquely; these
+are the leads. Name matching also produces false matches (e.g. ATLANTIC
+EXPLORER, a vessel typed SEISMIC_VESSEL, matches a scallop permit), which is
+why a match alone is never confirmation.
+
+Ask before adding any new package. Downloaded registry files are kept in
+`data/raw/vessel_evidence/registries/`, which git ignores.
+
+### Phase 4: Decide each vessel and record it in the crosswalk
+
+- **Thresholds:** a GFW registry record listing fishing gear, or a GARFO match
+  confirmed through the hull ID and call sign, counts as `confirmed`. A unique
+  GARFO name match with overlapping years and agreeing length is `probable`;
+  without a length to compare it is `possible`. A behavioural match alone is
+  `probable` or `possible`, as in the current scheme.
+- **Review only where there is evidence.** Possible missed fishing vessels
+  reach the review sheet only with a GFW registry record listing fishing gear
+  or a unique GARFO match with commercial or for-hire permits. The rest of
+  that pool is too large to research vessel by vessel; its hours are reported
+  as an upper bound on what the classification may still miss (in the
+  2026-10-06 pull it carries a large share of presence hours but almost no
+  fishing-effort hours, because it is mostly construction and crew vessels).
+  The other lists are short and are reviewed in full.
+- **Check the screen against the list already trusted.** Run it on the 42
+  vessels Ørsted confirmed and report how many it would have caught (its
+  recall). That shows how much to rely on its flags for unconfirmed vessels.
+
+### Phase 5: Apply the crosswalk in the data pipeline
+
+In `r/scripts/rmd/gfw_vessel_filtering.qmd`, join every record to the crosswalk
+on `MMSI` plus a date-range check, giving it `hull_class` and
+`activity_excluded`, plus a `gear_class` from the gear corrections (falling
+back to GFW's gear). Then define three analysis sets.
+
+#### The analysis sets
+
+The three sets are three versions of "the fishing activity", built from the
+same records with different amounts of trust in the corrections. They differ
+on two things: which vessels GFW missed get added, and which errors get
+removed. Each record starts with GFW's label; the crosswalk then adds or
+removes it depending on the confidence of the matching row:
+
+| | Fishing hulls GFW missed (typed OTHER, PASSENGER…) | Non-fishing hulls and charter activity |
+|---|---|---|
+| **Strict** | none added | removed only if `confirmed` |
+| **Primary** | added if `confirmed` | removed if `confirmed` or `probable` |
+| **Inclusive** | added if `confirmed`, `probable` or `possible` | removed if `confirmed` or `probable` |
+
+**Same in all three:**
+
+- **Gear markers** (e.g. ONWA33NT net buoys) are always removed.
+- **`possible` exclusions** (e.g. ESS Pride, Argo and Gulf Stream, from the
+  behavioural screen) are removed from none of the sets. The evidence is too
+  thin to act on, so they are reported as a stated caveat.
+- **Gear class** does not depend on the set; it comes from `vessel_gear.csv`
+  or from GFW.
+
+**What each set is for:**
+
+- **Strict: change GFW as little as possible.** GFW's fishing vessels, minus
+  only the errors that are certain. It never adds a vessel, so no unproven
+  guess enters the data. It answers "is this result just the corrections?",
+  and is the closest to what someone using GFW's data unchanged would see.
+- **Primary: the best estimate, and the headline analysis.** It adds fishing
+  vessels confirmed as missed by GFW, and removes errors judged at least
+  probable -- most of these are charter vessels flagged by the behavioural
+  screen.
+- **Inclusive: the widest plausible fishing fleet.** Primary's removals, plus
+  every missed fishing vessel with any evidence. It shows how far the results
+  could move if the doubtful vessels really are fishing vessels.
+
+**The sets are not strictly nested.** Inclusive contains everything in
+Primary, because it makes the same removals and adds more vessels. But Strict
+is not a subset of Primary: Strict keeps the probable charter activity that
+Primary removes. Strict is conservative about changing GFW's labels, not about
+how much activity it counts, so in Stage 3 it can show more fishing effort
+than Primary because it still includes those charter boats' guard and survey
+work.
+
+**How they behave:**
+
+- **Strict versus Primary mostly changes fishing-effort hours (AFE)**, through
+  the probable charter vessels. In a test run on the 2026-10-06 pull, before
+  any review, the Stage 2 → 3 change in fishing effort was +76% in Strict and
+  +31% in Primary; almost all of that gap is the six probable charter vessels
+  from the behavioural screen.
+- **Primary versus Inclusive mostly changes vessel-presence hours (VP).** GFW
+  calculates fishing effort only for vessels it already treats as fishing, so
+  vessels added because GFW missed them bring presence hours but almost no
+  effort hours. Phase 6 reports that missing effort separately, with an
+  imputed estimate as a sensitivity check.
+
+**How to use them in the thesis:**
+
+- Report Primary as the main result, with Strict and Inclusive alongside it.
+- A finding that holds in all three sets (e.g. the direction of a Stage 2 → 3
+  change, or a hotspot that persists) is robust to the vessel-classification
+  uncertainty.
+- A finding that appears in only one set should be stated as such, naming the
+  vessels behind the difference.
+- The cell × stage tables are written for each set, so the hotspot analysis
+  can be run three times.
+
+**Consequence for the review:** the confidence given to each decision decides
+which sets it affects. For example, a charter exclusion marked `probable`
+changes Primary and Inclusive but not Strict. Choose `confirmed`, `probable`
+or `possible` on the strength of the evidence, and upgrade to `confirmed` only
+with outside confirmation, such as Ørsted's records or a hull-ID and call-sign
+check.
+
+### Phase 6: Account for what's left
+
+- Run the fishnet aggregation (`r/scripts/rmd/gfw_fishnet_grid.qmd`) and the
+  spatial statistics on all three sets, and report how Stage 2 → 3 changes
+  vary across them.
+- For vessels added in the Primary or Inclusive sets, state that they have
+  **no fishing-effort hours** and quantify their presence hours as a known
+  undercount. Optionally, estimate their effort from presence hours using fleet
+  effort-to-presence ratios by gear class, as a sensitivity check only.
+- Report hours and vessel counts by GARFO permit type, for each set and stage,
+  so dual-permitted vessels (`commercial + for-hire`, `for-hire + open-access
+  commercial`) can be set aside to check the Stage 2 → 3 result.
+
+### Phase 7: Make it repeatable
+
+- Re-run the screening script on every new pull, and compare GFW labels against
+  the crosswalk's recorded `gfw_vessel_type`, so label changes like CYGNUS's
+  show up.
+- Record the crosswalk's row count, the counts by confidence level, and the
+  share of hours each one touches, in the data dictionary or methods.
+
+## Decisions to make
+
+1. **Whether the crosswalk replaces `vessel_removals.csv`** or extends it.
+   Replacing it keeps one source of truth, but the R and Python readers need
+   updating.
+2. **Whether dated charter windows can be obtained from Ørsted.** If not, keep
+   stage-based scopes and say so in the methods.
+3. **Which set is the primary analysis.**

@@ -1,0 +1,88 @@
+# Tests for r/analysis_helpers.R (Phase 0 onward)
+
+test_that("season_of() splits Apr–Sep from Oct–Mar", {
+  m <- as.Date(sprintf("2020-%02d-01", 1:12))
+  expect_equal(season_of(m), rep(c("OctMar", "AprSep", "OctMar"), c(3, 6, 3)))
+})
+
+test_that("season_year_of() labels Oct–Mar by the year it ends in", {
+  m <- as.Date(c("2016-01-01", "2016-04-01", "2016-09-01", "2020-10-01",
+                 "2021-03-01", "2026-08-01"))
+  expect_equal(season_year_of(m), c(2016L, 2016L, 2016L, 2021L, 2021L, 2026L))
+})
+
+test_that("the analysis window holds 22 season-years, none spanning two stages", {
+  months <- seq(analysis_start, analysis_end, by = "month")
+  sy <- tibble(month = months, stage = stage_of(months),
+               season = season_of(months), season_year = season_year_of(months))
+  per_sy <- distinct(sy, season, season_year, stage)
+  expect_equal(nrow(distinct(per_sy, season, season_year)), 22)
+  # one stage per season-year: no stratum straddles a stage boundary
+  expect_equal(nrow(per_sy), 22)
+})
+
+test_that("vst_density() is √ for VP and log(x + c) for AFE", {
+  d <- c(0, 0.04, 1)
+  expect_equal(vst_density(d, "vp"), sqrt(d))
+  # c is half the smallest positive density in the surface
+  expect_equal(vst_density(d, "afe"), log(d + 0.02))
+  expect_true(all(is.na(vst_density(c(0, 0), "afe"))))
+  expect_error(vst_density(d, "VP"), "vp or afe")
+})
+
+test_that("rate_std_of() weights every month-of-year equally", {
+  # Jan appears twice with 0 h, every other month once with 6 h: the raw
+  # mean counts Jan twice (66 / 13), the standardised mean once (66 / 12)
+  moy   <- c(1, 1, 2:12)
+  hours <- c(0, 0, rep(6, 11))
+  expect_equal(rate_std_of(hours, moy), 66 / 12)
+  expect_equal(mean(hours), 66 / 13)
+  expect_error(rate_std_of(1:11, 1:11), "all 12 months")
+})
+
+test_that("lease_distance() is negative inside and picks the nearest lease", {
+  sq <- function(x0, y0, s) sf::st_polygon(list(cbind(x0 + c(0, s, s, 0, 0), y0 + c(0, 0, s, s, 0))))
+  leases <- sf::st_sf(project = c("A", "B"),
+                      geometry = sf::st_sfc(sq(0, 0, 4000), sq(10000, 0, 4000), crs = 32619))
+  pts <- sf::st_sf(geometry = sf::st_sfc(
+    sf::st_point(c(1000, 2000)),   # inside A, 1 km from its west edge
+    sf::st_point(c(6000, 2000)),   # 2 km east of A, 4 km west of B
+    sf::st_point(c(9000, 2000)),   # 1 km west of B
+    crs = 32619))
+  out <- lease_distance(pts, leases)
+  expect_equal(out$dist_lease_km, c(-1, 2, 1))
+  expect_equal(out$nearest_project, c("A", "A", "B"))
+})
+
+test_that("dist_band_of() bins [lower, upper) with 8-15 as the reference", {
+  d <- c(-0.5, 0, 1.99, 2, 7.9, 8, 15)
+  band <- dist_band_of(d)
+  expect_equal(as.character(band), c("inside", "0-2", "0-2", "2-4", "4-8", "8-15", "8-15"))
+  expect_equal(levels(band)[1], "8-15")
+  expect_error(dist_band_of(15.1), "15 km")
+})
+
+test_that("lattice_nb() gives queen neighbours on a 3 × 3 block with a hole", {
+  # 3 × 3 block missing its centre: corners have 2 neighbours, edges 4
+  cells <- expand_grid(ix = 0:2, iy = 0:2) |> filter(!(ix == 1 & iy == 1))
+  nb <- lattice_nb(cells$ix, cells$iy, paste(cells$ix, cells$iy))
+  expect_s3_class(nb, "nb")
+  card <- lengths(nb)
+  edge <- (cells$ix == 1) | (cells$iy == 1)
+  # edge midpoints: two corners plus the two diagonal edge midpoints
+  expect_equal(card[edge], rep(4L, 4))
+  # corners: the two edge midpoints beside them (the diagonal is the hole)
+  expect_equal(card[!edge], rep(2L, 4))
+  # symmetric: j in nb[[i]] implies i in nb[[j]]
+  expect_true(spdep::is.symmetric.nb(nb, verbose = FALSE, force = TRUE))
+})
+
+test_that("lattice_nb() matches poly2nb() on unit squares", {
+  cells <- expand_grid(ix = 0:3, iy = 0:2)
+  polys <- sf::st_sfc(purrr::map2(cells$ix, cells$iy, \(x, y)
+    sf::st_polygon(list(cbind(x + c(0, 1, 1, 0, 0), y + c(0, 0, 1, 1, 0))))))
+  expect_true(isTRUE(all.equal(
+    spdep::poly2nb(sf::st_sf(geometry = polys), queen = TRUE, snap = 0),
+    lattice_nb(cells$ix, cells$iy, seq_len(nrow(cells))),
+    check.attributes = FALSE)))
+})

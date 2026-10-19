@@ -302,6 +302,16 @@ the methods with numbers recomputed at render time, not typed.
      bands. Check that assumption (Phase 1, step 7).
    - Add a fleet-size covariate (active MMSIs per gear per month, AOI-wide) as
      a sensitivity term.
+   - Report `rate_fleet` (hours per vessel-month) next to `rate` in every
+     stage-level table. If `rate` rises while `rate_fleet` stays flat, the
+     rise is fleet coverage, not more fishing per vessel. The fleet count can
+     itself respond to the projects: vessels that leave the AOI because of
+     them lower the denominator. A regional MMSI count from outside the AOI
+     avoids that and is preferred if one is available. New adopters are
+     mostly small fixed-gear boats with few hours, so `rate_fleet` falls from
+     that change in fleet mix alone. Never divide by per-cell n_MMSI. That
+     hides avoidance (fewer vessels in a cell is the signal) and leaves every
+     empty cell at 0/0.
    - Never interpret a rise in AOI-total effort as more fishing.
 6. **No external control.** With the within-AOI design (interview decision), an
    AOI-wide change cannot be separated from regional trends, the 2020 COVID
@@ -458,6 +468,8 @@ appropriate family and an exposure offset.
 | Field | Definition | Use |
 |---|---|---|
 | `rate` | hours ÷ months in the time step | Comparing stages |
+| `n_mmsi_fleet` | Distinct Primary MMSIs per gear active anywhere in the AOI in the time step (a regional count if available) | Denominator of `rate_fleet`. Fleet-size sensitivity covariate (caveat 5) |
+| `rate_fleet` | hours ÷ (months × `n_mmsi_fleet`) | Level comparisons only, reported next to `rate` to show AIS uptake (caveat 5). A constant per gear and time step, so it leaves the spatial statistics unchanged. Never a model response; the models take fleet size as a covariate or offset. |
 | `density` | hours ÷ (months × `area_km2`) | Maps, descriptives (h km⁻² month⁻¹) |
 | `log_expo` | `log(months × area_km2)` | Model offset |
 | `y_vst` | Variance-stabilised density (below) | Moran's I, General G, LISA, Gi\* |
@@ -757,6 +769,10 @@ same commit as the code that first uses it.
      zero-filled monthly table. Do not re-aggregate from records, so the
      hours reconcile exactly with 04.
    - Compute `rate_std` for the stage tables (caveat 8).
+   - Compute `n_mmsi_fleet` per gear and time step from the Primary rows of
+     `gfw_{vp,afe}_id_classified.csv`. The cell tables carry no MMSI, and
+     summing per-cell counts would count a vessel once for every cell it
+     visits. Then compute `rate_fleet` for the stage tables (caveat 5).
 4. Compute lease distances. Reproject the three leases to 32619, then derive
    the signed distance, `dist_band` and `nearest_project`.
 5. Compute the domain flags `domain_{gear}` from Stage 1 only.

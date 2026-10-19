@@ -21,3 +21,4 @@ project:
     - 02_build_grid.qmd
     - 03_review_vessels.qmd
     - 04_classify_aggregate.qmd
+    - 05_prepare_analysis.qmd

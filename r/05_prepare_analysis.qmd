@@ -1,0 +1,602 @@
+---
+title: "MM GFW Analysis Tables, Covariates and Weights (Phase 0)"
+author: "Malachy McCaffrey"
+date: today
+format: html
+params:
+  # Path overrides (see r/paths.R); leave blank to use the project paths.
+  interim_gfw: ""
+  processed_gfw: ""
+  grid: ""
+  analysis: ""
+  bathy: ""
+  # THREDDS WCS endpoint for NCEI Coastal Relief Model Vol. 1 (2023, 1 arc-second)
+  crm_wcs: "https://www.ngdc.noaa.gov/thredds/wcs/crm/cudem/crm_vol1_2023.nc"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# run from the repo root (the folder holding renv.lock) so the relative paths
+# in r/paths.R resolve whether the qmd is rendered or run chunk by chunk
+root <- getwd()
+while (!file.exists(file.path(root, "renv.lock")) && dirname(root) != root) root <- dirname(root)
+knitr::opts_knit$set(root.dir = root)
+```
+
+## Objective
+
+Phase 0 of `planning/gfw_analysis_plan.qmd`: turn the zero-filled **Primary**
+cell tables from `04_classify_aggregate.qmd` into one tidy analysis table per
+dataset × time step, keyed on `cell_id`, with every derived field the later
+phases use, plus the static cell covariates (lease distance, gear domains,
+bathymetry) and the spatial weights.
+
+Nothing here re-aggregates hours from records. The stage × season and
+season-year tables are sums of the zero-filled monthly table, so every hour
+reconciles exactly with 04. Records are read only for what the cell tables do
+not carry: vessel counts over strata 04 did not build, and the fleet size
+behind `rate_fleet`.
+
+| Output (`data/processed/analysis/`) | One row per |
+|---|---|
+| `{vp,afe}_stage_gear.csv` | cell × stage × gear |
+| `{vp,afe}_stage_season_gear.csv` | cell × stage × season × gear |
+| `{vp,afe}_season_year_gear.csv` | cell × season-year × gear |
+| `{vp,afe}_month_gear.csv` | cell × month × gear |
+| `cells.gpkg` | cell: geometry (EPSG:32619) and static covariates |
+| `grid_queen.gal`, `grid_weights.rds` | queen contiguity (GAL for GeoDa / PySAL; `listw` objects for R) |
+
+Every output has a `<file>.json` provenance sidecar. The bathymetry subset is
+stored once in `data/sf/bathy/` with its own sidecar, and fetched again only
+if its hash no longer matches. Fields are defined in
+`references/data_dictionary.md`.
+
+The **gate** at the end collects every check. The phase passes only if all of
+them hold.
+
+## Libraries and shared code
+
+```{r}
+library(tidyverse)
+library(sf)
+library(spdep)
+library(terra)
+
+source("r/paths.R")
+source("r/gfw_helpers.R")
+source("r/vessel_helpers.R")
+source("r/analysis_helpers.R")
+
+# Quarto parameters (header); `params` is read-only while rendering. Run chunk
+# by chunk, `params` is missing or left over from another session, so the
+# header is read from this file directly instead
+qparams <- if (isTRUE(getOption("knitr.in.progress"))) params else {
+  hdr <- knitr::knit_params(readLines(
+    file.path(root, "r/05_prepare_analysis.qmd"), warn = FALSE))
+  lapply(hdr, function(p) p$value)
+}
+paths <- gfw_paths_with(qparams)
+
+set.seed(42) # workflow-wide seed (plan, FAIR); nothing here is random yet
+
+crs_utm  <- 32619 # WGS 84 / UTM zone 19N, the grid's CRS
+datasets <- c("vp", "afe")
+
+# every check the Phase 0 gate needs, filled in as the steps run
+gate <- tibble(check = character(), pass = logical())
+check <- function(name, ok) {
+  gate <<- add_row(gate, check = name, pass = isTRUE(ok))
+  invisible(ok)
+}
+```
+
+## Step 1: read the gear tables
+
+The four gear tables per dataset (stage and month, both sets). Primary is
+the analysis set. Its `UNRESOLVED` rows are structural zeros, since every
+Primary record has a resolved gear class, so they are dropped once they are
+shown to hold no hours. Strict stays in its own object; the Strict
+sensitivity runs in `13` read it from `data/interim/` directly.
+
+```{r}
+gear_table_path <- function(dataset, time) {
+  file.path(paths$interim_gfw, sprintf("gfw_%s_cell_%s_gear_sets.csv", dataset, time))
+}
+
+read_gear_table <- function(dataset, time) {
+  read_csv(gear_table_path(dataset, time),
+           col_types = cols(cell_id = "c", set = "c", gear_class = "c",
+                            n_mmsi = "i", .default = "?")) |>
+    rename(hours = paste0(dataset, "_hours"))
+}
+
+interim <- list()
+for (ds in datasets) for (tm in c("stage", "month")) {
+  interim[[ds]][[tm]] <- read_gear_table(ds, tm)
+}
+
+unresolved <- map_dfr(datasets, \(ds) map_dfr(c("stage", "month"), \(tm)
+  interim[[ds]][[tm]] |>
+    filter(set == "primary", gear_class == "UNRESOLVED") |>
+    summarise(dataset = ds, table = tm, hours = sum(hours))))
+unresolved
+check("Primary UNRESOLVED rows hold 0 h", all(unresolved$hours == 0))
+
+primary <- map(interim, \(d) map(d, \(t) filter(t, set == "primary", gear_class %in% analysis_gears) |>
+                                   select(-set)))
+strict  <- map(interim, \(d) map(d, \(t) filter(t, set == "strict") |> select(-set)))
+```
+
+## Step 2: grid attributes and the calendar
+
+The calendar is one row per month of the analysis window, with every time
+label the tables need. The month counts per stratum (`months`) come from it.
+
+```{r}
+grid <- st_read(paths$grid, quiet = TRUE)
+stopifnot("grid is not in EPSG:32619" = st_crs(grid)$epsg == crs_utm)
+
+# centroid coordinates in km, for the spatial fields and the SPDE mesh
+ctr <- st_coordinates(st_centroid(st_geometry(grid)))
+grid_attr <- st_drop_geometry(grid) |>
+  transmute(cell_id, area_km2, aoi_class,
+            x_km = ctr[, "X"] / 1000, y_km = ctr[, "Y"] / 1000)
+
+calendar <- tibble(year_month = seq(analysis_start, analysis_end, by = "month")) |>
+  mutate(stage       = stage_of(year_month),
+         season      = season_of(year_month),
+         season_year = season_year_of(year_month),
+         moy         = as.integer(format(year_month, "%m")),
+         year        = as.integer(format(year_month, "%Y")),
+         t_index     = row_number())
+
+stopifnot("stage lengths differ from dev_stages" =
+            identical(as.integer(table(calendar$stage)[dev_stages$stage]), dev_stages$months))
+
+# months per stratum, for `rate`, `density` and `log_expo`
+months_stage        <- count(calendar, stage, name = "months")
+months_stage_season <- count(calendar, stage, season, name = "months")
+months_season_year  <- count(calendar, stage, season, season_year, name = "months")
+
+months_stage_season |> pivot_wider(names_from = season, values_from = months)
+
+# no stage × season stratum or season-year spans two stages
+check("no season-year spans two stages",
+      nrow(months_season_year) == nrow(distinct(calendar, season, season_year)))
+check("22 season-years", nrow(months_season_year) == 22)
+check("monthly tables cover every month of the window",
+      all(map_lgl(primary, \(d) setequal(unique(d$month$`Year Month`), calendar$year_month))))
+```
+
+## Step 3: time-step tables and derived fields
+
+### The monthly table and its sums
+
+```{r}
+month_tbl <- map(primary, \(d) d$month |>
+  rename(year_month = `Year Month`) |>
+  left_join(calendar, by = "year_month"))
+
+# stage × season and season-year: sums of the zero-filled monthly table
+sum_months <- function(m, keys) {
+  m |> group_by(across(all_of(c("cell_id", "gear_class", keys)))) |>
+    summarise(hours = sum(hours), .groups = "drop")
+}
+
+stage_tbl <- map(primary, \(d) d$stage |> rename(stage = `Development Stage`))
+stage_season_tbl <- map(month_tbl, sum_months, keys = c("stage", "season"))
+season_year_tbl  <- map(month_tbl, sum_months, keys = c("stage", "season", "season_year"))
+
+# 04's stage table must equal the monthly table summed by stage, cell by cell
+stage_vs_month <- map2_dbl(stage_tbl, month_tbl, \(s, m)
+  s |> inner_join(sum_months(m, "stage"), by = c("cell_id", "gear_class", "stage")) |>
+    with(max(abs(hours.x - hours.y))))
+stage_vs_month
+check("stage table = monthly table summed by stage, every cell", all(stage_vs_month < 1e-6))
+```
+
+### Records: vessel counts and fleet size
+
+The cell tables carry `n_mmsi` per row, but distinct counts do not sum, so
+stage × season and season-year vessel counts come from the Primary records.
+The records are first shown to reproduce the monthly table exactly.
+
+`n_mmsi_fleet` is the number of distinct Primary MMSIs per gear active
+anywhere in the AOI in the time step (caveat 5). It is an AOI count, so it can
+itself respond to the projects (vessels leaving the AOI lower it); a regional
+count from outside the AOI would avoid that and stays an open item.
+
+```{r}
+records_path <- \(ds) file.path(paths$processed_gfw, sprintf("gfw_%s_id_classified.csv", ds))
+
+records <- map(set_names(datasets), \(ds)
+  read_csv(records_path(ds), col_types = cols(.default = "c")) |>
+    filter(in_primary == "TRUE") |>
+    transmute(cell_id, MMSI, gear_class, hours = as.numeric(hours),
+              year_month = as.Date(`Year Month`)) |>
+    left_join(calendar, by = "year_month"))
+
+rec_vs_month <- map2_dbl(records, month_tbl, \(r, m)
+  m |> full_join(sum_months(r, "year_month"), by = c("cell_id", "gear_class", "year_month")) |>
+    mutate(across(starts_with("hours"), \(x) coalesce(x, 0))) |>
+    with(max(abs(hours.x - hours.y))))
+rec_vs_month
+check("Primary records reproduce the monthly table, every cell × month × gear",
+      all(rec_vs_month < 1e-6))
+
+# per-cell vessel counts for the strata 04 did not build
+n_mmsi_cell <- function(r, keys) {
+  r |> group_by(across(all_of(c("cell_id", "gear_class", keys)))) |>
+    summarise(n_mmsi = n_distinct(MMSI), .groups = "drop")
+}
+
+# AOI-wide fleet size per gear and time step
+n_mmsi_fleet <- function(r, keys) {
+  r |> group_by(across(all_of(c("gear_class", keys)))) |>
+    summarise(n_mmsi_fleet = n_distinct(MMSI), .groups = "drop")
+}
+
+# the record counts must agree with 04's per-cell stage counts
+mmsi_vs_stage <- map2_lgl(records, stage_tbl, \(r, s)
+  s |> left_join(n_mmsi_cell(r, "stage"), by = c("cell_id", "gear_class", "stage")) |>
+    with(all(n_mmsi.x == coalesce(n_mmsi.y, 0L))))
+check("record vessel counts match 04's cell × stage counts", all(mmsi_vs_stage))
+
+map_dfr(records, \(r) n_mmsi_fleet(r, "stage"), .id = "dataset") |>
+  pivot_wider(names_from = stage, values_from = n_mmsi_fleet)
+```
+
+### Derived fields
+
+| Field | Definition |
+|---|---|
+| `months` | months in the stratum |
+| `rate` | `hours / months` |
+| `rate_fleet` | `hours / (months × n_mmsi_fleet)`; level comparisons only |
+| `density` | `hours / (months × area_km2)`, h km⁻² month⁻¹ |
+| `log_expo` | `log(months × area_km2)`, the model offset |
+| `y_vst` | √`density` (VP) or `log(density + c)` (AFE), per surface |
+| `rate_std` | stage tables: mean of the 12 month-of-year mean rates |
+
+A surface, for `y_vst`, is one dataset × gear × time-step value: one map.
+
+```{r}
+add_derived <- function(tbl, ds, surface_keys) {
+  tbl |>
+    left_join(grid_attr, by = "cell_id") |>
+    mutate(rate     = hours / months,
+           rate_fleet = if_else(n_mmsi_fleet > 0, hours / (months * n_mmsi_fleet), NA_real_),
+           density  = hours / (months * area_km2),
+           log_expo = log(months * area_km2)) |>
+    group_by(across(all_of(c("gear_class", surface_keys)))) |>
+    mutate(y_vst = vst_density(density, ds)) |>
+    ungroup()
+}
+
+# season-standardised stage rate, per cell × gear × stage (caveat 8)
+rate_std_tbl <- map(month_tbl, \(m) m |>
+  group_by(cell_id, gear_class, stage) |>
+  summarise(rate_std = rate_std_of(hours, moy), .groups = "drop"))
+
+analysis <- list()
+for (ds in datasets) {
+  r <- records[[ds]]
+  analysis[[ds]] <- list(
+    stage = stage_tbl[[ds]] |>
+      left_join(months_stage, by = "stage") |>
+      left_join(n_mmsi_fleet(r, "stage"), by = c("gear_class", "stage")) |>
+      left_join(rate_std_tbl[[ds]], by = c("cell_id", "gear_class", "stage")) |>
+      add_derived(ds, "stage"),
+    stage_season = stage_season_tbl[[ds]] |>
+      left_join(months_stage_season, by = c("stage", "season")) |>
+      left_join(n_mmsi_cell(r, c("stage", "season")), by = c("cell_id", "gear_class", "stage", "season")) |>
+      left_join(n_mmsi_fleet(r, c("stage", "season")), by = c("gear_class", "stage", "season")) |>
+      add_derived(ds, c("stage", "season")),
+    season_year = season_year_tbl[[ds]] |>
+      left_join(months_season_year, by = c("stage", "season", "season_year")) |>
+      left_join(n_mmsi_cell(r, c("season", "season_year")), by = c("cell_id", "gear_class", "season", "season_year")) |>
+      left_join(n_mmsi_fleet(r, c("season", "season_year")), by = c("gear_class", "season", "season_year")) |>
+      add_derived(ds, c("season", "season_year")),
+    month = month_tbl[[ds]] |>
+      mutate(months = 1L) |>
+      left_join(n_mmsi_fleet(r, "year_month"), by = c("gear_class", "year_month")) |>
+      add_derived(ds, "year_month"))
+
+  # zero-filled strata: no vessel record means 0 vessels, not missing
+  analysis[[ds]] <- map(analysis[[ds]], \(t) mutate(t,
+    across(any_of(c("n_mmsi", "n_mmsi_fleet")), \(x) coalesce(as.integer(x), 0L))))
+}
+
+# season-standardised vs raw AOI stage rates, the caveat 8 table, recomputed
+map_dfr(analysis, \(d) d$stage |>
+  group_by(gear_class, stage) |>
+  summarise(bias_pct = round(100 * (sum(rate) / sum(rate_std) - 1), 1), .groups = "drop"),
+  .id = "dataset") |>
+  pivot_wider(names_from = stage, values_from = bias_pct)
+```
+
+## Step 4: lease distances
+
+Signed distance from each cell centroid to the nearest lease boundary
+(negative inside a lease), the BAG distance band, and the nearest project.
+The leases are stored in EPSG:3857 and reprojected first.
+
+```{r}
+leases <- map_dfr(paths$leases, \(f) st_read(f, quiet = TRUE) |>
+  st_transform(crs_utm) |>
+  summarise(geometry = st_union(geometry)) |>
+  mutate(project = tools::file_path_sans_ext(basename(f))))
+
+round(set_names(as.numeric(st_area(leases)) / 1e6, leases$project), 1)
+
+cell_dist <- lease_distance(st_centroid(st_geometry(grid)) |> st_sf(), leases) |>
+  mutate(cell_id = grid$cell_id,
+         dist_band = dist_band_of(dist_lease_km), .before = 1)
+
+count(cell_dist, dist_band)
+count(cell_dist, nearest_project)
+
+check("every cell within 15 km of a lease", max(cell_dist$dist_lease_km) <= 15)
+check("at least 280 cells in every distance band", min(table(cell_dist$dist_band)) >= 280)
+```
+
+## Step 5: gear domains
+
+Each gear's model domain is the cells where it was active in **Stage 1**,
+never the whole series: a domain drawn from all stages would drop cells
+abandoned because of the projects, conditioning on the outcome (caveat 13).
+The domain is per dataset, since a cell can see VP but no AFE.
+
+```{r}
+domains <- map_dfr(analysis, \(d) d$stage |>
+  filter(stage == "Stage 1") |>
+  transmute(cell_id, gear_class, domain = hours > 0), .id = "dataset")
+
+domains |> group_by(dataset, gear_class) |> summarise(cells = sum(domain), .groups = "drop")
+
+domain_wide <- domains |>
+  mutate(col = paste("domain", dataset, str_to_lower(gear_class), sep = "_")) |>
+  select(cell_id, col, domain) |>
+  pivot_wider(names_from = col, values_from = domain)
+
+for (ds in datasets) {
+  analysis[[ds]] <- map(analysis[[ds]], \(t) t |>
+    left_join(filter(domains, dataset == ds) |> select(-dataset),
+              by = c("cell_id", "gear_class")))
+}
+```
+
+## Step 6: bathymetry
+
+NCEI Coastal Relief Model Vol. 1 (2023, 1 arc-second, EGM2008 metres,
+negative down), fetched as a GeoTIFF subset over the grid's bounding box plus
+5 km through THREDDS WCS. The stored file is reused while its hash matches
+the sidecar written when it was fetched.
+
+Per-cell covariates, all area-weighted (`exact = TRUE`):
+
+- `depth_m`, `depth_sd_m`: mean and SD of depth at 30 m (SD is a rugosity
+  proxy);
+- `slope_deg`: mean slope at 30 m;
+- `bpi_broad`: broad-scale bathymetric position index, elevation minus its
+  mean in a 1–3 km annulus, so **positive = ridges and banks, negative =
+  troughs**. It is computed on a 150 m aggregate, because a 3 km annulus at
+  30 m is a 201 × 201 window over millions of pixels, and a 1–3 km index
+  gains nothing from 30 m detail.
+
+```{r}
+# grid bounding box + 5 km, in lon/lat, rounded outward to 0.01°
+bb <- st_bbox(st_transform(st_buffer(st_as_sfc(st_bbox(grid)), 5000), 4326))
+bb <- c(floor(bb[c("xmin", "ymin")] * 100), ceiling(bb[c("xmax", "ymax")] * 100)) / 100
+crm_url <- paste0(qparams$crm_wcs,
+                  "?service=WCS&version=1.0.0&request=GetCoverage&coverage=z",
+                  "&format=GeoTIFF_Float&bbox=",
+                  paste(bb[c("xmin", "ymin", "xmax", "ymax")], collapse = ","))
+
+bathy_side <- paste0(paths$bathy, ".json")
+bathy_ok <- file.exists(paths$bathy) && file.exists(bathy_side) &&
+  identical(jsonlite::read_json(bathy_side)$output_sha256, file_sha256(paths$bathy)) &&
+  identical(jsonlite::read_json(bathy_side)$request_url, crm_url)
+
+if (!bathy_ok) {
+  dir.create(dirname(paths$bathy), recursive = TRUE, showWarnings = FALSE)
+  download.file(crm_url, paths$bathy, mode = "wb", quiet = TRUE)
+  write_provenance(paths$bathy, inputs = character(), extra = list(
+    source = "NOAA NCEI U.S. Coastal Relief Model Vol. 1 (Northeast Atlantic), 2023, 1 arc-second",
+    request_url = crm_url, accessed = format(Sys.Date()),
+    vertical_datum = "EGM2008 (EPSG:3855), metres, positive up",
+    licence = "US Government work, public domain"))
+}
+message(if (bathy_ok) "Bathymetry: stored subset reused (hash matches)" else "Bathymetry: subset fetched")
+
+crm <- rast(paths$bathy)
+crm
+stopifnot("CRM subset is not lon/lat WGS 84" = same.crs(crm, "EPSG:4326"))
+
+# elevation (positive up) in UTM at 30 m; depth = -elevation
+utm_template <- rast(ext(project(crm, paste0("EPSG:", crs_utm))), resolution = 30,
+                     crs = paste0("EPSG:", crs_utm))
+elev  <- project(crm, utm_template, method = "bilinear")
+depth <- -elev
+slope <- terrain(elev, v = "slope", unit = "degrees")
+
+# broad BPI on a 150 m aggregate with a 1–3 km annulus
+elev150 <- aggregate(elev, fact = 5, fun = "mean", na.rm = TRUE)
+r_out <- ceiling(3000 / res(elev150)[1])
+dd <- outer(seq(-r_out, r_out), seq(-r_out, r_out), \(i, j) sqrt(i^2 + j^2)) * res(elev150)[1]
+annulus <- (dd >= 1000 & dd <= 3000) * 1
+# annulus mean = sum of elevations / number of non-missing pixels in the
+# annulus, so pixels near the raster edge average over what is there
+ann_sum <- focal(elev150, w = annulus, fun = "sum", na.rm = TRUE)
+ann_n   <- focal(!is.na(elev150), w = annulus, fun = "sum", na.rm = TRUE)
+bpi <- elev150 - ann_sum / ann_n
+
+# area-weighted per-cell summaries
+cells_v <- vect(select(grid, cell_id))
+wmean <- \(x, w) sum(x * w) / sum(w)
+wsd   <- \(x, w) sqrt(sum(w * (x - wmean(x, w))^2) / sum(w))
+
+fine30 <- c(depth, slope)
+names(fine30) <- c("depth", "slope")
+names(bpi) <- "bpi"
+ex30 <- extract(fine30, cells_v, exact = TRUE) |>
+  as_tibble() |> filter(!is.na(depth), !is.na(slope))
+ex150 <- extract(bpi, cells_v, exact = TRUE) |>
+  as_tibble() |> filter(!is.na(bpi))
+
+bathy_cells <- ex30 |>
+  group_by(ID) |>
+  summarise(depth_m = wmean(depth, fraction), depth_sd_m = wsd(depth, fraction),
+            slope_deg = wmean(slope, fraction), .groups = "drop") |>
+  full_join(ex150 |> group_by(ID) |>
+              summarise(bpi_broad = wmean(bpi, fraction), .groups = "drop"), by = "ID") |>
+  mutate(cell_id = grid$cell_id[ID], .keep = "unused")
+
+summary(select(bathy_cells, -cell_id))
+
+check("every cell has depth, slope and BPI",
+      nrow(bathy_cells) == nrow(grid) && !anyNA(bathy_cells))
+check("every depth is positive (the AOI does not touch land)", all(bathy_cells$depth_m > 0))
+check("depths within the shelf range (< 200 m)", all(bathy_cells$depth_m < 200))
+```
+
+## Step 7: spatial weights
+
+Queen contiguity built twice, from the cell polygons (`poly2nb()`, as in 02)
+and from the integer lattice (`lattice_nb()`), and checked to be identical,
+so no floating-point sliver in the geometry has added or dropped a link.
+
+- `lw_W`: row-standardised, for Moran's I and local Moran's I.
+- `lw_B_self`: binary with the cell itself included, for Gi\*. General G's
+  binary weights without self are built in Phase 2.
+
+```{r}
+# row.names = cell_id, so the GAL file and the nb object name cells by key
+nb_poly    <- poly2nb(grid, row.names = grid$cell_id, queen = TRUE, snap = 0)
+nb_lattice <- lattice_nb(grid$ix, grid$iy, grid$cell_id)
+
+summary(card(nb_poly))
+
+check("poly2nb and lattice neighbours identical",
+      isTRUE(all.equal(nb_poly, nb_lattice, check.attributes = FALSE)))
+check("one connected component", n.comp.nb(nb_poly)$nc == 1)
+check("no islands", all(card(nb_poly) > 0))
+check("mean neighbour count above 7.7", mean(card(nb_poly)) > 7.7)
+
+lw_W      <- nb2listw(nb_poly, style = "W")
+lw_B_self <- nb2listw(include.self(nb_poly), style = "B")
+```
+
+## Step 8: write the outputs
+
+Column order: keys first, then hours and vessel counts, exposure and rates,
+then the cell attributes. Dates are ISO 8601 and the CSVs UTF-8.
+
+```{r}
+dir.create(paths$analysis, recursive = TRUE, showWarnings = FALSE)
+
+pull_date <- as.character(read_pull_date(paths))
+key_cols <- list(stage = "stage", stage_season = c("stage", "season"),
+                 season_year = c("stage", "season", "season_year"),
+                 month = c("year_month", "stage", "season", "season_year", "moy", "year", "t_index"))
+value_cols <- c("hours", "n_mmsi", "n_mmsi_fleet", "months", "rate", "rate_std",
+                "rate_fleet", "density", "log_expo", "y_vst", "domain",
+                "area_km2", "aoi_class", "x_km", "y_km")
+
+inputs_of <- \(ds) c(gear_table_path(ds, "stage"), gear_table_path(ds, "month"),
+                     records_path(ds), paths$grid)
+
+written <- tibble(file = character(), rows = integer())
+for (ds in datasets) for (tm in names(key_cols)) {
+  out <- analysis[[ds]][[tm]] |>
+    select(cell_id, gear_class, all_of(key_cols[[tm]]), any_of(value_cols)) |>
+    arrange(gear_class, across(all_of(key_cols[[tm]][1])), cell_id)
+  f <- file.path(paths$analysis, sprintf("%s_%s_gear.csv", ds, tm))
+  write_csv(out, f, na = "")
+  write_provenance(f, inputs_of(ds), extra = list(
+    dataset = ds, time_step = tm, set = "primary", pull_date = pull_date,
+    rows = nrow(out), columns = names(out)))
+  written <- add_row(written, file = basename(f), rows = nrow(out))
+}
+
+cells <- grid |>
+  select(cell_id, ix, iy, area_km2, aoi_frac, aoi_class) |>
+  left_join(select(grid_attr, cell_id, x_km, y_km), by = "cell_id") |>
+  left_join(cell_dist, by = "cell_id") |>
+  left_join(domain_wide, by = "cell_id") |>
+  left_join(bathy_cells, by = "cell_id") |>
+  mutate(dist_band = as.character(dist_band))
+f_cells <- file.path(paths$analysis, "cells.gpkg")
+st_write(cells, f_cells, delete_dsn = TRUE, quiet = TRUE)
+write_provenance(f_cells, c(paths$grid, paths$leases, paths$bathy, unlist(map(datasets, inputs_of))),
+                 extra = list(rows = nrow(cells), crs = "EPSG:32619",
+                              columns = names(st_drop_geometry(cells)),
+                              dist_band_reference = "8-15"))
+
+# weights: GAL with cell_id as the region id, plus the R objects
+f_gal <- file.path(paths$analysis, "grid_queen.gal")
+write.nb.gal(nb_poly, f_gal, oldstyle = FALSE, shpfile = "cells", ind = "cell_id")
+write_provenance(f_gal, paths$grid, extra = list(type = "queen contiguity",
+                 region_id = "cell_id, in cells.gpkg row order"))
+f_w <- file.path(paths$analysis, "grid_weights.rds")
+saveRDS(list(nb = nb_poly, lw_W = lw_W, lw_B_self = lw_B_self, cell_id = grid$cell_id), f_w)
+write_provenance(f_w, paths$grid, extra = list(
+  objects = c("nb: queen nb", "lw_W: row-standardised", "lw_B_self: binary, self-included"),
+  spdep = as.character(packageVersion("spdep"))))
+
+written
+```
+
+## Gate
+
+Hours in each analysis table equal hours in 04's interim table per gear ×
+time step; the stage × season and season-year tables sum to the monthly
+totals; no stratum spans two stages; the tables have one row per cell for
+every stratum; and the weights and covariates pass their checks.
+
+```{r}
+interim_total <- function(ds, tm) {
+  interim[[ds]][[tm]] |> filter(set == "primary", gear_class %in% analysis_gears) |>
+    mutate(stage = if (tm == "stage") `Development Stage` else stage_of(`Year Month`)) |>
+    group_by(gear_class, stage) |> summarise(hours = sum(hours), .groups = "drop")
+}
+
+for (ds in datasets) {
+  ref <- interim_total(ds, "stage")
+  ref_m <- interim_total(ds, "month")
+  check(sprintf("%s: interim stage and month tables agree by gear × stage", ds),
+        isTRUE(all.equal(ref$hours, ref_m$hours)))
+  for (tm in names(key_cols)) {
+    got <- analysis[[ds]][[tm]] |> group_by(gear_class, stage) |>
+      summarise(hours = sum(hours), .groups = "drop") |>
+      right_join(ref, by = c("gear_class", "stage"))
+    check(sprintf("%s %s: hours = interim, per gear × stage", ds, tm),
+          isTRUE(all.equal(got$hours.x, got$hours.y)))
+  }
+  n_strata <- c(stage = nrow(months_stage), stage_season = nrow(months_stage_season),
+                season_year = nrow(months_season_year), month = nrow(calendar))
+  for (tm in names(n_strata)) {
+    t <- analysis[[ds]][[tm]]
+    check(sprintf("%s %s: one row per cell × stratum × gear", ds, tm),
+          nrow(t) == nrow(grid) * n_strata[[tm]] * length(analysis_gears) &&
+            !anyNA(select(t, -any_of(c("y_vst", "rate_fleet", "rate_std")))))
+  }
+}
+
+gate |> mutate(pass = if_else(pass, "pass", "FAIL")) |> knitr::kable()
+
+stopifnot("Phase 0 gate failed; see the table above" = all(gate$pass))
+```
+
+## Session info
+
+The R and package versions this render ran with, and renv's report on the
+project library against `renv.lock`.
+
+```{r}
+sessionInfo()
+```
+
+```{r}
+renv::diagnostics()
+```

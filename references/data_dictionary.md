@@ -347,6 +347,75 @@ Raw-data tables, written by 02, all vessel types and no classification:
 `_id` suffix so they are not mistaken for fishing-vessel totals. They stay
 in `data/interim/` alongside the fishing-vessel tables.
 
+### `data/processed/analysis/` analysis tables
+
+Written by `r/05_prepare_analysis.qmd` (Phase 0 of
+`planning/gfw_analysis_plan.qmd`) from the **Primary** gear tables. One table
+per dataset × time step, zero-filled across every cell, stratum and the three
+resolved gear classes (`UNRESOLVED` holds no Primary hours and is dropped).
+The stage × season and season-year tables are sums of the monthly table, so
+hours reconcile exactly with 04. Every file has a `<file>.json` provenance
+sidecar (input SHA-256s, git commit, `renv.lock` hash, R version, seed,
+`pull_date`).
+
+| File (VP and AFE) | One row per |
+|---|---|
+| `{vp,afe}_stage_gear.csv` | cell × stage × gear |
+| `{vp,afe}_stage_season_gear.csv` | cell × stage × season × gear |
+| `{vp,afe}_season_year_gear.csv` | cell × season-year × gear |
+| `{vp,afe}_month_gear.csv` | cell × month × gear |
+
+| Field | Description |
+|---|---|
+| `cell_id`, `gear_class` | Grid key; `MOBILE`, `FIXED` or `POLE_AND_LINE` |
+| `stage` | `Stage 1`–`Stage 3` (every table) |
+| `season` | `AprSep` or `OctMar`. Both stage boundaries fall between seasons |
+| `season_year` | Apr–Sep: its calendar year. Oct–Mar: the year it ends in (Oct 2020 – Mar 2021 is 2021). The first (2016 `OctMar`, 3 months) and last (2026 `AprSep`, 5 months) are partial |
+| `year_month`, `moy`, `year`, `t_index` | Monthly table only: first of month, month of year, year, month index from 1 (2016-01) |
+| `hours` | Sum of VP or AFE hours |
+| `n_mmsi` | Distinct MMSIs in the cell and stratum. Does not sum across rows |
+| `n_mmsi_fleet` | Distinct Primary MMSIs of the gear active anywhere in the AOI in the stratum. An AOI count, so it can itself respond to the projects |
+| `months` | Months in the stratum (1 in the monthly table) |
+| `rate` | `hours / months` |
+| `rate_std` | Stage table only: season-standardised rate, the mean of the 12 month-of-year mean rates in the stage. Level comparisons only |
+| `rate_fleet` | `hours / (months × n_mmsi_fleet)`, hours per vessel-month. Level comparisons only; blank when the gear has no vessels in the stratum |
+| `density` | `hours / (months × area_km2)`, h km⁻² month⁻¹ |
+| `log_expo` | `log(months × area_km2)`, the model offset |
+| `y_vst` | Variance-stabilised density for the spatial statistics: √`density` (VP); `log(density + c)` (AFE), `c` = half the smallest positive density in the surface (dataset × gear × stratum). Blank on an all-zero surface |
+| `domain` | Cell active for this dataset and gear in Stage 1 |
+| `area_km2`, `aoi_class`, `x_km`, `y_km` | From the grid; centroid in EPSG:32619, km |
+
+### `data/processed/analysis/cells.gpkg`
+
+One row per grid cell, EPSG:32619, with the static covariates.
+
+| Field | Description |
+|---|---|
+| `cell_id`, `ix`, `iy`, `area_km2`, `aoi_frac`, `aoi_class` | From the grid (02) |
+| `x_km`, `y_km` | Centroid, km |
+| `dist_lease_km` | Signed distance from the centroid to the nearest lease boundary; negative inside a lease |
+| `dist_band` | `inside`, `0-2`, `2-4`, `4-8`, `8-15` km, each [lower, upper). `8-15` is the BAG reference |
+| `nearest_project` | `SFW`, `RWF` or `SRW`: the lease containing the cell, or else the nearest |
+| `domain_{vp,afe}_{mobile,fixed,pole_and_line}` | Cell active for that dataset and gear in Stage 1 |
+| `depth_m`, `depth_sd_m` | Area-weighted mean and SD of depth (m, positive down), NCEI CRM Vol. 1 at 30 m |
+| `slope_deg` | Area-weighted mean slope at 30 m |
+| `bpi_broad` | Broad bathymetric position index: elevation minus its 1–3 km annulus mean, on a 150 m aggregate. Positive = ridges and banks |
+
+### `data/processed/analysis/grid_queen.gal`, `grid_weights.rds`
+
+Queen contiguity of the grid, checked identical between `poly2nb()` and the
+integer lattice. The GAL file uses `cell_id` as the region id, for GeoDa and
+PySAL. The RDS holds the `nb` object and the `listw` objects `lw_W`
+(row-standardised: Moran's I, LISA) and `lw_B_self` (binary, self-included:
+Gi\*).
+
+### `data/sf/bathy/crm_vol1_2023_aoi.tif`
+
+NOAA NCEI U.S. Coastal Relief Model Vol. 1 (2023, 1 arc-second, EGM2008
+metres, positive up), subset to the grid's bounding box plus 5 km via THREDDS
+WCS by 05. Public domain. The sidecar records the request URL, access date
+and file hash; 05 fetches again only if the hash or request changes.
+
 ---
 
 ## Provenance

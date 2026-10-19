@@ -1,0 +1,12 @@
+# Paths renv skips when scanning for package dependencies. When this file
+# exists renv reads it instead of .gitignore, so gitignored folders that hold
+# R code must be listed here as well.
+
+# Design documents: their example chunks (eval: false) name packages that are
+# added to renv.lock only when their analysis phase starts
+planning/
+
+# Gitignored (see .gitignore): personal scratch scripts and the archived
+# Python environment
+r/scratchpad/
+.venv/

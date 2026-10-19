@@ -492,6 +492,26 @@ lw_B_self <- nb2listw(include.self(nb_poly), style = "B")
 Column order: keys first, then hours and vessel counts, exposure and rates,
 then the cell attributes. Dates are ISO 8601 and the CSVs UTF-8.
 
+The static cell covariates (lease distance, distance band, nearest project,
+bathymetry) are copied from `cells.gpkg` onto every row, so each table can be
+used on its own.
+
+To keep the monthly tables from carrying full-precision doubles on every
+row, nine columns are **rounded when written**, each well below what the
+data resolve:
+
+| Columns | Decimals | Resolution |
+|---|---:|---|
+| `dist_lease_km`, `x_km`, `y_km` | 3 | 1 m |
+| `depth_m`, `depth_sd_m` | 3 | 1 mm |
+| `area_km2` | 6 | 1 m² |
+| `slope_deg`, `bpi_broad` | 4 | 0.0001°, 0.1 mm |
+| `y_vst` | 6 | about 1e-6 |
+
+Rounding happens only at the write. `density`, `log_expo`, `y_vst` and
+`dist_band` are all computed from unrounded values first, so no cell changes
+band. `cells.gpkg` keeps full precision; use it when exact values matter.
+
 ```{r}
 dir.create(paths$analysis, recursive = TRUE, showWarnings = FALSE)
 
@@ -501,7 +521,32 @@ key_cols <- list(stage = "stage", stage_season = c("stage", "season"),
                  month = c("year_month", "stage", "season", "season_year", "moy", "year", "t_index"))
 value_cols <- c("hours", "n_mmsi", "n_mmsi_fleet", "months", "rate", "rate_std",
                 "rate_fleet", "density", "log_expo", "y_vst", "domain",
-                "area_km2", "aoi_class", "x_km", "y_km")
+                "area_km2", "aoi_class", "x_km", "y_km",
+                "dist_lease_km", "dist_band", "nearest_project",
+                "depth_m", "depth_sd_m", "slope_deg", "bpi_broad")
+
+# static cell covariates repeated on every row, so each table stands alone
+# for the phases that need distance or depth next to effort (1, 3, 5–6);
+# cells.gpkg stays the single source they are copied from, at full precision
+cell_static <- cell_dist |>
+  mutate(dist_band = as.character(dist_band)) |>
+  left_join(bathy_cells, by = "cell_id")
+
+# Decimals each column is rounded to when written, applied only at the write,
+# so every derived field (density, log_expo, y_vst, dist_band) is computed
+# from full-precision values first. Each is far below what the data resolve,
+# and it keeps full-precision doubles off ~1.3 million rows in the monthly
+# tables. cells.gpkg keeps full precision.
+write_digits <- c(
+  dist_lease_km = 3,  # 1 m
+  depth_m       = 3,  # 1 mm
+  depth_sd_m    = 3,  # 1 mm
+  x_km          = 3,  # 1 m
+  y_km          = 3,  # 1 m
+  area_km2      = 6,  # 1 m² on cells of ~0.93 km²
+  slope_deg     = 4,  # 0.0001°; cell means range ~0.01–1.4°
+  bpi_broad     = 4,  # 0.1 mm of relief
+  y_vst         = 6)  # ~1e-6 on values of order 0.01–10; no effect on the spatial statistics
 
 inputs_of <- \(ds) c(gear_table_path(ds, "stage"), gear_table_path(ds, "month"),
                      records_path(ds), paths$grid)
@@ -509,11 +554,15 @@ inputs_of <- \(ds) c(gear_table_path(ds, "stage"), gear_table_path(ds, "month"),
 written <- tibble(file = character(), rows = integer())
 for (ds in datasets) for (tm in names(key_cols)) {
   out <- analysis[[ds]][[tm]] |>
+    left_join(cell_static, by = "cell_id") |>
+    mutate(across(all_of(names(write_digits)), \(x) round(x, write_digits[[cur_column()]]))) |>
     select(cell_id, gear_class, all_of(key_cols[[tm]]), any_of(value_cols)) |>
     arrange(gear_class, across(all_of(key_cols[[tm]][1])), cell_id)
   f <- file.path(paths$analysis, sprintf("%s_%s_gear.csv", ds, tm))
   write_csv(out, f, na = "")
-  write_provenance(f, inputs_of(ds), extra = list(
+  stopifnot("static covariates missing after the join" =
+              !anyNA(select(out, dist_lease_km:bpi_broad)))
+  write_provenance(f, c(inputs_of(ds), paths$leases, paths$bathy), extra = list(
     dataset = ds, time_step = tm, set = "primary", pull_date = pull_date,
     rows = nrow(out), columns = names(out)))
   written <- add_row(written, file = basename(f), rows = nrow(out))

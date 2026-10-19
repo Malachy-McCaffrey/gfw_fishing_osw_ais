@@ -384,6 +384,11 @@ sidecar (input SHA-256s, git commit, `renv.lock` hash, R version, seed,
 | `y_vst` | Variance-stabilised density for the spatial statistics: √`density` (VP); `log(density + c)` (AFE), `c` = half the smallest positive density in the surface (dataset × gear × stratum). Blank on an all-zero surface |
 | `domain` | Cell active for this dataset and gear in Stage 1 |
 | `area_km2`, `aoi_class`, `x_km`, `y_km` | From the grid; centroid in EPSG:32619, km |
+| `dist_lease_km`, `dist_band`, `nearest_project`, `depth_m`, `depth_sd_m`, `slope_deg`, `bpi_broad` | Static cell covariates, copied from `cells.gpkg` (defined there) so each table stands alone |
+
+Rounded when written (decimals): `dist_lease_km`, `x_km`, `y_km`, `depth_m`,
+`depth_sd_m` 3; `area_km2` 6; `slope_deg`, `bpi_broad` 4; `y_vst` 6. Every
+derived field is computed before rounding; `cells.gpkg` keeps full precision.
 
 ### `data/processed/analysis/cells.gpkg`
 

@@ -49,6 +49,43 @@ vst_density <- function(density, dataset) {
   log(density + min(pos) / 2)
 }
 
+# Any of the three candidate scales for the transform check (Phase 1, step 3).
+# "log" uses the same per-surface c as vst_density(), so "sqrt" and "log"
+# reproduce y_vst for VP and AFE respectively.
+transform_scale <- function(density, scale) {
+  switch(scale,
+         raw  = density,
+         sqrt = sqrt(density),
+         log  = vst_density(density, "afe"),
+         stop("scale must be raw, sqrt or log"))
+}
+
+# Mean–variance slope -------------------------------------------------------
+# Slope of log(variance) on log(mean) across units (cells), using only units
+# with a positive mean and variance. On raw values it estimates the Tweedie
+# power p (Var ∝ mean^p). With `var` taken on a transformed scale and `mean`
+# on the raw scale, a slope near 0 means the transform stabilises the variance.
+mv_slope <- function(mean, var) {
+  keep <- is.finite(mean) & is.finite(var) & mean > 0 & var > 0
+  if (sum(keep) < 3) return(NA_real_)
+  unname(coef(stats::lm(log(var[keep]) ~ log(mean[keep])))[2])
+}
+
+# Vessel concentration ------------------------------------------------------
+# Share of the total held by the k largest values (e.g. vessels' hours).
+top_k_share <- function(x, k) {
+  x <- sort(x, decreasing = TRUE)
+  sum(x[seq_len(min(k, length(x)))]) / sum(x)
+}
+
+# Lorenz curve points: cumulative share of units (smallest first) against
+# cumulative share of the total, starting at (0, 0).
+lorenz_points <- function(x) {
+  x <- sort(x)
+  tibble::tibble(p_units = c(0, seq_along(x) / length(x)),
+                 p_total = c(0, cumsum(x) / sum(x)))
+}
+
 # Season-standardised stage rate -------------------------------------------
 # Caveat 8: a per-month stage rate is weighted by the stage's calendar mix.
 # The standardised rate weights every month-of-year equally: the mean of the

@@ -86,3 +86,30 @@ test_that("lattice_nb() matches poly2nb() on unit squares", {
     lattice_nb(cells$ix, cells$iy, seq_len(nrow(cells))),
     check.attributes = FALSE)))
 })
+
+test_that("transform_scale() reproduces y_vst and rejects unknown scales", {
+  d <- c(0, 0.04, 1)
+  expect_equal(transform_scale(d, "raw"), d)
+  expect_equal(transform_scale(d, "sqrt"), vst_density(d, "vp"))
+  expect_equal(transform_scale(d, "log"), vst_density(d, "afe"))
+  expect_error(transform_scale(d, "log1p"), "raw, sqrt or log")
+})
+
+test_that("mv_slope() recovers the power of a known mean–variance law", {
+  m <- c(0.5, 1, 2, 4, 8)
+  expect_equal(mv_slope(m, 3 * m^1.7), 1.7)
+  # zero means and variances are dropped, not logged
+  expect_equal(mv_slope(c(0, m), c(0, 3 * m^1.7)), 1.7)
+  expect_true(is.na(mv_slope(c(1, 2), c(1, 4))))
+})
+
+test_that("top_k_share() and lorenz_points() describe concentration", {
+  x <- c(50, 30, 10, 5, 5)
+  expect_equal(top_k_share(x, 1), 0.5)
+  expect_equal(top_k_share(x, 2), 0.8)
+  expect_equal(top_k_share(x, 10), 1)
+  lz <- lorenz_points(x)
+  expect_equal(nrow(lz), 6)
+  expect_equal(lz$p_total[c(1, 6)], c(0, 1))
+  expect_equal(lz$p_total[2], 0.05)
+})

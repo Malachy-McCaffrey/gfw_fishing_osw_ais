@@ -1,0 +1,933 @@
+---
+title: "MM GFW Exploratory Analysis (Phase 1)"
+author: "Malachy McCaffrey"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    fig-width: 10
+    fig-height: 6
+params:
+  # Path overrides (see r/paths.R); leave blank to use the project paths.
+  analysis: ""
+  processed_gfw: ""
+  interim_gfw: ""
+  explore: ""
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# run from the repo root (the folder holding renv.lock) so the relative paths
+# in r/paths.R resolve whether the qmd is rendered or run chunk by chunk
+root <- getwd()
+while (!file.exists(file.path(root, "renv.lock")) && dirname(root) != root) root <- dirname(root)
+knitr::opts_knit$set(root.dir = root)
+```
+
+## Objective
+
+Phase 1 of `planning/gfw_analysis_plan.qmd`: recompute the data-structure
+findings at render time, and test the assumptions the later phases rest on.
+It reads the Phase 0 outputs (`05_prepare_analysis.qmd`), the Primary
+records, and the vessel crosswalk.
+
+| Step | Question |
+|---|---|
+| 1 | Composition: hours, records and vessels by gear × stage (× season) |
+| 2 | Distribution: zeros, dispersion, skew, Tweedie power |
+| 3 | Transforms: does `y_vst` stabilise variance and limit influential cells? |
+| 4 | Time series by distance band, with trend and season decomposed |
+| 5 | Vessel concentration, and the pre-window screen of charter and survey hulls |
+| 6 | Depth and effort: gear niches, collinearity with lease distance |
+| 7 | Is AIS uptake spatially uniform before construction? (key BAG assumption) |
+| 8 | Maps |
+| 9 | Temporal completeness: which model time steps the data support |
+
+Figures and tables go to `reports/explore/` (gitignored: derived GFW
+products), listed with their hashes in `reports/explore/manifest.csv` and its
+provenance sidecar. **The gate** at the end gathers the three decisions this
+phase feeds: the transform per dataset × gear (step 3), hulls to send back to
+`03` (step 5), and whether the BAG needs a pre-trend term (step 7).
+
+## Libraries and shared code
+
+```{r}
+library(tidyverse)
+library(sf)
+library(spdep)
+library(terra)
+
+source("r/paths.R")
+source("r/gfw_helpers.R")
+source("r/vessel_helpers.R")
+source("r/analysis_helpers.R")
+
+# Quarto parameters (header); `params` is read-only while rendering. Run chunk
+# by chunk, `params` is missing or left over from another session, so the
+# header is read from this file directly instead
+qparams <- if (isTRUE(getOption("knitr.in.progress"))) params else {
+  hdr <- knitr::knit_params(readLines(file.path(root, "r/06_explore.qmd"), warn = FALSE))
+  lapply(hdr, function(p) p$value)
+}
+paths <- gfw_paths_with(qparams)
+
+set.seed(42) # workflow-wide seed (plan, FAIR)
+
+datasets <- c("vp", "afe")
+ds_label <- c(vp = "VP", afe = "AFE")
+stage_breaks <- dev_stages$start[-1] # 2020-10-01 and 2023-04-01
+
+fig_dir <- file.path(paths$explore, "figures")
+tab_dir <- file.path(paths$explore, "tables")
+dir.create(fig_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(tab_dir, recursive = TRUE, showWarnings = FALSE)
+
+# every output is recorded here; the manifest is written at the end
+outputs <- character()
+save_tab <- function(df, name) {
+  f <- file.path(tab_dir, paste0(name, ".csv"))
+  write_csv(df, f, na = "")
+  outputs <<- c(outputs, f)
+  invisible(df)
+}
+save_fig <- function(p, name, width = 10, height = 6) {
+  f <- file.path(fig_dir, paste0(name, ".png"))
+  ggsave(f, p, width = width, height = min(height, 49), dpi = 120, bg = "white", limitsize = FALSE)
+  outputs <<- c(outputs, f)
+  invisible(p)
+}
+
+theme_set(theme_minimal(base_size = 10))
+```
+
+## Read the Phase 0 outputs and the records
+
+```{r}
+table_path <- \(ds, ts) file.path(paths$analysis, sprintf("%s_%s_gear.csv", ds, ts))
+time_steps <- c("stage", "stage_season", "season_year", "month")
+
+read_analysis <- function(ds, ts) {
+  read_csv(table_path(ds, ts), col_types = cols(
+    cell_id = "c", gear_class = "c", stage = "c", season = "c", aoi_class = "c",
+    dist_band = "c", nearest_project = "c", domain = "l", .default = "?")) |>
+    mutate(gear_class = factor(gear_class, levels = analysis_gears),
+           dist_band  = factor(dist_band, levels = dist_band_levels))
+}
+
+tabs <- map(set_names(datasets), \(ds) map(set_names(time_steps), \(ts) read_analysis(ds, ts)))
+
+cells <- st_read(file.path(paths$analysis, "cells.gpkg"), quiet = TRUE) |>
+  mutate(dist_band = factor(dist_band, levels = dist_band_levels))
+weights <- readRDS(file.path(paths$analysis, "grid_weights.rds"))
+stopifnot("weights and cells.gpkg are in a different cell order" =
+            identical(weights$cell_id, cells$cell_id))
+lw_W <- weights$lw_W
+
+cell_lease <- st_drop_geometry(cells) |>
+  transmute(cell_id, dist_band, in_lease = dist_lease_km < 0)
+
+records_path <- \(ds) file.path(paths$processed_gfw, sprintf("gfw_%s_id_classified.csv", ds))
+records <- map_dfr(set_names(datasets), \(ds)
+  read_csv(records_path(ds), col_types = cols(.default = "c")) |>
+    filter(in_primary == "TRUE") |>
+    transmute(MMSI, vessel_name = `Vessel Name`, cell_id, gear_class,
+              date = as.Date(date), hours = as.numeric(hours)), .id = "dataset") |>
+  mutate(year_month = floor_date(date, "month"),
+         stage = stage_of(year_month), season = season_of(year_month),
+         year = year(date), gear_class = factor(gear_class, levels = analysis_gears)) |>
+  left_join(cell_lease, by = "cell_id")
+
+stopifnot("records outside the analysis gears or cells" =
+            !anyNA(records$gear_class) && !anyNA(records$dist_band))
+
+# hours must match the Phase 0 tables (which 05 reconciled with 04)
+rec_check <- records |> count(dataset, wt = hours, name = "records") |>
+  left_join(map_dfr(tabs, \(d) tibble(tables = sum(d$stage$hours)), .id = "dataset"), by = "dataset")
+rec_check
+stopifnot("records and Phase 0 tables disagree" = isTRUE(all.equal(rec_check$records, rec_check$tables)))
+
+input_files <- c(map(datasets, \(ds) table_path(ds, time_steps)) |> unlist(),
+                 file.path(paths$analysis, c("cells.gpkg", "grid_weights.rds")),
+                 records_path(datasets), paths$crosswalk,
+                 file.path(paths$interim_gfw, "gfw_vp_id_cell_month.csv"),
+                 paths$leases, paths$basemap)
+```
+
+## Step 1: composition
+
+Hours, records and distinct MMSIs by dataset × gear × stage, with three
+rates: raw (`hours / months`), season-standardised (the sum of the cells'
+`rate_std`, caveat 8) and per vessel-month (`rate_fleet`, caveat 5). Read the
+raw and standardised rates together for level comparisons, and the
+per-vessel rate against the raw one: a raw rate that rises while the
+per-vessel rate stays flat is fleet coverage, not more fishing per vessel.
+
+```{r}
+months_of <- map_dfr(tabs, \(d) distinct(d$stage, stage, months), .id = "dataset") |> distinct(stage, months)
+months_ss <- distinct(tabs$vp$stage_season, stage, season, months)
+
+rate_std_aoi <- map_dfr(tabs, \(d) d$stage |> group_by(gear_class, stage) |>
+  summarise(rate_std = sum(rate_std), .groups = "drop"), .id = "dataset")
+
+composition <- records |>
+  group_by(dataset, gear_class, stage) |>
+  summarise(hours = sum(hours), records = n(), n_mmsi = n_distinct(MMSI), .groups = "drop") |>
+  left_join(months_of, by = "stage") |>
+  left_join(rate_std_aoi, by = c("dataset", "gear_class", "stage")) |>
+  mutate(rate = hours / months,
+         std_vs_raw_pct = 100 * (rate / rate_std - 1),
+         rate_fleet = hours / (months * n_mmsi))
+
+composition |> mutate(across(where(is.double), \(x) round(x, 2))) |> knitr::kable()
+save_tab(composition, "composition_stage")
+
+composition_ss <- records |>
+  group_by(dataset, gear_class, stage, season) |>
+  summarise(hours = sum(hours), records = n(), n_mmsi = n_distinct(MMSI), .groups = "drop") |>
+  left_join(months_ss, by = c("stage", "season")) |>
+  mutate(rate = hours / months, rate_fleet = hours / (months * n_mmsi))
+save_tab(composition_ss, "composition_stage_season")
+
+composition_ss |>
+  select(dataset, gear_class, stage, season, rate) |>
+  pivot_wider(names_from = c(stage, season), values_from = rate) |>
+  mutate(across(where(is.double), \(x) round(x, 1))) |> knitr::kable()
+```
+
+```{r}
+#| fig-height: 5
+p <- composition |>
+  pivot_longer(c(rate, rate_std, rate_fleet), names_to = "measure") |>
+  mutate(measure = factor(measure, c("rate", "rate_std", "rate_fleet"),
+                          c("hours / month", "season-standardised", "hours / vessel-month"))) |>
+  ggplot(aes(stage, value, colour = gear_class, group = gear_class)) +
+  geom_line() + geom_point() +
+  facet_grid(measure ~ dataset, scales = "free_y", labeller = labeller(dataset = ds_label)) +
+  labs(x = NULL, y = NULL, colour = NULL, title = "Stage rates: raw, season-standardised and per vessel")
+save_fig(p, "composition_rates", height = 7)
+```
+
+## Step 2: distribution diagnostics
+
+Per surface (dataset × gear × stratum) at every time step: percent zero,
+mean, variance, var/mean, skewness (type 2), and quantiles of the positive
+values. The Tweedie power is the slope of log variance on log mean across
+cells, from each cell's 128 monthly values. A profile-likelihood estimate
+needs `glmmTMB`, which is installed at Phase 5; it is deferred to there.
+
+```{r}
+surface_keys <- list(stage = "stage", stage_season = c("stage", "season"),
+                     season_year = c("season", "season_year"), month = "year_month")
+
+dist_diag <- function(t, keys) {
+  t |> group_by(gear_class, across(all_of(keys))) |>
+    summarise(n_cells = n(), pct_zero = 100 * mean(hours == 0),
+              mean = mean(hours), var = var(hours), var_mean = var / mean,
+              skew = e1071::skewness(hours, type = 2),
+              q50_pos = quantile(hours[hours > 0], 0.5, names = FALSE),
+              q90_pos = quantile(hours[hours > 0], 0.9, names = FALSE),
+              q99_pos = quantile(hours[hours > 0], 0.99, names = FALSE),
+              max = max(hours), .groups = "drop")
+}
+
+distribution <- map_dfr(set_names(datasets), \(ds) map_dfr(set_names(time_steps), \(ts)
+  dist_diag(tabs[[ds]][[ts]], surface_keys[[ts]]) |>
+    mutate(across(any_of(c("season_year", "year_month")), as.character)), .id = "time_step"),
+  .id = "dataset")
+save_tab(distribution, "distribution_by_surface")
+
+# the stage surfaces, as in the plan's "Cell × stage × gear" table
+distribution |> filter(time_step == "stage") |>
+  select(dataset, gear_class, stage, pct_zero, var_mean, skew, q50_pos, q90_pos, q99_pos) |>
+  mutate(across(where(is.double), \(x) round(x, 1))) |> knitr::kable()
+
+# every time step, summarised across its surfaces
+distribution |>
+  group_by(dataset, gear_class, time_step) |>
+  summarise(surfaces = n(), median_pct_zero = median(pct_zero),
+            median_var_mean = median(var_mean, na.rm = TRUE), .groups = "drop") |>
+  mutate(time_step = factor(time_step, time_steps)) |> arrange(dataset, gear_class, time_step) |>
+  mutate(across(where(is.double), \(x) round(x, 1))) |> knitr::kable()
+```
+
+```{r}
+tweedie_power <- map_dfr(tabs, \(d) d$month |>
+  group_by(gear_class, cell_id) |>
+  summarise(m = mean(hours), v = var(hours), .groups = "drop") |>
+  group_by(gear_class) |>
+  summarise(power_monthly = mv_slope(m, v), cells_used = sum(m > 0 & v > 0), .groups = "drop"),
+  .id = "dataset")
+tweedie_power |> mutate(power_monthly = round(power_monthly, 2)) |> knitr::kable()
+save_tab(tweedie_power, "tweedie_power")
+
+vp_integer <- all(abs(tabs$vp$month$hours - round(tabs$vp$month$hours)) < 1e-9)
+vp_integer
+```
+
+## Step 3: transform check
+
+Three scales per surface: raw density, √density and log(density + *c*),
+with *c* half the smallest positive density in the surface. `y_vst` is √ for
+VP and log for AFE (05), so it is always one of the three and is labelled as
+such. The transforms serve only the spatial statistics, so the measures are
+variance stabilisation and influence, not normality, and every plot uses the
+**positive values only**, with the zero share printed on each panel.
+
+Per surface and scale:
+
+- `skew`: skewness of the positive transformed values;
+- `mv_slope`: slope of log(variance of the transformed monthly densities) on
+  log(mean raw monthly density) across cells, within the surface's stratum.
+  Near 0 means the transform stabilises the variance. On the raw scale it is
+  the Tweedie power. For log, *c* comes from the stratum's monthly values;
+- `lev_share`: share of cells flagged influential in the Moran scatterplot
+  (`spdep::moran.plot` with `lw_W`; its hat-value / Cook's-distance measures).
+
+The plan's layout (rows gear × stratum, columns the scales) is used for the
+stage and stage × season pages. At season-year it would be 66 rows per page,
+so season-year contributes numbers only (to the decision rule and a
+trajectory plot).
+
+```{r}
+scales_all <- c("raw", "sqrt", "log")
+vst_scale  <- c(vp = "sqrt", afe = "log")
+alt_scale  <- c(vp = "log", afe = "sqrt")
+scale_lab  <- \(ds) c(raw = "raw density", sqrt = "√ density", log = "log(density + c)") |>
+  (\(l) { l[vst_scale[[ds]]] <- paste(l[vst_scale[[ds]]], "(y_vst)"); l })()
+
+# one surface: values in cells order, for the Moran scatterplot
+surface_check <- function(sdat, mdat, keep_moran) {
+  d <- sdat$density[match(cells$cell_id, sdat$cell_id)]
+  pos <- d > 0
+  # per-cell mean raw monthly density, shared by the three scales
+  m_cell <- mdat |> group_by(cell_id) |> summarise(m = mean(density), .groups = "drop")
+  res <- map(set_names(scales_all), function(sc) {
+    v <- transform_scale(d, sc)
+    v_cell <- mdat |> mutate(v = transform_scale(density, sc)) |>
+      group_by(cell_id) |> summarise(vv = var(v), .groups = "drop")
+    mp <- if (sum(pos) > 1 && var(v) > 0) moran.plot(v, lw_W, plot = FALSE, return_df = TRUE) else NULL
+    list(stats = tibble(scale = sc, n_pos = sum(pos), pct_zero = 100 * mean(!pos),
+                        skew = if (sum(pos) > 2) e1071::skewness(v[pos], type = 2) else NA_real_,
+                        mv_slope = mv_slope(m_cell$m, v_cell$vv[match(m_cell$cell_id, v_cell$cell_id)]),
+                        lev_share = if (is.null(mp)) NA_real_ else mean(mp$is_inf)),
+         moran = if (keep_moran && !is.null(mp)) tibble(scale = sc, x = mp$x, wx = mp$wx, is_inf = mp$is_inf) else NULL)
+  })
+  list(stats = map_dfr(res, "stats"), moran = map_dfr(res, "moran"))
+}
+
+transform_checks <- list()
+moran_data <- list()
+for (ds in datasets) for (ts in c("stage", "stage_season", "season_year")) {
+  keys <- surface_keys[[ts]]
+  s_nest <- tabs[[ds]][[ts]] |> select(cell_id, gear_class, all_of(keys), density) |>
+    nest(sdat = c(cell_id, density))
+  m_nest <- tabs[[ds]]$month |> select(cell_id, gear_class, all_of(keys), density) |>
+    nest(mdat = c(cell_id, density))
+  both <- inner_join(s_nest, m_nest, by = c("gear_class", keys))
+  stopifnot("surfaces without monthly data" = nrow(both) == nrow(s_nest))
+  out <- map2(both$sdat, both$mdat, surface_check, keep_moran = ts != "season_year")
+  meta <- select(both, gear_class, all_of(keys))
+  transform_checks[[paste(ds, ts)]] <- bind_cols(meta[rep(seq_len(nrow(meta)), each = 3), ],
+                                                 map_dfr(out, "stats")) |>
+    mutate(dataset = ds, time_step = ts, .before = 1)
+  moran_data[[paste(ds, ts)]] <- map2_dfr(seq_along(out), out, \(i, o)
+    if (nrow(o$moran)) bind_cols(meta[i, ], o$moran) else NULL)
+}
+
+transform_check <- bind_rows(map(transform_checks, \(t) mutate(t, across(any_of("season_year"), as.character))))
+for (ds in datasets) save_tab(filter(transform_check, dataset == ds), paste0("transform_check_", ds))
+
+transform_check |>
+  group_by(dataset, gear_class, scale) |>
+  summarise(surfaces = n(), median_skew = median(skew, na.rm = TRUE),
+            median_mv_slope = median(mv_slope, na.rm = TRUE),
+            median_lev_share = median(lev_share, na.rm = TRUE), .groups = "drop") |>
+  mutate(across(where(is.double), \(x) round(x, 3))) |> knitr::kable()
+```
+
+### Decision rule
+
+Keep `y_vst` (√ for VP, log for AFE) unless, on the median surface of a
+dataset × gear across all three descriptive time steps, the alternative has
+a mean–variance slope at least 0.2 closer to zero **and** a high-leverage
+share at least a third lower.
+
+```{r}
+medians <- transform_check |>
+  group_by(dataset, gear_class, scale) |>
+  summarise(mv = median(abs(mv_slope), na.rm = TRUE),
+            lev = median(lev_share, na.rm = TRUE), .groups = "drop")
+
+transform_decision <- map_dfr(datasets, \(ds) {
+  cur <- filter(medians, dataset == ds, scale == vst_scale[[ds]])
+  alt <- filter(medians, dataset == ds, scale == alt_scale[[ds]])
+  inner_join(cur, alt, by = c("dataset", "gear_class"), suffix = c("_cur", "_alt")) |>
+    mutate(slope_gain = mv_cur - mv_alt,
+           lev_drop = 1 - lev_alt / lev_cur,
+           switch = slope_gain >= 0.2 & lev_drop >= 1 / 3,
+           transform = if_else(switch, scale_alt, scale_cur))
+})
+transform_decision |> mutate(across(where(is.double), \(x) round(x, 3))) |> knitr::kable()
+save_tab(transform_decision, "transform_decision")
+```
+
+### Transform-check figures
+
+```{r}
+# rows: gear × stratum label; columns: scale
+surface_label <- function(t, keys) {
+  t |> unite("surface", gear_class, all_of(keys), sep = " · ", remove = FALSE)
+}
+
+for (ds in datasets) for (ts in c("stage", "stage_season")) {
+  keys <- surface_keys[[ts]]
+  labs_sc <- scale_lab(ds)
+  pos <- tabs[[ds]][[ts]] |> filter(density > 0) |>
+    select(cell_id, gear_class, all_of(keys), density, depth_m, dist_lease_km, bpi_broad) |>
+    group_by(gear_class, across(all_of(keys))) |>
+    mutate(raw = density, sqrt = sqrt(density), log = log(density + min(density) / 2)) |>
+    ungroup() |>
+    pivot_longer(all_of(scales_all), names_to = "scale", values_to = "value") |>
+    mutate(scale = factor(scale, scales_all, labs_sc)) |>
+    surface_label(keys)
+  zeros <- transform_check |> filter(dataset == ds, time_step == ts, scale == "raw") |>
+    surface_label(keys) |> select(surface, pct_zero) |>
+    crossing(scale = factor(labs_sc, labs_sc)) |>
+    mutate(lab = sprintf("%.0f%% zero", pct_zero))
+  n_rows <- n_distinct(pos$surface)
+  h <- 1.3 * n_rows + 1.5
+  tag <- sprintf("%s · %s", ds_label[[ds]], ts)
+
+  save_fig(ggplot(pos, aes(value)) + geom_histogram(bins = 40, fill = "grey40") +
+             geom_text(data = zeros, aes(x = Inf, y = Inf, label = lab), hjust = 1.1, vjust = 1.5, size = 3) +
+             facet_grid(surface ~ scale, scales = "free") +
+             theme(strip.text.y = element_text(angle = 0)) +
+             labs(x = NULL, y = "cells", title = paste("Positive values by scale:", tag)),
+           sprintf("transform_hist_%s_%s", ds, ts), height = h)
+
+  save_fig(ggplot(pos, aes(sample = value)) + stat_qq(size = 0.4) + stat_qq_line(colour = "red") +
+             geom_text(data = zeros, aes(x = -Inf, y = Inf, label = lab), inherit.aes = FALSE,
+                       hjust = -0.1, vjust = 1.5, size = 3) +
+             facet_grid(surface ~ scale, scales = "free") +
+             theme(strip.text.y = element_text(angle = 0)) +
+             labs(x = "normal quantile", y = NULL, title = paste("QQ plots of positive values (supporting only):", tag)),
+           sprintf("transform_qq_%s_%s", ds, ts), height = h)
+
+  # mean–variance: per cell, monthly values within the stratum
+  mv <- tabs[[ds]]$month |> select(cell_id, gear_class, all_of(keys), density) |>
+    group_by(gear_class, across(all_of(keys))) |>
+    mutate(raw = density, sqrt = sqrt(density),
+           log = if (any(density > 0)) log(density + min(density[density > 0]) / 2) else NA_real_) |>
+    group_by(gear_class, across(all_of(keys)), cell_id) |>
+    summarise(m = mean(density), across(all_of(scales_all), var), .groups = "drop") |>
+    filter(m > 0) |>
+    pivot_longer(all_of(scales_all), names_to = "scale", values_to = "v") |>
+    filter(v > 0) |>
+    mutate(scale = factor(scale, scales_all, labs_sc)) |>
+    surface_label(keys)
+  save_fig(ggplot(mv, aes(m, v)) + geom_point(size = 0.3, alpha = 0.3) +
+             geom_smooth(method = "lm", formula = y ~ x, colour = "red", linewidth = 0.6) +
+             scale_x_log10() + scale_y_log10() +
+             facet_grid(surface ~ scale, scales = "free_y") +
+             theme(strip.text.y = element_text(angle = 0)) +
+             labs(x = "mean raw monthly density (log)", y = "variance on the scale (log)",
+                  title = paste("Mean–variance across cells; a flat line is stabilised:", tag)),
+           sprintf("transform_meanvar_%s_%s", ds, ts), height = h)
+
+  # Moran scatterplots, raw vs y_vst
+  md <- moran_data[[paste(ds, ts)]] |> filter(scale %in% c("raw", vst_scale[[ds]])) |>
+    mutate(scale = factor(scale, scales_all, labs_sc)) |> surface_label(keys)
+  save_fig(ggplot(md, aes(x, wx)) +
+             geom_point(aes(colour = is_inf), size = 0.4) +
+             geom_smooth(method = "lm", formula = y ~ x, colour = "black", linewidth = 0.5) +
+             scale_colour_manual(values = c(`FALSE` = "grey60", `TRUE` = "red"), labels = c("", "influential")) +
+             facet_grid(surface ~ scale, scales = "free") +
+             theme(strip.text.y = element_text(angle = 0)) +
+             labs(x = "value", y = "spatial lag", colour = NULL,
+                  title = paste("Moran scatterplots, raw vs y_vst:", tag)),
+           sprintf("transform_moran_%s_%s", ds, ts), height = h)
+
+  # relationships with the static covariates (stage surfaces only)
+  if (ts == "stage") {
+    rel <- pos |> pivot_longer(c(depth_m, dist_lease_km, bpi_broad), names_to = "covariate", values_to = "cov")
+    save_fig(ggplot(rel, aes(cov, value, colour = stage)) +
+               geom_point(size = 0.2, alpha = 0.2) +
+               geom_smooth(method = "loess", formula = y ~ x, se = FALSE, linewidth = 0.6) +
+               facet_grid(gear_class + covariate ~ scale, scales = "free") +
+               theme(strip.text.y = element_text(angle = 0)) +
+               labs(x = "covariate", y = NULL, colour = NULL,
+                    title = paste("Positive density against depth, lease distance and BPI:", ds_label[[ds]])),
+             sprintf("transform_relationships_%s", ds), height = 18)
+  }
+}
+
+# season-year: the numbers as trajectories
+p <- transform_check |> filter(time_step == "season_year") |>
+  mutate(sy = paste(season_year, season)) |>
+  pivot_longer(c(mv_slope, lev_share), names_to = "measure") |>
+  ggplot(aes(sy, value, colour = scale, group = scale)) + geom_line() +
+  facet_grid(measure ~ dataset + gear_class, scales = "free_y") +
+  theme(axis.text.x = element_blank()) +
+  labs(x = "season-year (2016 → 2026)", y = NULL, colour = NULL,
+       title = "Season-year surfaces: mean–variance slope and high-leverage share by scale")
+save_fig(p, "transform_season_year", width = 14)
+p
+```
+
+## Step 4: time series
+
+Monthly Primary hours by gear and distance band, with the stage boundaries,
+and an STL decomposition (periodic season) of each AOI series on the log
+scale.
+
+```{r}
+#| fig-height: 8
+monthly <- map_dfr(tabs, \(d) d$month |>
+  group_by(gear_class, year_month, dist_band) |>
+  summarise(hours = sum(hours), .groups = "drop"), .id = "dataset")
+save_tab(monthly, "monthly_by_band")
+
+p <- monthly |>
+  ggplot(aes(year_month, hours, colour = dist_band)) + geom_line(linewidth = 0.4) +
+  geom_vline(xintercept = stage_breaks, linetype = 2) +
+  facet_grid(gear_class ~ dataset, scales = "free_y", labeller = labeller(dataset = ds_label)) +
+  labs(x = NULL, y = "hours per month", colour = "band (km)",
+       title = "Monthly Primary hours by distance band; dashed = stage boundaries")
+save_fig(p, "timeseries_by_band", height = 8)
+p
+
+p <- monthly |> mutate(where = if_else(dist_band == "inside", "inside leases", "outside")) |>
+  group_by(dataset, gear_class, year_month, where) |> summarise(hours = sum(hours), .groups = "drop") |>
+  ggplot(aes(year_month, hours, colour = where)) + geom_line(linewidth = 0.4) +
+  geom_vline(xintercept = stage_breaks, linetype = 2) +
+  facet_grid(gear_class ~ dataset, scales = "free_y", labeller = labeller(dataset = ds_label)) +
+  labs(x = NULL, y = "hours per month", colour = NULL)
+save_fig(p, "timeseries_inside_outside", height = 8)
+```
+
+```{r}
+#| fig-height: 9
+stl_parts <- monthly |>
+  group_by(dataset, gear_class, year_month) |> summarise(hours = sum(hours), .groups = "drop") |>
+  group_by(dataset, gear_class) |>
+  group_modify(\(d, k) {
+    fit <- stl(ts(log1p(d$hours), start = c(2016, 1), frequency = 12), s.window = "periodic")
+    tibble(year_month = d$year_month, log1p_hours = log1p(d$hours),
+           seasonal = fit$time.series[, "seasonal"], trend = fit$time.series[, "trend"],
+           remainder = fit$time.series[, "remainder"])
+  }) |> ungroup()
+save_tab(stl_parts, "stl_components")
+
+p <- stl_parts |>
+  pivot_longer(c(log1p_hours, trend, seasonal), names_to = "part") |>
+  mutate(part = factor(part, c("log1p_hours", "trend", "seasonal"))) |>
+  ggplot(aes(year_month, value, colour = gear_class)) + geom_line(linewidth = 0.4) +
+  geom_vline(xintercept = stage_breaks, linetype = 2) +
+  facet_grid(part ~ dataset, scales = "free_y", labeller = labeller(dataset = ds_label)) +
+  labs(x = NULL, y = "log(1 + hours)", colour = NULL, title = "STL decomposition of AOI monthly hours")
+save_fig(p, "timeseries_stl", height = 9)
+p
+```
+
+## Step 5: vessel concentration and the pre-window screen
+
+```{r}
+vessel_hours <- records |>
+  group_by(dataset, gear_class, stage, MMSI) |>
+  summarise(vessel_name = first(vessel_name), hours = sum(hours),
+            lease_share = sum(hours[in_lease]) / sum(hours),
+            active_days = n_distinct(date), .groups = "drop")
+
+concentration <- vessel_hours |>
+  group_by(dataset, gear_class, stage) |>
+  summarise(vessels = n(), top1 = top_k_share(hours, 1), top5 = top_k_share(hours, 5),
+            top10 = top_k_share(hours, 10), .groups = "drop")
+concentration |> mutate(across(starts_with("top"), \(x) round(100 * x, 1))) |> knitr::kable()
+save_tab(concentration, "concentration_topk")
+
+p <- vessel_hours |>
+  group_by(dataset, gear_class, stage) |>
+  reframe(lorenz_points(hours)) |>
+  ggplot(aes(p_units, p_total, colour = stage)) + geom_line() +
+  geom_abline(linetype = 3) +
+  facet_grid(dataset ~ gear_class, labeller = labeller(dataset = ds_label)) +
+  labs(x = "share of vessels (smallest first)", y = "share of hours", colour = NULL,
+       title = "Lorenz curves of hours across vessels")
+save_fig(p, "concentration_lorenz", height = 6)
+p
+
+# vessels holding more than 10% of a gear × stage total
+dominant <- vessel_hours |>
+  group_by(dataset, gear_class, stage) |>
+  mutate(share = hours / sum(hours)) |> ungroup() |>
+  filter(share > 0.10) |>
+  mutate(hours_per_day = hours / active_days) |>
+  arrange(dataset, gear_class, stage, desc(share))
+dominant |> mutate(across(c(share, lease_share), \(x) round(100 * x, 1)),
+                   across(c(hours, hours_per_day), \(x) round(x, 1))) |> knitr::kable()
+save_tab(dominant, "dominant_vessels")
+```
+
+### Pre-window screen
+
+For every hull with a charter or survey window in the crosswalk
+(`activity_excluded`), the share of its Primary hours inside the leases in
+the 12 months before its first window, against the rest of the Primary fleet
+in the same 12 months. Hulls above **twice** the fleet share are flagged, as
+PROVIDER would have been before its window moved (caveat 11). A share on a
+handful of hours is noise, so a hull needs at least **20 pre-window hours**
+in the dataset to be flagged (decision 2026-10-19: the first render flagged
+Cailyn & Maren, 338389953, on 5 VP hours, 2 of them in the leases; no action
+was taken on it).
+
+```{r}
+min_flag_hours <- 20 # pre-window hours a hull needs before its share can flag it
+
+windows <- read_chr(paths$crosswalk) |>
+  filter(activity_excluded == "TRUE", !is.na(valid_from)) |>
+  group_by(MMSI) |>
+  summarise(vessel_name = first(Vessel_Name), operation = first(Operation),
+            first_window = min(as.Date(valid_from)), .groups = "drop")
+
+pre_window <- windows |>
+  crossing(dataset = datasets) |>
+  pmap_dfr(function(MMSI, vessel_name, operation, first_window, dataset) {
+    win <- records[records$dataset == dataset &
+                     records$date >= first_window - 365 & records$date < first_window, ]
+    hull  <- win[win$MMSI == MMSI, ]
+    fleet <- win[win$MMSI != MMSI, ]
+    tibble(dataset, MMSI, vessel_name, operation, first_window,
+           hull_hours = sum(hull$hours),
+           hull_lease_share = if (nrow(hull)) sum(hull$hours[hull$in_lease]) / sum(hull$hours) else NA_real_,
+           fleet_lease_share = sum(fleet$hours[fleet$in_lease]) / sum(fleet$hours))
+  }) |>
+  mutate(ratio = hull_lease_share / fleet_lease_share,
+         flag = !is.na(ratio) & ratio > 2 & hull_hours >= min_flag_hours) |>
+  arrange(desc(flag), desc(ratio))
+save_tab(pre_window, "pre_window_screen")
+
+pre_window |> filter(hull_hours > 0) |>
+  mutate(across(c(hull_lease_share, fleet_lease_share), \(x) round(100 * x, 1)),
+         across(c(hull_hours, ratio), \(x) round(x, 2))) |>
+  knitr::kable()
+```
+
+## Step 6: depth and effort
+
+```{r}
+#| fig-height: 8
+p <- map_dfr(tabs, \(d) d$stage, .id = "dataset") |>
+  filter(density > 0) |>
+  pivot_longer(c(depth_m, bpi_broad), names_to = "covariate", values_to = "cov") |>
+  ggplot(aes(cov, density, colour = stage)) +
+  geom_point(size = 0.2, alpha = 0.2) +
+  geom_smooth(method = "loess", formula = y ~ x, se = FALSE, linewidth = 0.6) +
+  scale_y_log10() +
+  facet_grid(dataset + gear_class ~ covariate, scales = "free",
+             labeller = labeller(dataset = ds_label)) +
+  theme(strip.text.y = element_text(angle = 0)) +
+  labs(x = NULL, y = "density (h km⁻² month⁻¹, log)", colour = NULL,
+       title = "Positive density against depth and broad BPI")
+save_fig(p, "depth_effort", height = 12)
+p
+
+# gear-depth niches: hours-weighted depth quantiles, Stage 1 baseline
+wq <- function(x, w, p) { o <- order(x); cw <- cumsum(w[o]) / sum(w); x[o][which(cw >= p)[1]] }
+niche <- map_dfr(tabs, \(d) d$stage, .id = "dataset") |>
+  filter(stage == "Stage 1", hours > 0) |>
+  group_by(dataset, gear_class) |>
+  summarise(depth_q25 = wq(depth_m, hours, 0.25), depth_q50 = wq(depth_m, hours, 0.5),
+            depth_q75 = wq(depth_m, hours, 0.75), bpi_q50 = wq(bpi_broad, hours, 0.5),
+            .groups = "drop")
+niche |> mutate(across(where(is.double), \(x) round(x, 2))) |> knitr::kable()
+save_tab(niche, "gear_depth_niche")
+
+covariates <- st_drop_geometry(cells) |> select(dist_lease_km, depth_m, depth_sd_m, slope_deg, bpi_broad)
+covariate_rho <- cor(covariates, method = "spearman")
+round(covariate_rho, 2)
+save_tab(as_tibble(covariate_rho, rownames = "covariate"), "covariate_spearman")
+depth_distance_rho <- covariate_rho["depth_m", "dist_lease_km"]
+```
+
+## Step 7: is AIS uptake spatially uniform?
+
+The within-AOI BAG cancels an AOI-wide uptake trend only if uptake rises
+**in parallel across the distance bands** before construction. Three
+indicators per band and calendar year, restricted to the pre-construction
+years with all 12 months (2016–2022; Stage 2 runs to March 2023):
+
+- distinct Primary MMSIs per gear;
+- Primary VP hours per gear;
+- all-vessel raw VP hours (`gfw_vp_id_cell_month.csv`, every vessel type).
+
+Test: a quasi-Poisson GLM of each indicator on `band + year` against
+`band × year`, by F test. A significant interaction means the bands do not
+trend in parallel.
+
+**Reading the result (decision 2026-10-19).** With 35 band-years per test
+and large year-to-year variation, a non-significant interaction is weak
+evidence of parallel trends, not proof. The **raw all-vessel series is not
+an uptake measure**: inside the leases it rises several-fold to a 2019–2020
+peak and falls back in 2021, while the other bands roughly double. That
+pattern is pre-construction project traffic (site surveys), not AIS
+adoption. The BAG therefore proceeds within the AOI as planned, and a
+`band × year` pre-trend term is added for every gear as a **Phase 8
+sensitivity run**, whatever these tests say.
+
+```{r}
+years_pre <- 2016:2022
+
+mmsi_band <- records |> filter(year %in% years_pre) |>
+  group_by(dataset, gear_class, dist_band, year) |>
+  summarise(value = n_distinct(MMSI), .groups = "drop") |>
+  mutate(indicator = paste(ds_label[dataset], "MMSIs")) |>
+  complete(nesting(dataset, gear_class, indicator), dist_band, year = years_pre, fill = list(value = 0))
+
+vp_band <- records |> filter(dataset == "vp", year %in% years_pre) |>
+  group_by(gear_class, dist_band, year) |>
+  summarise(value = sum(hours), .groups = "drop") |>
+  mutate(dataset = "vp", indicator = "VP hours")
+
+raw_vp <- read_csv(file.path(paths$interim_gfw, "gfw_vp_id_cell_month.csv"),
+                   col_types = cols(cell_id = "c", .default = "?")) |>
+  mutate(year = year(`Year Month`)) |>
+  filter(year %in% years_pre) |>
+  left_join(cell_lease, by = "cell_id") |>
+  group_by(dist_band, year) |>
+  summarise(value = sum(vp_hours), .groups = "drop") |>
+  mutate(dataset = "vp", gear_class = factor("ALL VESSELS"), indicator = "raw VP hours (all vessels)")
+
+uptake <- bind_rows(mmsi_band, vp_band, raw_vp) |>
+  mutate(gear_class = as.character(gear_class))
+save_tab(uptake, "uptake_by_band")
+
+p <- uptake |>
+  group_by(indicator, gear_class, dist_band) |>
+  # indexed to each band's own 2016–2022 mean, not to 2016: sparse series
+  # (e.g. fixed AFE) have bands with no vessels in 2016, where a 2016 base
+  # divides by zero
+  mutate(index = value / mean(value)) |>
+  ggplot(aes(year, index, colour = dist_band)) + geom_line() + geom_point(size = 0.8) +
+  scale_y_log10() +
+  facet_wrap(~ indicator + gear_class, scales = "free_y", ncol = 3) +
+  labs(x = NULL, y = "index (band's 2016–2022 mean = 1, log)", colour = "band (km)",
+       title = "Pre-construction trends by distance band (2016–2022); parallel lines = uniform uptake")
+save_fig(p, "uptake_by_band", height = 10)
+p
+
+uptake_test <- uptake |>
+  group_by(indicator, gear_class) |>
+  group_modify(\(d, k) {
+    d <- mutate(d, year_c = year - 2019)
+    m0 <- glm(value ~ dist_band + year_c, family = quasipoisson, data = d)
+    m1 <- glm(value ~ dist_band * year_c, family = quasipoisson, data = d)
+    a <- anova(m0, m1, test = "F")
+    # per-band annual growth, for reading the size of any divergence
+    slopes <- coef(m1)[c("year_c", grep("^dist_band.*:year_c$", names(coef(m1)), value = TRUE))]
+    growth <- exp(slopes[1] + c(0, slopes[-1])) - 1
+    tibble(F = a$F[2], p = a$`Pr(>F)`[2],
+           growth_min_pct = 100 * min(growth), growth_max_pct = 100 * max(growth))
+  }) |> ungroup() |>
+  mutate(parallel = p >= 0.05)
+uptake_test |> mutate(across(where(is.double), \(x) signif(x, 3))) |> knitr::kable()
+save_tab(uptake_test, "uptake_parallel_test")
+```
+
+## Step 8: maps
+
+Density per gear × stage and per gear × stage × season on one colour scale
+per gear and dataset (√-stretched), with the lease outlines; the n_MMSI per
+cell; and differences between stages on the season-standardised rates
+(caveat 8).
+
+Every map draws three layers of the grid so that "no effort" and "not in the
+grid" cannot be confused:
+
+- **pale grey:** grid cells with 0 h (or no change, on the difference maps);
+- **colour:** cells with effort, on the scale;
+- **thin dark grey line:** the grid's outer boundary. Outside it is basemap
+  only (cells GFW returned no records for, excluded in 02).
+
+The lease outlines are drawn last, as a black line over a white halo, so they
+stay visible over both the darkest and lightest colours of every scale.
+
+```{r}
+basemap <- rast(paths$basemap) |> aggregate(fact = 3)
+bm_arr <- as.array(basemap)
+bm_max <- max(bm_arr, na.rm = TRUE)
+bm_ras <- as.raster(array(pmin(1, pmax(0, coalesce(c(bm_arr), bm_max) / bm_max)), dim(bm_arr)))
+bm_ext <- as.vector(ext(basemap))
+bm_layer <- annotation_raster(bm_ras, bm_ext["xmin"], bm_ext["xmax"], bm_ext["ymin"], bm_ext["ymax"])
+
+leases <- map_dfr(paths$leases, \(f) st_read(f, quiet = TRUE) |>
+  st_transform(st_crs(cells)) |> summarise(geometry = st_union(geometry)))
+cells_geo <- select(cells, cell_id)
+bb <- st_bbox(cells)
+# outer boundary of the grid, so cells outside it read as "not in the grid"
+grid_outline <- st_union(st_geometry(cells)) |> st_boundary()
+
+zero_fill <- "grey85" # cells in the grid with no effort
+
+# layers under the data: basemap, then every grid cell in pale grey; cells
+# with effort are drawn over the grey, zero cells (NA fill) let it show
+map_under <- function() {
+  list(bm_layer,
+       geom_sf(data = cells_geo, fill = zero_fill, colour = NA, inherit.aes = FALSE))
+}
+
+# layers over the data: grid boundary, then the leases as a black line on a
+# wider white halo, which stays visible on dark and light fills alike
+map_over <- function(zero_note = "grid cells with 0 h") {
+  list(geom_sf(data = grid_outline, colour = "grey30", linewidth = 0.25, inherit.aes = FALSE),
+       geom_sf(data = leases, fill = NA, colour = "white", linewidth = 1.4, inherit.aes = FALSE),
+       geom_sf(data = leases, fill = NA, colour = "black", linewidth = 0.6, inherit.aes = FALSE),
+       coord_sf(xlim = bb[c("xmin", "xmax")], ylim = bb[c("ymin", "ymax")], expand = FALSE, datum = NA),
+       labs(caption = paste0("Grey: ", zero_note,
+                             ". Black on white: lease areas. Dark grey line: grid boundary.")),
+       theme_void(base_size = 9))
+}
+
+for (ds in datasets) for (g in analysis_gears) {
+  tag <- sprintf("%s %s", ds_label[[ds]], g)
+  st <- tabs[[ds]]$stage |> filter(gear_class == g)
+  ss <- tabs[[ds]]$stage_season |> filter(gear_class == g)
+  lim <- c(0, max(st$density, ss$density))
+  fill <- scale_fill_viridis_c(trans = "sqrt", limits = lim, na.value = NA,
+                               name = "h km⁻²\nmonth⁻¹")
+
+  p1 <- ggplot() + map_under() +
+    geom_sf(data = left_join(cells_geo, mutate(st, density = na_if(density, 0)), by = "cell_id"),
+            aes(fill = density), colour = NA) + fill + map_over() +
+    facet_wrap(~ stage, nrow = 1) + labs(title = paste(tag, "density by stage"))
+  save_fig(p1, sprintf("map_density_%s_%s_stage", ds, g), width = 12, height = 5)
+
+  p2 <- ggplot() + map_under() +
+    geom_sf(data = left_join(cells_geo, mutate(ss, density = na_if(density, 0)), by = "cell_id"),
+            aes(fill = density), colour = NA) + fill + map_over() +
+    facet_grid(season ~ stage) + labs(title = paste(tag, "density by stage × season"))
+  save_fig(p2, sprintf("map_density_%s_%s_stage_season", ds, g), width = 12, height = 8)
+
+  p3 <- ggplot() + map_under() +
+    geom_sf(data = left_join(cells_geo, mutate(st, n_mmsi = na_if(n_mmsi, 0)), by = "cell_id") |>
+              mutate(n_mmsi = cut(n_mmsi, c(0, 1, 2, 5, 10, Inf), c("1", "2", "3–5", "6–10", ">10"))),
+            aes(fill = n_mmsi), colour = NA) +
+    scale_fill_viridis_d(na.value = NA, na.translate = FALSE, name = "MMSIs") + map_over() +
+    facet_wrap(~ stage, nrow = 1) + labs(title = paste(tag, "distinct MMSIs per cell"))
+  save_fig(p3, sprintf("map_nmmsi_%s_%s_stage", ds, g), width = 12, height = 5)
+
+  diffs <- st |> mutate(std_density = rate_std / area_km2) |>
+    select(cell_id, stage, std_density) |>
+    pivot_wider(names_from = stage, values_from = std_density) |>
+    transmute(cell_id, `Stage 2 − Stage 1` = `Stage 2` - `Stage 1`,
+              `Stage 3 − Stage 2` = `Stage 3` - `Stage 2`) |>
+    pivot_longer(-cell_id, names_to = "contrast", values_to = "diff")
+  dl <- max(abs(diffs$diff))
+  p4 <- ggplot() + map_under() +
+    geom_sf(data = left_join(cells_geo, mutate(diffs, diff = na_if(diff, 0)), by = "cell_id"),
+            aes(fill = diff), colour = NA) +
+    scale_fill_distiller(palette = "RdBu", direction = 1, limits = c(-dl, dl), na.value = NA,
+                         name = "Δ h km⁻²\nmonth⁻¹") +
+    map_over("no change (in practice, 0 h in both stages)") +
+    facet_wrap(~ contrast, nrow = 1) + labs(title = paste(tag, "season-standardised density difference"))
+  save_fig(p4, sprintf("map_difference_%s_%s", ds, g), width = 9, height = 5)
+}
+p1
+p4
+```
+
+## Step 9: temporal completeness
+
+Active months (of 128) and active season-years (of 22) per cell × gear,
+within each gear's Stage 1 domain, and the positive cell-steps available to
+the models at each time step.
+
+```{r}
+completeness <- map_dfr(set_names(datasets), \(ds) {
+  am <- tabs[[ds]]$month |> filter(domain) |> group_by(gear_class, cell_id) |>
+    summarise(active_months = sum(hours > 0), .groups = "drop")
+  asy <- tabs[[ds]]$season_year |> filter(domain) |> group_by(gear_class, cell_id) |>
+    summarise(active_season_years = sum(hours > 0), .groups = "drop")
+  left_join(am, asy, by = c("gear_class", "cell_id"))
+}, .id = "dataset")
+save_tab(completeness, "completeness_by_cell")
+
+completeness |>
+  group_by(dataset, gear_class) |>
+  summarise(domain_cells = n(),
+            median_active_months = median(active_months),
+            median_active_season_years = median(active_season_years),
+            pct_cells_6plus_months = 100 * mean(active_months >= 6), .groups = "drop") |>
+  mutate(across(where(is.double), \(x) round(x, 1))) |> knitr::kable()
+
+positives <- map_dfr(set_names(datasets), \(ds) map_dfr(set_names(c("month", "season_year", "stage_season")), \(ts)
+  tabs[[ds]][[ts]] |> filter(domain) |> group_by(gear_class) |>
+    summarise(positive_steps = sum(hours > 0), pct_zero = 100 * mean(hours == 0), .groups = "drop"),
+  .id = "time_step"), .id = "dataset")
+positives |> select(-pct_zero) |>
+  pivot_wider(names_from = time_step, values_from = positive_steps) |> knitr::kable()
+save_tab(positives, "positive_cell_steps")
+
+p <- completeness |>
+  ggplot(aes(active_months)) + geom_histogram(binwidth = 2, fill = "grey40") +
+  facet_grid(dataset ~ gear_class, scales = "free_y", labeller = labeller(dataset = ds_label)) +
+  labs(x = "active months of 128 (domain cells)", y = "cells", title = "Temporal completeness")
+save_fig(p, "completeness_active_months", height = 5)
+p
+```
+
+## Gate
+
+Phase 1's gate is three decisions, not assertions:
+
+1. **Transform** per dataset × gear (step 3): kept, or switched under the
+   decision rule. A switch means updating `y_vst` in `05` and re-rendering
+   before Phase 2.
+2. **Flagged hulls** (step 5) go back to `03` for a decision before the
+   Stage 1 baseline is used for inference. Hulls need at least 20 pre-window
+   hours to be flagged.
+3. **Parallel pre-construction trends** (step 7) → proceed with the
+   within-AOI BAG. Otherwise add a `band × year` pre-trend term to every BAG
+   model and say so. Whatever the tests say, the pre-trend term is a Phase 8
+   sensitivity run for every gear (decision 2026-10-19).
+
+```{r}
+gate <- list(
+  transform = transform_decision |> select(dataset, gear_class, current = scale_cur,
+                                          alternative = scale_alt, slope_gain, lev_drop, switch),
+  flagged_hulls = pre_window |> filter(flag) |>
+    select(dataset, MMSI, vessel_name, operation, first_window, hull_hours,
+           hull_lease_share, fleet_lease_share, ratio),
+  uptake = uptake_test |> select(indicator, gear_class, p, growth_min_pct, growth_max_pct, parallel))
+
+gate$transform |> mutate(across(where(is.double), \(x) round(x, 3))) |> knitr::kable()
+gate$flagged_hulls |> mutate(across(where(is.double), \(x) round(x, 3))) |> knitr::kable()
+gate$uptake |> mutate(across(where(is.double), \(x) signif(x, 3))) |> knitr::kable()
+
+gate_summary <- tibble(
+  decision = c("transforms switched", "hulls flagged for 03", "non-parallel band trends"),
+  count = c(sum(gate$transform$switch), nrow(gate$flagged_hulls), sum(!gate$uptake$parallel)))
+gate_summary |> knitr::kable()
+save_tab(gate_summary, "gate_summary")
+```
+
+## Manifest and provenance
+
+```{r}
+manifest <- tibble(file = outputs, sha256 = map_chr(outputs, file_sha256))
+f_manifest <- file.path(paths$explore, "manifest.csv")
+write_csv(manifest, f_manifest)
+write_provenance(f_manifest, input_files, extra = list(
+  outputs = nrow(manifest), pull_date = as.character(read_pull_date(paths))))
+nrow(manifest)
+```
+
+## Session info
+
+```{r}
+sessionInfo()
+```
+
+```{r}
+renv::diagnostics()
+```

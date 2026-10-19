@@ -16,7 +16,7 @@ gfw_paths <- list(
 
   # spatial layers
   aoi           = "data/sf/aoi/Orsted_AOI.shp",
-  leases        = c("data/sf/owf/SFW.shp", "data/sf/owf/RWF.shp", "data/sf/owf/SRW.shp"),
+  leases        = c("data/sf/owf/sfw/SFW.shp", "data/sf/owf/rwf/RWF.shp", "data/sf/owf/srw/SRW.shp"),
   fishnet       = "data/sf/fishnet",
   grid          = "data/sf/fishnet/gfw_grid_utm19n.gpkg",
 
@@ -35,7 +35,9 @@ gfw_paths <- list(
 
   # analysis tables, covariates and weights (05_prepare_analysis.qmd onward)
   analysis      = "data/processed/analysis",
-  bathy         = "data/sf/bathy/crm_vol1_2023_aoi.tif" # NCEI CRM Vol. 1 AOI subset, fetched by 05
+  bathy         = "data/sf/bathy/crm_vol1_2023_aoi.tif", # NCEI CRM Vol. 1 AOI subset, fetched by 05
+  explore       = "reports/explore",                     # 06 figures/ and tables/ (gitignored)
+  basemap       = "references/basemap/aoi_ocean_utm19n.tif" # map background, EPSG:32619
 )
 
 # gfw_paths with any non-empty Quarto parameter of the same name applied

@@ -107,3 +107,7 @@ r/scratchpad/
 
 # Quarto project cache (r/_quarto.yml)
 .quarto/
+
+# Exploratory outputs from r/06_explore.qmd (figures and tables). They are
+# derived GFW products (CC BY-SA), reproducible from the qmd, so not tracked.
+reports/explore/

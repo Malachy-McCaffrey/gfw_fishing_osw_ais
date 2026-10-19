@@ -108,8 +108,8 @@ registry attribute, so this is a lookup, not an inference. Corrections from
 | File | CRS | Description |
 |---|---|---|
 | `data/sf/aoi/Orsted_AOI.shp` | EPSG:4326 | Study boundary — dissolved union of the SFW + RWF + SRW 10 km buffers |
-| `data/sf/owf/{SFW,RWF,SRW}.shp` | EPSG:3857 | Ørsted lease areas. **Reproject before use.** A cell is `in_lease` (03) when its centroid falls inside one. |
-| `data/sf/owf/{VW1,VW1_Buffer,SRW_Buffer}.shp`, `SNE_OWFs.shp` | EPSG:3857 | **Not used.** Vineyard Wind is not an Ørsted project and lies outside the AOI; `*_Buffer` are AOI-construction intermediates. |
+| `data/sf/owf/sfw/SFW.shp`, `rwf/RWF.shp`, `srw/SRW.shp` | EPSG:3857 | Ørsted lease areas. **Reproject before use.** A cell is `in_lease` (03) when its centroid falls inside one. |
+| `data/sf/owf/vw1/{VW1,VW1_Buffer}.shp`, `srw/SRW_Buffer.shp`, `SNE_OWFs.shp` | EPSG:3857 | **Not used.** Vineyard Wind is not an Ørsted project and lies outside the AOI; `*_Buffer` are AOI-construction intermediates. |
 | `data/sf/fishnet/gfw_grid_utm19n.gpkg` | EPSG:32619 | The analysis grid, written by `02_build_grid.qmd`. One polygon per 0.01° cell present in the raw VP pull (3,376 cells), built from the lower-left corner and reprojected, so each cell is a parallelogram of about 840 m E–W by 1,110 m N–S. |
 
 Grid fields:

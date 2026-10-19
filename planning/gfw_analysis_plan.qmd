@@ -92,6 +92,13 @@ Six findings from profiling the current outputs (2026-10-06 pull, measured
 
 | Topic | Decision | Consequence for this plan |
 |---|---|---|
+| *2026-10-19, BAG power* | | |
+| Simulation power analysis | **Added to Phase 5** (step 3): minimum detectable BAG effect per gear × dataset, from the Phase 6 base model with injected effects | Every BAG estimate is reported against its MDE. A gear with MDE > 50% is reported descriptively (@sec-bag-power). |
+| Pre-trend equivalence test | **Added to Phase 5** (step 4): TOST on band-specific pre-construction trends at cell level, margin tied to the MDE | Parallel trends must be shown, not just not rejected (@sec-bag-pretrend) |
+| *2026-10-19, Phase 1 gate* | | |
+| Transforms | **Kept**: √ for VP, log(density + *c*) for AFE. No dataset × gear met the step 3 switch rule | `y_vst` in `05` unchanged |
+| Pre-window screen | Cailyn & Maren (338389953) was flagged on 5 VP h (2 in the leases): **no action**. A hull now needs **≥ 20 pre-window hours** to be flagged | No hull goes back to `03`; the Stage 1 baseline stands |
+| Pre-construction trends | No band × year test rejected parallel trends, but power is low, and the raw all-vessel series is dominated by project survey traffic inside the leases (2018–2020). **Proceed with the within-AOI BAG**, and add a **band × year pre-trend term for every gear as a Phase 8 sensitivity run** | The raw all-vessel series is not used as an uptake measure |
 | *2026-10-18, third follow-up* | | |
 | Descriptive time steps | **The same for every gear and dataset:** stage (default), stage × season (Apr–Sep / Oct–Mar) and season-year (22 steps) | Moran's I, General G, LISA, Gi\* and the maps are comparable across gears, because none of them changes with the time step. The seasons are Apr–Sep and Oct–Mar because both stage boundaries fall between them (@sec-time-steps). |
 | Model time steps | **A shared stage × season BAG model** for every modelled gear. **Timing models:** monthly for VP and mobile AFE, season-year for fixed AFE | The BAG effects are comparable across gears. Monthly resolution is kept only where the data support it (@sec-time-steps). |
@@ -126,7 +133,7 @@ into `data/interim/` or `data/raw/`.
 | `data/interim/gfw/gfw_{vp,afe}_id_cell_month.csv` | — | All vessel types (raw), used for the AIS-coverage diagnostic |
 | `data/processed/gfw/gfw_{vp,afe}_id_classified.csv` | 437,897 / 66,097 rows; 93,295 / 20,241 Primary | Record level: the vessel-concentration, leave-one-vessel-out and per-vessel analyses |
 | `data/sf/fishnet/gfw_grid_utm19n.gpkg` | 3,376 cells | Grid, EPSG:32619, with `area_km2` and `aoi_class` |
-| `data/sf/owf/{SFW,RWF,SRW}.shp` | 3 leases | Lease polygons in EPSG:3857; **reproject** before use |
+| `data/sf/owf/sfw/SFW.shp`, `rwf/RWF.shp`, `srw/SRW.shp` | 3 leases | Lease polygons in EPSG:3857; **reproject** before use |
 | *Ørsted turbine and cable data* (to come) | — | Time-varying infrastructure covariates (@sec-infra) |
 | NCEI Coastal Relief Model Vol. 1, `crm_vol1_2023.nc` (AOI subset) | 1 arc-second raster | Depth and terrain covariates (@sec-env) |
 | *Ørsted benthic habitat classification* (to come) | — | Habitat covariates (@sec-env) |
@@ -941,7 +948,8 @@ assumptions the later phases rest on.
    - Profile any vessel holding more than 10% of a gear × stage total.
    - For every hull with a charter or survey window, compare the share of its
      hours inside the leases in the 12 months before the window with the
-     fleet's share. Flag hulls more than twice the fleet share. PROVIDER is
+     fleet's share. Flag hulls more than twice the fleet share, if they have
+     at least 20 pre-window hours (a share on fewer is noise). PROVIDER is
      the current case (caveat 11).
 6. **Depth and effort.** Effort density against `depth_m` and BPI per gear.
    Check the expected gear–depth niches, and the collinearity of depth with
@@ -1313,15 +1321,127 @@ $$
    gradient profile per stage per gear, one panel per season.
 2. Event-time plot: monthly rate by band around each project's
    `first foundation` date (−24 to +24 months).
-3. Fit the stage × season BAG for each modelled gear × dataset with the family
+3. **Simulation power analysis** (@sec-bag-power): the minimum detectable
+   BAG effect per modelled gear × dataset. Run it before looking at the real
+   *γ*. It sets the equivalence margin for step 4.
+4. **Pre-trend equivalence test** (@sec-bag-pretrend): show that the
+   distance bands trended in parallel before construction, within a margin
+   tied to step 3, instead of relying on a non-significant interaction.
+5. Fit the stage × season BAG for each modelled gear × dataset with the family
    from @sec-treatments (NB2 for VP; Tweedie and delta-Gamma for AFE).
-4. Fit the timing BAG with the Ørsted covariates (needs `09`): monthly for VP
+6. Fit the timing BAG with the Ørsted covariates (needs `09`): monthly for VP
    and mobile AFE, season-year for fixed AFE.
-5. Formal gear contrast: a joint MOBILE + FIXED model with a `gear × period ×
+7. Formal gear contrast: a joint MOBILE + FIXED model with a `gear × period ×
    band` interaction, to test whether mobile and fixed gear respond
    differently.
-6. Report the BAG rate ratios (exp *γ*) with 95% CI, marginal predicted
-   densities by band × period, and the turbine-distance curve *h*(·).
+8. Report the BAG rate ratios (exp *γ*) with 95% CI, marginal predicted
+   densities by band × period, and the turbine-distance curve *h*(·). Report
+   every estimate next to its gear's minimum detectable effect, so a null
+   reads as "no effect larger than the MDE", not "no effect".
+
+### Simulation power analysis {#sec-bag-power}
+
+**Question.** How large a change in the near-field gradient could each BAG
+model detect, given these data's zeros, overdispersion, spatial
+autocorrelation and vessel concentration? Without this, a null for sparse
+fixed AFE cannot be read.
+
+**Base model.** The BAG model of step 5 (or 6) **without the BAG term**
+*γ*<sub>s</sub>, fitted to all stages per gear × dataset with the family and
+spatial structure chosen in Phase 6. It therefore runs once Phase 6 has
+settled the base model (the Phase 3 power simulation has the same dependency,
+@sec-timeline).
+
+**Procedure.**
+
+1. Keep the observed design (cells, strata, offsets, covariates) and
+   simulate responses from the base model. Draw new spatial random effects in
+   each simulation rather than conditioning on the fitted ones, so spatial
+   uncertainty is included (conservative).
+2. Inject a known BAG effect: multiply the simulated mean by (1 − *e*) in the
+   `inside` and `0–2` km bands in Stage 3 (and, for the timing model, as a
+   function of turbine distance after installation). Effect sizes
+   *e* ∈ {10, 20, 30, 50}%, plus *e* = 0 to check the false-positive rate.
+3. Refit the full BAG model to each simulated dataset and record whether the
+   95% CI of the headline rate ratio excludes 1, its bias, and the CI coverage.
+4. 200 simulations per effect size and model (`set.seed(42)`, parallel,
+   cached with `fit_cached()`). Increase to 500 for any gear whose power curve
+   crosses 0.8 between two tested effect sizes, to pin down the MDE.
+
+**Outputs.** Power curves per gear × dataset × model; a table of the
+**minimum detectable effect** (MDE, the smallest *e* with power ≥ 0.8); the
+false-positive rate at *e* = 0 (should be close to 0.05); bias and coverage.
+Written to `models/power_*.csv` with provenance sidecars.
+
+**Vessel clustering.** A cell-level model treats cells as the only source of
+clustering, but a cell's effort often comes from one vessel (caveat 12). The
+simulated power is therefore **optimistic** for fixed and pole-and-line gear.
+As a check, repeat the *e* = 20% scenario with vessel-level resampling:
+redraw vessels with replacement within gear × stage from the records, rebuild
+the cell table, and inject the effect. Report how much it lowers power.
+
+**Use of the result.**
+
+- Report every BAG estimate next to its MDE.
+- A gear × dataset with an **MDE above 50%** is reported descriptively
+  (steps 1–2), with its MDE stated, not as a hypothesis test.
+- The MDE sets the pre-trend equivalence margin (@sec-bag-pretrend).
+
+No new dependency: `simulate()` for `glmmTMB` and `sdmTMB` fits does the
+simulation, and the refits use the Phase 6 code.
+
+### Pre-trend equivalence test {#sec-bag-pretrend}
+
+**Why.** The Phase 1 test (step 7) found no significant band × year
+interaction, but failing to reject is not evidence of parallel trends,
+especially with 35 band-years per test. An equivalence test turns the
+question around: the pre-trends must be shown to be **smaller than a margin
+that would matter**.
+
+**Model.** The pre-construction data at the timing model's time step (cell ×
+month for VP and mobile AFE, cell × season-year for fixed AFE), with the
+season or cyclic month term, offset, covariates and spatial structure from
+Phase 6, plus a band-specific linear trend:
+
+$$
+\log \mu_{c,t} = \ldots + \theta_{b(c)} \cdot \text{year}_t
+$$
+
+*θ*<sub>b</sub> is band *b*'s annual trend relative to the 8–15 km ring
+(log scale). Using cells, not band totals, gives thousands of observations
+instead of 35.
+
+**Pre-construction period.** Stages 1–2 (to March 2023) until the Ørsted
+dates arrive. After `09`, each cell's pre-period ends at its nearest
+project's first seabed preparation, which adds RWF's and SRW's later starts.
+
+**Margin.** A pre-trend matters if, extrapolated over the gap between the
+before and after periods, it would bias the BAG effect by as much as half
+the smallest effect worth detecting:
+
+$$
+\delta = \frac{\tfrac{1}{2}\,\lvert \log(1 - \text{MDE}) \rvert}{\Delta t}
+$$
+
+Δt is the gap in years between the Stage 1 and Stage 3 midpoints (computed
+at render time). The MDE is the gear's from @sec-bag-power. Until the power
+analysis has run, use **δ = log(1.03)**, 3% a year.
+
+**Test (TOST).** Band *b* is equivalent if the **90% CI** of *θ*<sub>b</sub>
+lies inside (−*δ*, *δ*). That is two one-sided tests at α = 0.05. Parallel
+trends require all four bands to pass. This is an intersection–union test,
+so no multiplicity correction is needed.
+
+**Outcomes per gear × dataset.**
+
+| Result | Meaning | Action |
+|---|---|---|
+| Every band's 90% CI inside (−*δ*, *δ*) | Parallel trends shown | Primary BAG without a pre-trend term. The pre-trend sensitivity (Phase 8) still runs. |
+| Some CI crosses ±*δ*, none excludes 0 | Inconclusive: too little information | Report the BAG with and without the pre-trend term as co-primary, and say so. |
+| Some 95% CI excludes 0 and its estimate lies outside ±*δ* | Non-parallel trends | Add the `band × year` pre-trend term to every BAG model for that gear (the Phase 1 rule), and report the extrapolated bias. |
+
+Report *θ*<sub>b</sub> with 90% and 95% CIs and *δ* on one forest plot per
+gear × dataset. Written to `models/pretrend_*.csv`.
 
 ### Limits of the within-AOI BAG {#sec-bag-limits}
 
@@ -1336,8 +1456,12 @@ $$
 - **An AOI-wide change cannot be identified.** The stage main effects
   *β*<sub>s</sub> mix project effects with regional trends, COVID and AIS
   uptake. Report them, but do not interpret them as project effects.
-- **Pre-trend check.** The parallel-trends test in Phase 1, step 7 must pass,
-  or a pre-trend term is added (gate in @sec-phase1).
+- **Pre-trend check.** The Phase 1 test (step 7) screens for divergent
+  trends. Parallel trends must then be **shown** by the equivalence test
+  (@sec-bag-pretrend), or the pre-trend term is added or the result reported
+  as inconclusive.
+- **Limited power.** Read every estimate against its gear's minimum
+  detectable effect (@sec-bag-power).
 
 ## Phase 6: Statistical models, comparison of approaches (`11_models_frequentist.qmd`, `12_models_inla.qmd`) {#sec-models}
 
@@ -1720,6 +1844,7 @@ grid: variant × outcome, with the estimate and CI.
 | Mobile AFE timing model at season-year instead of monthly | Time-step robustness of the turbine-distance curve |
 | Alternative transform (√ ↔ log) and weights (queen / 2-order / distance band) | Phase 3 robustness |
 | Fleet-size covariate (active MMSIs per gear per month) | AIS uptake |
+| `band × year` pre-trend term, every gear (Phase 1 gate, 2026-10-19) | Parallel pre-construction trends across distance bands, which the Phase 1 tests could not establish with power |
 | Distance bands vs a continuous distance smooth | BAG specification |
 
 ## Phase 9: Synthesis (`14_synthesis.qmd`) {#sec-synthesis}

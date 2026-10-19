@@ -39,9 +39,10 @@ Companion documents:
 
 **Read-only inputs**
 
-- `data/shp/aoi/Orsted_sqGrid_utm19n.shp` — 3,375 cells, EPSG:32619
-- `data/shp/aoi/Orsted_AOI.shp` — EPSG:4326, single polygon, ~3,024.7 km²
-- `data/shp/owf/{SFW,RWF,SRW,SNE_OWFs}.shp` — EPSG:3857, reproject before use
+- `archive/fishnet/Orsted_sqGrid_utm19n.shp` — 3,375 cells, EPSG:32619
+  (superseded by `data/sf/fishnet/gfw_grid_utm19n.gpkg`, 3,376 cells, built by `r/02`)
+- `data/sf/aoi/Orsted_AOI.shp` — EPSG:4326, single polygon, ~3,024.7 km²
+- `data/sf/owf/sfw/SFW.shp`, `rwf/RWF.shp`, `srw/SRW.shp`, `SNE_OWFs.shp` — EPSG:3857, reproject before use
 - `data/interim/gfw/gfw_{vp1,vp2,vp3}_fv_sub.csv` — 23,078 / 28,116 / 34,906 rows
 - `data/interim/gfw/gfw_{afe1,afe2,afe3}_id_sub.csv` — 3,264 / 4,617 / 9,430 rows
 

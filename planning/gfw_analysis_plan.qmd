@@ -884,9 +884,55 @@ assumptions the later phases rest on.
    - Tweedie power by the log-variance/log-mean slope, and by profile
      likelihood (`glmmTMB` fits with *p* free, once installed);
    - for VP, check that `vp_hours` is integer.
-3. **Transform check.** Skew and the mean–variance slope of `y_vst` against
-   raw density, √ and log for each surface. This confirms or overrides the
-   choices in @sec-treatments.
+3. **Transform check.** Compare four scales for every surface: raw density,
+   √, log(density + *c*) and the chosen `y_vst`. This confirms or overrides
+   the choices in @sec-treatments.
+
+   The transforms serve only the spatial statistics, which are tested by
+   permutation. Normality is therefore not the goal. What matters is that the
+   variance stops growing with the mean, and that a few extreme cells do not
+   dominate. The models never see the transformed values (they fit raw hours).
+   With 40–99% zeros in many surfaces, no transform makes a surface normal.
+   So every plot uses the **positive values only, with the surface's zero
+   share printed on each panel**.
+
+   Numbers, per surface and scale:
+   - skewness of the positive values;
+   - the mean–variance slope across cells (log variance on log mean, as in
+     step 2), computed on the transformed values;
+   - the share of high-leverage cells in the Moran scatterplot (below).
+
+   Plots, one faceted page per dataset × time step (stage, stage × season,
+   season-year), with gear × stratum as rows and the four scales as columns,
+   so the 36 stage × season surfaces fit on two pages rather than 144 plots:
+   1. **Distribution:** histograms or density plots of the positive values.
+   2. **Spread:** a mean–variance plot across cells on log–log axes with the
+      fitted slope. A flat line on the transformed scale means the variance
+      is stabilised.
+   3. **Normality (supporting only):** QQ plots of the positive values against
+      the normal.
+   4. **Relationships:** density against `depth_m`, `dist_lease_km` and
+      `bpi_broad`, with a loess smooth. This shows whether a transform
+      straightens a relationship or hides it, which matters for reading the
+      local statistics against distance in Phase 3.
+   5. **Influence on the spatial statistics:** a Moran scatterplot per
+      surface (`spdep::moran.plot` with `lw_W`), raw against `y_vst`.
+      High-leverage cells are those flagged by its influence measures (hat
+      value or Cook's distance). This links the transform choice to the
+      statistics it serves.
+
+   Write the per-surface numbers to `tables/transform_check_{vp,afe}.csv` and
+   the pages to `figures/transform_check_{vp,afe}_{timestep}.png`.
+
+   **Decision rule.** Keep the transform in @sec-treatments (√ for VP,
+   log(density + *c*) for AFE) unless the alternative does better on the
+   median surface of a dataset × gear by **both** of:
+   - the mean–variance slope is at least 0.2 closer to zero;
+   - the share of high-leverage cells is at least a third lower.
+
+   Report the result either way. A switch applies to that dataset × gear at
+   every time step, so the gears stay comparable within a time step, and the
+   rejected transform becomes the Phase 3 robustness run.
 4. **Time series.** Monthly Primary VP and AFE by gear, split inside/outside
    the leases and by `dist_band`, with the stage boundaries marked. Include
    STL or cyclic-smooth decompositions of trend and season.
@@ -916,6 +962,8 @@ assumptions the later phases rest on.
 
 **Gate.**
 
+- Step 3 confirms the transform for each dataset × gear, or switches it under
+  the decision rule. Update `y_vst` in `05` and re-render before Phase 2.
 - Step 7 shows parallel pre-construction trends across bands → proceed with the
   within-AOI BAG.
 - If not, add a `band × year` pre-trend term to every BAG model and say so.

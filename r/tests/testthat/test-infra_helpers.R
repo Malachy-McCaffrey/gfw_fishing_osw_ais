@@ -33,6 +33,42 @@ test_that("dms_to_dd() signs south and west negative", {
   expect_equal(dms_to_dd("41-05-45.63N"), 41 + 5 / 60 + 45.63 / 3600)
   expect_true(is.na(dms_to_dd(NA)))
   expect_error(dms_to_dd("41 8 41.91 N"), "unparsed DMS")
+  # comma-separated, as in the SFW CSV, including a space before the hemisphere
+  expect_equal(dms_to_dd("41, 06, 31.782N"), 41 + 6 / 60 + 31.782 / 3600)
+  expect_equal(dms_to_dd("71, 10, 4.620 W"), -(71 + 10 / 60 + 4.62 / 3600))
+})
+
+test_that("read_sfw_csv() collapses day rows and keeps the position id", {
+  f <- tempfile(fileext = ".csv")
+  writeLines(c(
+    "USCG_ID,Orsted_ID,Install_Dates,Latitude,Longitude,Source",
+    'AM0,A01,2023-08-04,"41, 06, 31.782N","71, 11, 23.401W",Orsted',
+    'AN08,A10,2023-07-08,"41, 05, 36.168N","71, 07, 24.229W",Orsted',
+    'AN08,A10,2023-07-09,"41, 05, 36.168N","71, 07, 24.229W",Orsted',
+    'AP06,Z01,2023-06-19,"41, 04, 33.450N","71, 10, 4.620 W",Orsted'), f)
+  out <- read_sfw_csv(f)
+  expect_equal(out$foundation_id, c("A01", "A10", "Z01"))
+  expect_equal(out$structure, c("WTG", "WTG", "OSS"))
+  # A10's two installation days become one foundation spanning both
+  expect_equal(out$foundation_installed[2], as.Date("2023-07-08"))
+  expect_equal(out$foundation_end[2], as.Date("2023-07-09"))
+  expect_equal(out$n_date_rows, c(1L, 2L, 1L))
+  # the truncated id is kept as given; 05 resolves it by position
+  expect_equal(out$uscg_id, c("AM0", "AN08", "AP06"))
+  expect_equal(out$lon[3], -(71 + 10 / 60 + 4.62 / 3600))
+
+  # repeated day rows naming two positions are an error
+  bad <- tempfile(fileext = ".csv")
+  writeLines(c(
+    "USCG_ID,Orsted_ID,Install_Dates,Latitude,Longitude,Source",
+    'AN08,A10,2023-07-08,"41, 05, 36.168N","71, 07, 24.229W",Orsted',
+    'AN09,A10,2023-07-09,"41, 05, 36.168N","71, 07, 24.229W",Orsted'), bad)
+  expect_error(read_sfw_csv(bad), "disagree on USCG_ID")
+  # a non-ISO date is an error, not a silent NA
+  writeLines(c(
+    "USCG_ID,Orsted_ID,Install_Dates,Latitude,Longitude,Source",
+    'AN08,A10,8-Jul-23,"41, 05, 36.168N","71, 07, 24.229W",Orsted'), bad)
+  expect_error(read_sfw_csv(bad), "unparsed SFW installation date")
 })
 
 test_that("coord_to_dd() passes decimals through and converts DMS", {
@@ -121,6 +157,38 @@ test_that("foundation_exposure() ignores foundations with no dates (planned)", {
                             as.Date("2024-02-01"))
   expect_equal(ex$d_found_km, 1)
   expect_equal(ex$n_found_2km, 1L)
+})
+
+test_that("safety_zone_share() gives the area share of active zones per cell and month", {
+  # two 1 km × 1 km cells side by side (metres), in a projected CRS
+  sq <- \(x0) sf::st_polygon(list(rbind(c(x0, 0), c(x0 + 1000, 0), c(x0 + 1000, 1000),
+                                        c(x0, 1000), c(x0, 0))))
+  cells <- sf::st_sf(id = 1:2, geometry = sf::st_sfc(sq(0), sq(1000), crs = 32619))
+  # one foundation in the middle of cell 1, and two co-located on the shared edge
+  pts <- sf::st_sf(geometry = sf::st_sfc(sf::st_point(c(500, 500)), sf::st_point(c(1000, 500)),
+                                         sf::st_point(c(1000, 500)), crs = 32619))
+  months <- as.Date(c("2024-01-01", "2024-02-01", "2024-03-01"))
+  # zone 1 active Jan only (one day is enough); zones 2–3 from Feb, open to Mar
+  start <- as.Date(c("2024-01-31", "2024-02-10", "2024-02-10"))
+  end   <- as.Date(c("2024-01-31", "2024-03-31", "2024-03-31"))
+  out <- safety_zone_share(cells, pts, start, end, months, radius_m = 500)
+  expect_equal(nrow(out), 6)
+  get <- \(cl, m) out$sz_share[out$cell == cl & out$year_month == as.Date(m)]
+  # January: a 500 m circle wholly inside cell 1 (π · 0.25 km² of 1 km²); polygon
+  # approximation of the circle keeps it within 0.1%
+  expect_equal(get(1, "2024-01-01"), pi / 4, tolerance = 1e-3)
+  expect_equal(get(2, "2024-01-01"), 0)
+  # February: the co-located pair counts once, half in each cell
+  expect_equal(get(1, "2024-02-01"), pi / 8, tolerance = 1e-3)
+  expect_equal(get(2, "2024-02-01"), pi / 8, tolerance = 1e-3)
+  expect_equal(get(1, "2024-03-01"), get(1, "2024-02-01"))
+  # a zone never active (NA dates) contributes nothing
+  none <- safety_zone_share(cells, pts, rep(as.Date(NA), 3), rep(as.Date(NA), 3), months)
+  expect_equal(none$sz_share, rep(0, 6))
+  # months with and without zones mixed: every cell × month keeps its row
+  mixed <- safety_zone_share(cells, pts, start, end, c(as.Date("2023-12-01"), months))
+  expect_equal(nrow(mixed), 8)
+  expect_equal(mixed$sz_share[mixed$year_month == as.Date("2023-12-01")], c(0, 0))
 })
 
 test_that("cable_works_exposure() needs a known window and the radius", {

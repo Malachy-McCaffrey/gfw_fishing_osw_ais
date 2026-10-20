@@ -6,10 +6,13 @@
 # give one row per installation day: a foundation installed over several days
 # repeats its row with each date. Dates are mostly "10-May-24", with a few
 # two-day cells ("19-20-Jul-25"); RWF coordinates are degree-minute-second
-# text. These functions turn that into one row per foundation with a first
+# text. SFW comes as its own Ørsted CSV (ISO dates, comma-separated DMS, one
+# row per installation day; read_sfw_csv()). These functions turn that into
+# one row per foundation with a first
 # and a last date, and then into per-cell, per-month exposure covariates.
 #
-# Everything here except read_foundation_csv() (which reads a file) is a
+# Everything here except read_foundation_csv() and read_sfw_csv() (which
+# read a file) is a
 # pure function of its arguments, unit-tested in
 # r/tests/testthat/test-infra_helpers.R.
 
@@ -75,9 +78,13 @@ parse_install_dates <- function(x) {
 
 # Degree-minute-second text -> signed decimal degrees.
 # "41-8-41.91N" -> 41.144975; "71-2-15.57W" -> -71.037658. South and west are
-# negative. NA stays NA; anything else unparseable is an error.
+# negative. Two layouts are accepted: hyphen-separated (the RWF CSV) and
+# comma-separated, "41, 06, 31.782N" (the SFW CSV, which also has one
+# hemisphere letter after a space, "4.620 W"). NA stays NA; anything else
+# unparseable is an error.
 dms_to_dd <- function(x) {
-  m <- stringr::str_match(stringr::str_squish(x), "^(\\d+)-(\\d+)-([0-9.]+)([NSEW])$")
+  m <- stringr::str_match(stringr::str_squish(x),
+                          "^(\\d+)(?:-|, ?)(\\d+)(?:-|, ?)([0-9.]+) ?([NSEW])$")
   bad <- !is.na(x) & is.na(m[, 1])
   if (any(bad)) stop("unparsed DMS coordinate(s): ", paste(x[bad], collapse = " | "))
   dd <- as.numeric(m[, 2]) + as.numeric(m[, 3]) / 60 + as.numeric(m[, 4]) / 3600
@@ -157,6 +164,48 @@ read_foundation_csv <- function(path) {
     collapse_foundation_rows()
 }
 
+# Read Ørsted's SFW monopile CSV (sfw_monopile_install_orsted.csv) to one row
+# per foundation, in the same shape as read_foundation_csv().
+#
+# Columns: USCG_ID (the layout grid position, e.g. AM06), Orsted_ID (the
+# PSO report's monopile id, A01–A15 or Z01), Install_Dates (ISO, one row per
+# installation day), Latitude / Longitude (comma-separated DMS), Source.
+# This file is the crosswalk the PSO report lacks: it ties each PSO id, and
+# so each installation date, to a position. Structure comes from the id
+# (Z## is the offshore substation, A## a turbine). The file has no water
+# depth. `uscg_id` is kept as given; 05 matches positions by distance,
+# because one id in the delivered file is truncated ("AM0").
+read_sfw_csv <- function(path) {
+  raw <- readr::read_csv(path, col_types = readr::cols(.default = "c"))
+  need <- c("USCG_ID", "Orsted_ID", "Install_Dates", "Latitude", "Longitude")
+  stopifnot("SFW CSV is missing a column" = all(need %in% names(raw)))
+  rows <- raw |>
+    dplyr::mutate(dplyr::across(dplyr::everything(), stringr::str_squish)) |>
+    dplyr::filter(!is.na(Orsted_ID)) |>
+    dplyr::transmute(
+      foundation_id = Orsted_ID,
+      uscg_id = USCG_ID,
+      structure = dplyr::if_else(stringr::str_detect(Orsted_ID, "^Z"), "OSS", "WTG"),
+      # strict ISO: anything else becomes NA and is caught below
+      date_first = as.Date(Install_Dates, format = "%Y-%m-%d"),
+      date_last = date_first,
+      lat = dms_to_dd(Latitude), lon = dms_to_dd(Longitude),
+      depth_m = NA_real_)
+  if (anyNA(rows$date_first))
+    stop("unparsed SFW installation date(s): ",
+         paste(raw$Install_Dates[is.na(rows$date_first)], collapse = " | "))
+  # a foundation's day rows must name one position id, like they must agree
+  # on position and structure (checked by collapse_foundation_rows())
+  # count before taking the first: summarise() evaluates in order, so a
+  # uscg_id summarised first would leave n_distinct() only one value to see
+  ids <- dplyr::summarise(dplyr::group_by(rows, foundation_id),
+                          n_ids = dplyr::n_distinct(uscg_id), uscg_id = dplyr::first(uscg_id))
+  if (any(ids$n_ids > 1)) stop("repeated SFW rows disagree on USCG_ID: ",
+                               paste(ids$foundation_id[ids$n_ids > 1], collapse = ", "))
+  collapse_foundation_rows(dplyr::select(rows, -uscg_id)) |>
+    dplyr::left_join(dplyr::select(ids, foundation_id, uscg_id), by = "foundation_id")
+}
+
 # Matching ------------------------------------------------------------------
 
 # For each point in `a`, the nearest point in `b` and the distance in metres.
@@ -213,6 +262,57 @@ foundation_exposure <- function(d_km, installed, end, months,
   out <- dplyr::bind_rows(out)
   names(out)[names(out) == "n_found"] <- sprintf("n_found_%gkm", r_count_km)
   out
+}
+
+# Per-cell exposure to construction safety zones, month by month.
+#
+# The U.S. Coast Guard set a 500 m safety zone around every SFW, RWF and SRW
+# foundation (references/infra_safety_zones.csv). Inside it, vessels other
+# than those attending construction are excluded by regulation, so a loss of
+# effort there is mandated, not a behavioural response. A 500 m zone covers
+# about 0.79 km², most of a ~0.93 km² cell, so exposure is measured as an
+# area share rather than from the cell centroid.
+#
+# `cells`: sf polygons (projected, metres). `pts`: sf points, one per
+# foundation, same CRS. `start`, `end`: each zone's first and last active day
+# (NA: never active). A zone counts in a month if it is active on any day of
+# it. Zones are unioned before intersecting, so co-located foundations (RWF
+# Z01a and Z01b share AL11) are not counted twice. Returns a tibble, one row
+# per cell × month (`cell` = row of `cells`), with `sz_share` in [0, 1].
+safety_zone_share <- function(cells, pts, start, end, months, radius_m = 500) {
+  stopifnot("cells and pts must share a CRS" = sf::st_crs(cells) == sf::st_crs(pts),
+            nrow(pts) == length(start), length(start) == length(end))
+  me <- month_end(months)
+  geom <- sf::st_geometry(cells)
+  cell_area <- as.numeric(sf::st_area(geom))
+  buf <- sf::st_buffer(sf::st_geometry(pts), radius_m)
+  # foundations × months: is each zone active in each month?
+  active <- vapply(seq_along(months), function(k)
+    !is.na(start) & !is.na(end) & start <= me[k] & end >= months[k],
+    logical(length(start)))
+  active <- matrix(active, nrow = length(start))
+  # months with the same set of active zones share one computation. A month
+  # with none is keyed "none", not "": a list cannot be indexed by an empty
+  # name, which would silently drop those months
+  key <- apply(active, 2, \(a) if (any(a)) paste(which(a), collapse = ",") else "none")
+  share_of <- function(k) {
+    s <- numeric(length(geom))
+    if (k == "none") return(s)
+    u <- sf::st_union(buf[as.integer(strsplit(k, ",")[[1]])])
+    hit <- which(lengths(sf::st_intersects(geom, u)) > 0)
+    if (length(hit) == 0) return(s)
+    # intersect with ids kept, so a cell that only touches a zone (an empty or
+    # line intersection, dropped by st_intersection) cannot shift the rest
+    xi <- suppressWarnings(sf::st_intersection(sf::st_sf(id = hit, geometry = geom[hit]),
+                                               sf::st_sf(geometry = u)))
+    a <- tapply(as.numeric(sf::st_area(xi)), xi$id, sum)
+    s[as.integer(names(a))] <- a / cell_area[as.integer(names(a))]
+    pmin(s, 1)
+  }
+  shares <- lapply(stats::setNames(unique(key), unique(key)), share_of)
+  tibble::tibble(cell = rep(seq_along(geom), length(months)),
+                 year_month = rep(months, each = length(geom)),
+                 sz_share = unlist(shares[key], use.names = FALSE))
 }
 
 # Per-cell exposure to cable works, month by month.

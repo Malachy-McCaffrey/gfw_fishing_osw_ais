@@ -76,7 +76,7 @@ test_that("vessel_permit_groups.csv is valid", {
 })
 
 test_that("sfw_foundation_dates.csv is valid", {
-  sfw <- read_chr(root_paths$sfw_foundations)
+  sfw <- read_chr(root_paths$sfw_pso_dates)
   expect_true(all(c("pso_id", "structure", "first_date", "last_date", "source") %in% names(sfw)))
   # 12 turbines and one substation (Z01), each listed once
   expect_equal(sum(sfw$structure == "WTG"), 12)
@@ -85,6 +85,39 @@ test_that("sfw_foundation_dates.csv is valid", {
   expect_true(all(iso_or_blank(sfw$first_date) & !is.na(sfw$first_date)))
   expect_true(all(as.Date(sfw$first_date) <= as.Date(sfw$last_date)))
   expect_false(anyNA(sfw$source))
+})
+
+test_that("the Ørsted SFW CSV covers the 13 foundations and agrees with PSO Table 3", {
+  # the Ørsted file sits under data/ (not tracked), so it may be absent
+  skip_if_not(file.exists(root_paths$sfw_foundations), "SFW Ørsted CSV not present")
+  sfw <- read_sfw_csv(root_paths$sfw_foundations)
+  expect_equal(nrow(sfw), 13)
+  expect_equal(sum(sfw$structure == "WTG"), 12)
+  expect_equal(sfw$foundation_id[sfw$structure == "OSS"], "Z01")
+  # the substation sits where the export cable lands
+  expect_equal(sfw$uscg_id[sfw$foundation_id == "Z01"], "AP06")
+  # every position id is a complete grid name (A01's "AM0" corrected to AM05,
+  # 2026-10-20), one per foundation
+  expect_true(all(str_detect(sfw$uscg_id, "^[A-Z]{2}\\d{2}$")))
+  expect_equal(sfw$uscg_id[sfw$foundation_id == "A01"], "AM05")
+  expect_false(anyDuplicated(sfw$uscg_id) > 0)
+  pso <- read_chr(root_paths$sfw_pso_dates)
+  both <- inner_join(sfw, pso, by = c("foundation_id" = "pso_id"))
+  expect_equal(nrow(both), 13)
+  expect_equal(both$foundation_installed, as.Date(both$first_date))
+  expect_equal(both$foundation_end, as.Date(both$last_date))
+})
+
+test_that("infra_safety_zones.csv is valid", {
+  sz <- read_chr(root_paths$safety_zones)
+  expect_true(all(c("project", "radius_m", "rule_start", "rule_end", "zones", "source") %in% names(sz)))
+  expect_setequal(sz$project, c("SFW", "RWF", "SRW"))
+  expect_true(all(as.numeric(sz$radius_m) == 500))
+  expect_true(all(iso_or_blank(sz$rule_start) & iso_or_blank(sz$rule_end)))
+  expect_true(all(as.Date(sz$rule_start) <= as.Date(sz$rule_end)))
+  # one zone per foundation position: SFW 13, RWF 67 (65 WTG + 2 OSS sites), SRW 85
+  expect_equal(as.integer(sz$zones[match(c("SFW", "RWF", "SRW"), sz$project)]), c(13L, 67L, 85L))
+  expect_false(anyNA(sz$source))
 })
 
 test_that("infra_cable_windows.csv is valid", {

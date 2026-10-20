@@ -1,0 +1,4 @@
+project,radius_m,rule_start,rule_end,zones,source
+SFW,500,2023-05-01,2024-05-31,13,"USCG temporary final rule, 88 FR (2 May 2023), Safety Zone; South Fork Wind Farm Project Area, OCS-A 0517, effective to 2023-12-31; extended to 2024-05-31 by 88 FR 87716 (19 Dec 2023). Enforced 2023-05-01 to 2024-05-31 (user, 2026-10-20)"
+RWF,500,2024-05-06,2027-05-31,67,"USCG temporary final rule, 89 FR (6 May 2024), 16 zones 2024-05-06 to 2024-05-31; final rule 89 FR (16 May 2024), Safety Zone; Revolution Wind Farm Project Area, OCS-A 0486, 67 zones 2024-06-01 to 2027-05-31. Enforced during active construction, announced in Local Notices to Mariners"
+SRW,500,2025-06-01,2028-05-31,85,"USCG rule, 90 FR (16 Jun 2025), Safety Zone; Sunrise Wind Farm Project Area, OCS-A 0487, 85 zones (84 WTG + OCS-DC) 2025-06-01 to 2028-05-31. Enforced during active construction, announced in Local Notices to Mariners"

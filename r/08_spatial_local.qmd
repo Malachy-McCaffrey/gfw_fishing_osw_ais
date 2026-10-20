@@ -1,0 +1,751 @@
+---
+title: "MM GFW Local Spatial Statistics (Phase 3)"
+author: "Malachy McCaffrey"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    fig-width: 10
+    fig-height: 6
+params:
+  # Path overrides (see r/paths.R); leave blank to use the project paths.
+  analysis: ""
+  spatial: ""
+  processed_gfw: ""
+  # Permutations (decision 2026-10-20): 999 throughout. The z-moment p has
+  # no floor, so more draws only refine each cell's permutation mean and
+  # variance; one count everywhere keeps the main, robustness and power runs
+  # calibrated alike
+  nsim_main: 999
+  nsim_robust: 999
+  nsim_power: 999
+  # Criterion 4: extra permutation seeds, and vessels in the jackknife
+  seeds_extra: [101, 102, 103, 104]
+  top_k: 10
+  # Criterion 5: interim null replicates and the planted signals
+  n_null: 40
+  halo_km: 2          # avoidance halo: inside the leases and out to this distance
+  halo_factor: 0.5    # -50%
+  ring_lo_km: 2       # spillover ring: [ring_lo_km, ring_hi_km) outside the leases
+  ring_hi_km: 4
+  ring_factor: 1.5    # +50%
+  min_excess: 0.10    # paired detection: the signal raises the zone's flagged share by >= 10 pp
+  # GRF range clamp (km), as for the Phase 2 bootstrap blocks
+  range_min_km: 3
+  range_max_km: 10
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# run from the repo root (the folder holding renv.lock) so the relative paths
+# in r/paths.R resolve whether the qmd is rendered or run chunk by chunk
+root <- getwd()
+while (!file.exists(file.path(root, "renv.lock")) && dirname(root) != root) root <- dirname(root)
+knitr::opts_knit$set(root.dir = root)
+```
+
+## Objective
+
+Phase 3 of `planning/gfw_analysis_plan.qmd`: compare Local Moran's I (LISA)
+and Getis-Ord Gi\* on these data against criteria fixed before the results
+are seen, then adopt one as the primary hotspot method.
+
+| Step | Content |
+|---|---|
+| 1 | Both statistics on every dataset × gear × stage (18) and × stage × season (36) surface, BH-FDR at q = 0.05 and 0.10 within each surface |
+| 2 | Classes and maps: Gi\* bins −3…+3, LISA quadrants |
+| 3 | Stage-change classes S1→S2, S2→S3, S1→S3, overall and within each season (the archive's scheme) |
+| 4 | Criteria 1–5 (criterion 6 waits for Phase 5) |
+| 5 | Scorecard and gate |
+
+| Criterion | Question |
+|---|---|
+| 1 Agreement | Cohen's κ, Gi\* hot vs LISA HH and cold vs LL, with disagreement maps |
+| 2 Zero-inflation | Share of significant LL / cold cells whose whole neighbourhood is empty |
+| 3 Unique information | LISA's HL / LH outliers inside the leases and on their boundaries |
+| 4 Stability | Classes kept across permutation seeds, weights, and a leave-one-vessel-out jackknife |
+| 5 Power | Detection of a planted 2 km avoidance halo and a 2–4 km spillover ring |
+| 6 Agreement with BAG | **Deferred**: needs the Phase 5 estimates |
+
+**Settings (decisions 2026-10-20).**
+
+- **z-moment permutation p-values** (`Pr(z != E(Ii))`, `Pr(z != E(Gi))`),
+  999 conditional permutations: each cell's statistic is standardised by its
+  own permutation mean and variance and given a two-sided normal p. It has no
+  floor, so BH-FDR can still reject on sparse surfaces. The rank p (floor
+  2/1,000) rejected nothing on the sparse AFE surfaces. The folded p is
+  **wrong in spdep 1.4.2 for Gi\***: it returns 0.001 for cells whose whole
+  neighbourhood is empty, where a hand-coded permutation gives about 0.4,
+  and so flagged every empty neighbourhood. The normal approximation is
+  checked empirically by the null runs of criterion 5 (`fp`).
+- **Scales:** LISA on `y_vst`; Gi\* on the non-negative G scale
+  (`g_scale()`: √density for VP, log(1 + density / *c*) for AFE).
+  `localG_perm()` divides by the surface total, which is negative for AFE's
+  log `y_vst`, and that reverses the sign of every z.
+- **Weights** (05, Phase 2 gate): queen, row-standardised for LISA and
+  binary self-included for Gi\*. The Phase 2 gate adds a distance-band run
+  for every dataset × gear (`global_rho0.csv`); it enters criterion 4.
+- **Criterion 5 uses interim nulls:** a Gaussian random field at each
+  gear's *ρ*₀, reshaped by rank to the observed Stage 1 values. It keeps the
+  zero share, the positive distribution and the spatial scale, but none of
+  the real geography. It is re-run with Phase 6 model simulations later.
+
+Every permutation run is cached in `reports/spatial/cache/` under a hash of
+its inputs (`cached()`), so a re-render recomputes only what changed. The
+first render takes about 2.5 hours, serially.
+
+## Libraries and shared code
+
+```{r}
+library(tidyverse)
+library(sf)
+library(spdep)
+library(terra)
+
+source("r/paths.R")
+source("r/gfw_helpers.R")
+source("r/analysis_helpers.R")
+source("r/spatial_helpers.R")
+
+# Quarto parameters (header); `params` is read-only while rendering. Run chunk
+# by chunk, `params` is missing or left over from another session, so the
+# header is read from this file directly instead
+qparams <- if (isTRUE(getOption("knitr.in.progress"))) params else {
+  hdr <- knitr::knit_params(readLines(file.path(root, "r/08_spatial_local.qmd"), warn = FALSE))
+  lapply(hdr, function(p) p$value)
+}
+paths <- gfw_paths_with(qparams)
+
+set.seed(42) # workflow-wide seed (plan, FAIR); every permutation run also
+             # takes an explicit seed, so results do not depend on run order
+
+datasets <- c("vp", "afe")
+ds_label <- c(vp = "VP", afe = "AFE")
+stages <- c("Stage 1", "Stage 2", "Stage 3")
+
+fig_dir <- file.path(paths$spatial, "figures")
+tab_dir <- file.path(paths$spatial, "tables")
+cache_dir <- file.path(paths$spatial, "cache")
+dir.create(fig_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(tab_dir, recursive = TRUE, showWarnings = FALSE)
+
+# every output is recorded here; the manifest is written at the end
+outputs <- character()
+save_tab <- function(df, name) {
+  f <- file.path(tab_dir, paste0(name, ".csv"))
+  write_csv(df, f, na = "")
+  outputs <<- c(outputs, f)
+  invisible(f)
+}
+save_fig <- function(p, name, width = 10, height = 6) {
+  f <- file.path(fig_dir, paste0(name, ".png"))
+  ggsave(f, p, width = width, height = min(height, 49), dpi = 120, bg = "white", limitsize = FALSE)
+  outputs <<- c(outputs, f)
+  invisible(p)
+}
+# rounds every double column for display only; the saved tables keep full precision
+kable_round <- function(df, digits = 3) {
+  df |> mutate(across(where(is.double), \(x) round(x, digits))) |> knitr::kable()
+}
+
+theme_set(theme_minimal(base_size = 10))
+```
+
+## Read the Phase 0 and Phase 2 outputs
+
+```{r}
+table_path <- \(ds, ts) file.path(paths$analysis, sprintf("%s_%s_gear.csv", ds, ts))
+
+read_surfaces <- function(ds, ts) {
+  read_csv(table_path(ds, ts),
+           col_select = c(cell_id, gear_class, stage, any_of("season"), months, hours, density),
+           col_types = cols(cell_id = "c", gear_class = "c", stage = "c", season = "c",
+                            .default = "d"))
+}
+# one long table of every surface: stage surfaces carry season "all"
+surfaces <- map_dfr(datasets, \(ds) bind_rows(
+  read_surfaces(ds, "stage") |> mutate(season = "all"),
+  read_surfaces(ds, "stage_season")) |>
+    mutate(dataset = ds, .before = 1)) |>
+  mutate(gear_class = factor(gear_class, levels = analysis_gears),
+         season = factor(season, c("all", "AprSep", "OctMar")))
+
+cells <- st_read(file.path(paths$analysis, "cells.gpkg"), quiet = TRUE)
+weights <- readRDS(file.path(paths$analysis, "grid_weights.rds"))
+stopifnot("weights and cells.gpkg are in a different cell order" =
+            identical(weights$cell_id, cells$cell_id))
+cell_info <- st_drop_geometry(cells) |>
+  select(cell_id, x_km, y_km, area_km2, dist_lease_km, dist_band)
+coords_km <- as.matrix(cell_info[, c("x_km", "y_km")])
+
+n_surf <- surfaces |> count(dataset, gear_class, stage, season)
+stopifnot("54 surfaces, each holding every cell once" =
+            nrow(n_surf) == 54 && all(n_surf$n == nrow(cells)))
+
+# Phase 2 gate: rho0 and the distance-band width per dataset × gear
+f_rho0 <- file.path(paths$spatial, "tables", "global_rho0.csv")
+rho0 <- read_csv(f_rho0, col_types = cols(dataset = "c", gear_class = "c",
+                                          phase3_weights = "c", .default = "?"))
+rho0 |> select(dataset, gear_class, rho0_km, rho0_censored, phase3_band_km) |> kable_round(1)
+
+input_files <- c(map(datasets, \(ds) table_path(ds, c("stage", "stage_season"))) |> unlist(),
+                 file.path(paths$analysis, c("cells.gpkg", "grid_weights.rds")), f_rho0)
+```
+
+### Weights
+
+Queen (05) for the main runs. For criterion 4, second-order queen (cells
+within two queen steps) and the Phase 2 distance band(s). Each has a
+row-standardised version for LISA and a binary, self-included one for Gi\*.
+
+```{r}
+nb <- weights$nb
+wts <- list(queen = list(I = weights$lw_W, G = weights$lw_B_self))
+nb2 <- nblag_cumul(nblag(nb, 2))
+wts$queen2 <- list(I = nb2listw(nb2, style = "W"), G = nb2listw(include.self(nb2), style = "B"))
+band_kms <- sort(unique(na.omit(rho0$phase3_band_km)))
+for (k in band_kms) {
+  nbk <- dnearneigh(coords_km, 0, k, bounds = c("GT", "LE"))
+  wts[[paste0("band", k)]] <- list(I = nb2listw(nbk, style = "W", zero.policy = TRUE),
+                                   G = nb2listw(include.self(nbk), style = "B", zero.policy = TRUE))
+}
+tibble(weights = names(wts),
+       mean_neighbours = map_dbl(wts, \(w) mean(card(w$I$neighbours)))) |> kable_round(1)
+```
+
+### Running and classifying one surface
+
+```{r}
+# Gi* class at FDR level q: hot / cold / ns
+gi_class_q <- function(z, p, q) {
+  sig <- fdr_sig(p, q)
+  case_when(sig & z > 0 ~ "hot", sig & z < 0 ~ "cold", TRUE ~ "ns")
+}
+
+# both statistics on one density surface (cells order), classified. LISA on
+# y_vst, Gi* on the G scale; the transform's c is per surface, as in 05
+run_local <- function(ds, d, wname, nsim, seed) {
+  local_stats(vst_density(d, ds), g_scale(d, ds), wts[[wname]]$I, wts[[wname]]$G,
+              nsim = nsim, seed = seed) |>
+    mutate(gi_bin = gi_bins(gi_z, gi_p),
+           gi05 = gi_class_q(gi_z, gi_p, 0.05), gi10 = gi_class_q(gi_z, gi_p, 0.10),
+           lisa05 = lisa_class(quadrant, lisa_p, 0.05), lisa10 = lisa_class(quadrant, lisa_p, 0.10))
+}
+
+# cached: keyed on the values, the weights, nsim and the seed
+run_cached <- function(tag, ds, d, wname, nsim, seed) {
+  name <- gsub("[^A-Za-z0-9]+", "_", tag)
+  cached(cache_dir, name, list(ds = ds, d = d, w = wname, nsim = nsim, seed = seed),
+         \() run_local(ds, d, wname, nsim, seed))
+}
+
+# a surface's density in cells order
+in_cell_order <- \(s) s[match(cells$cell_id, s$cell_id), ]
+```
+
+## Step 1: both statistics on every surface
+
+```{r}
+nested <- surfaces |> nest(sdat = c(cell_id, months, hours, density))
+
+primary <- nested |>
+  mutate(res = pmap(list(dataset, as.character(gear_class), stage, as.character(season), sdat),
+    function(ds, g, st, se, s) {
+      s <- in_cell_order(s)
+      run_cached(paste("main", ds, g, st, se), ds, s$density, "queen", qparams$nsim_main, 42) |>
+        mutate(cell_id = cells$cell_id, density = s$density,
+               # criterion 2: the cell and every queen neighbour at 0
+               zero_nb = all_zero_neighbourhood(s$density, nb), .before = 1)
+    })) |>
+  select(-sdat) |>
+  unnest(res)
+
+counts <- primary |>
+  group_by(dataset, gear_class, stage, season) |>
+  summarise(positive_cells = sum(density > 0),
+            gi_hot05 = sum(gi05 == "hot"), gi_cold05 = sum(gi05 == "cold"),
+            gi_hot10 = sum(gi10 == "hot"), gi_cold10 = sum(gi10 == "cold"),
+            gi_bin3 = sum(abs(gi_bin) == 3),
+            HH05 = sum(lisa05 == "HH"), LL05 = sum(lisa05 == "LL"),
+            HL05 = sum(lisa05 == "HL"), LH05 = sum(lisa05 == "LH"),
+            HH10 = sum(lisa10 == "HH"), LL10 = sum(lisa10 == "LL"), .groups = "drop")
+save_tab(counts, "local_counts")
+counts |> filter(season == "all") |> knitr::kable()
+```
+
+Per-cell results go to `local_{vp,afe}.gpkg` (one layer, every surface,
+long format) for Phase 5 and the thesis maps.
+
+```{r}
+for (ds in datasets) {
+  f <- file.path(paths$spatial, sprintf("local_%s.gpkg", ds))
+  out <- select(cells, cell_id) |>
+    inner_join(filter(primary, dataset == ds) |>
+                 mutate(across(c(gear_class, season), as.character)), by = "cell_id")
+  st_write(out, f, layer = "local", delete_dsn = TRUE, quiet = TRUE)
+  outputs <- c(outputs, f)
+}
+```
+
+## Step 2: maps
+
+Gi\* bins (−3…+3: 99 / 95 / 90% after FDR) and LISA classes (q = 0.05), by
+stage (columns) and by all months / Apr–Sep / Oct–Mar (rows).
+
+```{r}
+basemap <- rast(paths$basemap) |> aggregate(fact = 3)
+bm_arr <- as.array(basemap)
+bm_max <- max(bm_arr, na.rm = TRUE)
+bm_ras <- as.raster(array(pmin(1, pmax(0, coalesce(c(bm_arr), bm_max) / bm_max)), dim(bm_arr)))
+bm_ext <- as.vector(ext(basemap))
+bm_layer <- annotation_raster(bm_ras, bm_ext["xmin"], bm_ext["xmax"], bm_ext["ymin"], bm_ext["ymax"])
+leases <- map_dfr(paths$leases, \(f) st_read(f, quiet = TRUE) |>
+  st_transform(st_crs(cells)) |> summarise(geometry = st_union(geometry)))
+cells_geo <- select(cells, cell_id)
+bb <- st_bbox(cells)
+grid_outline <- st_union(st_geometry(cells)) |> st_boundary()
+input_files <- c(input_files, paths$basemap, paths$leases)
+
+# basemap and pale-grey grid under the classes; grid outline and leases over
+map_layers <- function(fill_scale, caption) {
+  list(fill_scale,
+       geom_sf(data = grid_outline, colour = "grey30", linewidth = 0.25, inherit.aes = FALSE),
+       geom_sf(data = leases, fill = NA, colour = "white", linewidth = 1.2, inherit.aes = FALSE),
+       geom_sf(data = leases, fill = NA, colour = "black", linewidth = 0.5, inherit.aes = FALSE),
+       coord_sf(xlim = bb[c("xmin", "xmax")], ylim = bb[c("ymin", "ymax")], expand = FALSE, datum = NA),
+       labs(caption = caption), theme_void(base_size = 9))
+}
+class_map <- function(df, var, fill_scale, title, caption) {
+  ggplot() + bm_layer +
+    geom_sf(data = cells_geo, fill = "grey88", colour = NA) +
+    geom_sf(data = left_join(cells_geo, df, by = "cell_id"), aes(fill = .data[[var]]), colour = NA) +
+    map_layers(fill_scale, caption) +
+    facet_grid(season ~ stage) + labs(title = title)
+}
+
+bin_cols <- c("-3" = "#2c7bb6", "-2" = "#6aa5cd", "-1" = "#abd9e9",
+              "1" = "#fdae61", "2" = "#f46d43", "3" = "#d73027")
+lisa_cols <- c(HH = "#d7191c", HL = "#fdae61", LH = "#abd9e9", LL = "#2c7bb6")
+
+for (ds in datasets) for (g in analysis_gears) {
+  d <- filter(primary, dataset == ds, gear_class == g)
+  tag <- sprintf("%s %s", ds_label[[ds]], g)
+  p1 <- class_map(d |> mutate(bin = factor(na_if(gi_bin, 0L), levels = c(-3:-1, 1:3))), "bin",
+                  scale_fill_manual(values = bin_cols, na.value = NA, na.translate = FALSE, drop = FALSE,
+                                    name = "Gi* bin"),
+                  paste(tag, "Gi* hot and cold spots (FDR 99 / 95 / 90%)"),
+                  "Grey: not significant. Black on white: lease areas.")
+  save_fig(p1, sprintf("local_gi_%s_%s", ds, g), width = 12, height = 10)
+  p2 <- class_map(d |> mutate(cls = factor(na_if(lisa05, "ns"), levels = names(lisa_cols))), "cls",
+                  scale_fill_manual(values = lisa_cols, na.value = NA, na.translate = FALSE, drop = FALSE,
+                                    name = "LISA (q = 0.05)"),
+                  paste(tag, "LISA clusters and outliers"),
+                  "Grey: not significant. HL / LH: outliers. Black on white: lease areas.")
+  save_fig(p2, sprintf("local_lisa_%s_%s", ds, g), width = 12, height = 10)
+}
+p1
+p2
+```
+
+## Step 3: stage-change classes
+
+The archive's mutually exclusive scheme (`change_class()`), on Gi\* status
+(any bin, as in the archive) and on LISA status (HH = hot, LL = cold, at
+q = 0.05). The within-season classes (Apr–Sep S1 → Apr–Sep S2, …) are free of
+the calendar-mix confound (caveat 8). Each surface is FDR-corrected within
+itself, so these describe how classifications moved; they are not tests of
+change.
+
+```{r}
+status <- primary |>
+  transmute(dataset, gear_class, stage, season, cell_id,
+            gi = gi_status(gi_bin), lisa = lisa_status(lisa05))
+pairs <- tibble(from = c("Stage 1", "Stage 2", "Stage 1"), to = c("Stage 2", "Stage 3", "Stage 3"))
+
+changes <- pmap_dfr(pairs, function(from, to) {
+  inner_join(filter(status, stage == from), filter(status, stage == to),
+             by = c("dataset", "gear_class", "season", "cell_id"), suffix = c("_from", "_to")) |>
+    transmute(dataset, gear_class, season, cell_id, pair = paste(from, "→", to),
+              gi = change_class(gi_from, gi_to), lisa = change_class(lisa_from, lisa_to))
+}) |>
+  pivot_longer(c(gi, lisa), names_to = "method", values_to = "change") |>
+  mutate(change = factor(change, change_levels))
+
+change_area <- changes |>
+  left_join(select(cell_info, cell_id, area_km2, dist_band), by = "cell_id") |>
+  group_by(dataset, gear_class, season, pair, method, change, dist_band) |>
+  summarise(cells = n(), area_km2 = sum(area_km2), .groups = "drop")
+save_tab(change_area, "local_change_area")
+
+# Gi*, all months: area per class (km²), summed over bands
+change_area |> filter(method == "gi", season == "all") |>
+  group_by(dataset, gear_class, pair, change) |>
+  summarise(area_km2 = sum(area_km2), .groups = "drop") |>
+  pivot_wider(names_from = change, values_from = area_km2, values_fill = 0) |>
+  kable_round(1)
+```
+
+```{r}
+change_cols <- c("stable hot" = "#d62f27", "gained hot" = "#ed7551", "lost hot" = "#fab984",
+                 "hot to cold" = "#7b3294", "cold to hot" = "#c2a5cf", "stable cold" = "#2f6fb0",
+                 "gained cold" = "#7fa9d4", "lost cold" = "#c5d9ec")
+for (ds in datasets) for (g in analysis_gears) {
+  d <- changes |> filter(dataset == ds, gear_class == g, method == "gi") |>
+    mutate(change = factor(na_if(as.character(change), "no change"), names(change_cols)),
+           stage = pair)  # class_map facets on `stage`
+  p <- class_map(d, "change",
+                 scale_fill_manual(values = change_cols, na.value = NA, na.translate = FALSE,
+                                   drop = FALSE, name = "Gi* change"),
+                 sprintf("%s %s Gi* stage-change classes", ds_label[[ds]], g),
+                 "Grey: no change. Within-season rows are free of the calendar-mix confound.")
+  save_fig(p, sprintf("local_change_gi_%s_%s", ds, g), width = 12, height = 10)
+}
+p
+```
+
+## Step 4: comparison criteria
+
+### Criterion 1: agreement
+
+Cohen's κ per surface between Gi\* hot and LISA HH, and between Gi\* cold
+and LISA LL (q = 0.05).
+
+```{r}
+c1 <- primary |>
+  group_by(dataset, gear_class, stage, season) |>
+  summarise(kappa_hot = cohen_kappa(gi05 == "hot", lisa05 == "HH"),
+            kappa_cold = cohen_kappa(gi05 == "cold", lisa05 == "LL"),
+            hot_both = sum(gi05 == "hot" & lisa05 == "HH"),
+            hot_gi_only = sum(gi05 == "hot" & lisa05 != "HH"),
+            HH_lisa_only = sum(gi05 != "hot" & lisa05 == "HH"), .groups = "drop")
+save_tab(c1, "local_c1_agreement")
+c1 |> group_by(dataset, gear_class) |>
+  summarise(median_kappa_hot = median(kappa_hot, na.rm = TRUE),
+            median_kappa_cold = median(kappa_cold, na.rm = TRUE), .groups = "drop") |>
+  kable_round(2)
+
+agree_cols <- c("both" = "#7b3294", "Gi* hot only" = "#f46d43", "LISA HH only" = "#2c7bb6")
+for (ds in datasets) {
+  d <- primary |> filter(dataset == ds, season == "all") |>
+    mutate(agree = case_when(gi05 == "hot" & lisa05 == "HH" ~ "both",
+                             gi05 == "hot" ~ "Gi* hot only",
+                             lisa05 == "HH" ~ "LISA HH only"),
+           agree = factor(agree, names(agree_cols)),
+           season = gear_class)  # rows = gear on this map
+  p <- class_map(d, "agree",
+                 scale_fill_manual(values = agree_cols, na.value = NA, na.translate = FALSE,
+                                   drop = FALSE, name = NULL),
+                 sprintf("%s: where Gi* hot and LISA HH agree and disagree (q = 0.05)", ds_label[[ds]]),
+                 "Grey: neither.")
+  save_fig(p, sprintf("local_c1_disagreement_%s", ds), width = 12, height = 10)
+}
+p
+```
+
+### Criterion 2: behaviour on zero-inflated surfaces
+
+The share of significant low cells (LISA LL, Gi\* cold) whose whole queen
+neighbourhood, the cell included, holds no effort. A statistic that labels
+empty sea "significant" says nothing about effort.
+
+```{r}
+c2 <- primary |>
+  group_by(dataset, gear_class, stage, season) |>
+  summarise(LL = sum(lisa05 == "LL"), LL_empty_share = mean(zero_nb[lisa05 == "LL"]),
+            cold = sum(gi05 == "cold"), cold_empty_share = mean(zero_nb[gi05 == "cold"]),
+            .groups = "drop") |>
+  mutate(across(ends_with("_share"), \(x) if_else(is.nan(x), NA_real_, x)))
+save_tab(c2, "local_c2_zero_inflation")
+c2 |> group_by(dataset, gear_class) |>
+  # the shares first: summarise() evaluates in order, so summing LL first
+  # would leave weighted.mean() one weight for many shares
+  summarise(LL_empty_share = weighted.mean(LL_empty_share, LL, na.rm = TRUE), LL = sum(LL),
+            cold_empty_share = weighted.mean(cold_empty_share, cold, na.rm = TRUE), cold = sum(cold),
+            .groups = "drop") |>
+  kable_round(2)
+```
+
+### Criterion 3: unique information (LISA outliers)
+
+HL (a high cell among low neighbours) and LH outliers, by where they sit:
+inside a lease (more than 1 km in), on a lease boundary (within 1 km of it,
+either side), or outside. Gi\* has no outlier class.
+
+```{r}
+loc <- cell_info |>
+  transmute(cell_id, location = case_when(dist_lease_km < -1 ~ "inside lease",
+                                          abs(dist_lease_km) <= 1 ~ "lease boundary",
+                                          TRUE ~ "outside"))
+c3 <- primary |> filter(lisa05 %in% c("HL", "LH")) |>
+  left_join(loc, by = "cell_id") |>
+  count(dataset, gear_class, stage, season, lisa05, location, name = "cells")
+save_tab(c3, "local_c3_outliers")
+c3 |> filter(season == "all") |>
+  pivot_wider(names_from = c(lisa05, location), values_from = cells, values_fill = 0) |>
+  knitr::kable()
+```
+
+### Criterion 4: stability
+
+On the 18 stage surfaces, at `r qparams$nsim_robust` permutations: a
+baseline run (seed 42, queen), then runs that change one thing each.
+
+- **Seeds:** `r paste(qparams$seeds_extra, collapse = ", ")`.
+- **Weights:** second-order queen, and the Phase 2 distance band for that
+  dataset × gear.
+- **Leave-one-vessel-out:** the top `r qparams$top_k` MMSIs per dataset ×
+  gear (by Primary hours over the window), each removed from the surface,
+  re-aggregated from the record-level file.
+
+For each run and statistic: among the baseline's significant cells, the
+share keeping exactly the same class (`keep_share`), and the Jaccard overlap
+of the significant sets.
+
+```{r}
+stage_surf <- nested |> filter(season == "all") |>
+  mutate(sdat = map(sdat, in_cell_order))
+
+base <- stage_surf |>
+  mutate(res = pmap(list(dataset, as.character(gear_class), stage, sdat), \(ds, g, st, s)
+    run_cached(paste("rob base", ds, g, st), ds, s$density, "queen", qparams$nsim_robust, 42))) |>
+  select(dataset, gear_class, stage, res)
+
+score <- function(b, a) bind_rows(
+  class_stability(b$gi05, a$gi05) |> mutate(statistic = "Gi*"),
+  class_stability(b$lisa05, a$lisa05) |> mutate(statistic = "LISA"))
+base_of <- \(ds, g, st) base$res[[which(base$dataset == ds & base$gear_class == g & base$stage == st)]]
+
+# seeds and weights
+band_of <- \(ds, g) paste0("band", rho0$phase3_band_km[rho0$dataset == ds & rho0$gear_class == g])
+alt_runs <- stage_surf |>
+  mutate(runs = pmap(list(dataset, as.character(gear_class), stage, sdat), function(ds, g, st, s) {
+    specs <- bind_rows(tibble(type = "seed", run = as.character(qparams$seeds_extra),
+                              wname = "queen", seed = as.integer(qparams$seeds_extra)),
+                       tibble(type = "weights", run = c("queen2", band_of(ds, g)),
+                              wname = c("queen2", band_of(ds, g)), seed = 42L))
+    pmap_dfr(specs, function(type, run, wname, seed) {
+      a <- run_cached(paste("rob", type, run, ds, g, st), ds, s$density, wname,
+                      qparams$nsim_robust, seed)
+      score(base_of(ds, g, st), a) |> mutate(type = type, run = run)
+    })
+  })) |>
+  select(dataset, gear_class, stage, runs) |> unnest(runs)
+```
+
+The jackknife needs each vessel's hours per cell and stage. The record-level
+hours must add up to the stage tables' hours cell by cell, or the
+re-aggregation would not reproduce the surfaces.
+
+```{r}
+records_path <- \(ds) file.path(paths$processed_gfw, sprintf("gfw_%s_id_classified.csv", ds))
+input_files <- c(input_files, records_path(datasets))
+vessel_cell <- map_dfr(set_names(datasets), \(ds)
+  read_csv(records_path(ds), col_types = cols(.default = "c")) |>
+    filter(in_primary == "TRUE") |>
+    transmute(MMSI, cell_id, gear_class, hours = as.numeric(hours),
+              stage = stage_of(floor_date(as.Date(date), "month"))) |>
+    group_by(MMSI, cell_id, gear_class, stage) |>
+    summarise(hours = sum(hours), .groups = "drop"), .id = "dataset")
+
+rec_check <- vessel_cell |> group_by(dataset, gear_class, stage, cell_id) |>
+  summarise(rec = sum(hours), .groups = "drop") |>
+  full_join(surfaces |> filter(season == "all", hours > 0) |>
+              transmute(dataset, gear_class = as.character(gear_class), stage, cell_id, tab = hours),
+            by = c("dataset", "gear_class", "stage", "cell_id"))
+stopifnot("record hours do not reproduce the stage tables cell by cell" =
+            isTRUE(all.equal(coalesce(rec_check$rec, 0), coalesce(rec_check$tab, 0), tolerance = 1e-8)))
+
+top_vessels <- vessel_cell |> group_by(dataset, gear_class, MMSI) |>
+  summarise(hours = sum(hours), .groups = "drop") |>
+  group_by(dataset, gear_class) |> slice_max(hours, n = qparams$top_k, with_ties = FALSE) |>
+  mutate(rank = row_number()) |> ungroup()
+save_tab(top_vessels, "local_jackknife_vessels")
+
+jack_runs <- stage_surf |>
+  mutate(runs = pmap(list(dataset, as.character(gear_class), stage, sdat), function(ds, g, st, s) {
+    vs <- top_vessels$MMSI[top_vessels$dataset == ds & top_vessels$gear_class == g]
+    map_dfr(vs, function(v) {
+      vh <- vessel_cell |> filter(dataset == ds, gear_class == g, stage == st, MMSI == v)
+      if (nrow(vh) == 0) return(NULL)  # no hours in this stage: the surface is unchanged
+      h_v <- coalesce(vh$hours[match(s$cell_id, vh$cell_id)], 0)
+      # scale each cell's density by the hours left without the vessel; the
+      # max() absorbs float residue where it held all of a cell's hours
+      d_new <- if_else(s$hours > 0, s$density * pmax(0, s$hours - h_v) / s$hours, 0)
+      a <- run_cached(paste("rob jack", v, ds, g, st), ds, d_new, "queen", qparams$nsim_robust, 42)
+      score(base_of(ds, g, st), a) |> mutate(type = "jackknife", run = v)
+    })
+  })) |>
+  select(dataset, gear_class, stage, runs) |> unnest(runs)
+
+c4 <- bind_rows(alt_runs, jack_runs)
+save_tab(c4, "local_c4_stability")
+c4 |> group_by(dataset, gear_class, statistic, type) |>
+  summarise(median_keep = median(keep_share, na.rm = TRUE),
+            median_jaccard = median(jaccard, na.rm = TRUE), runs = n(), .groups = "drop") |>
+  pivot_wider(names_from = statistic, values_from = c(median_keep, median_jaccard, runs)) |>
+  kable_round(2)
+```
+
+```{r}
+#| fig-height: 7
+p <- c4 |>
+  ggplot(aes(type, keep_share, fill = statistic)) +
+  geom_boxplot(outlier.size = 0.6, position = position_dodge(width = 0.8)) +
+  facet_grid(dataset ~ gear_class, labeller = labeller(dataset = ds_label)) +
+  scale_fill_manual(values = c("Gi*" = "#f46d43", LISA = "#2c7bb6")) +
+  labs(x = NULL, y = "share of baseline significant cells keeping their class", fill = NULL,
+       title = "Criterion 4: stability across seeds, weights and leave-one-vessel-out")
+save_fig(p, "local_c4_stability", height = 7)
+p
+```
+
+### Criterion 5: detection power on planted signals
+
+For each dataset × gear: `r qparams$n_null` null surfaces from a Gaussian
+random field at the gear's *ρ*₀ (clamped to
+`r qparams$range_min_km`–`r qparams$range_max_km` km), rank-mapped onto the
+observed Stage 1 values. Two signals are planted on each null:
+
+- **avoidance halo:** density × `r qparams$halo_factor` in cells inside the
+  leases or within `r qparams$halo_km` km of them;
+- **spillover ring:** density × `r qparams$ring_factor` in cells
+  `r qparams$ring_lo_km`–`r qparams$ring_hi_km` km outside them.
+
+For the halo, the flagged share is the share of zone cells flagged low
+(Gi\* cold; LISA LL or LH); for the ring, flagged high (Gi\* hot; LISA HH or
+HL); at q = 0.05. Each replicate's null and signal runs share the field and
+the permutation seed, so their difference is the signal's doing. **A
+replicate detects the signal if it raises the flagged share by at least
+`r 100 * qparams$min_excess` percentage points of the zone** (paired;
+decision 2026-10-20); power is the share of replicates that do
+(`power_summary()`). `fp` is the flagged share with no signal: clusters the
+null field happens to put in the zone, not a test error rate.
+`r qparams$nsim_power` permutations per run.
+
+```{r}
+halo <- cell_info$dist_lease_km < qparams$halo_km
+ring <- cell_info$dist_lease_km >= qparams$ring_lo_km & cell_info$dist_lease_km < qparams$ring_hi_km
+tibble(zone = c("halo", "ring"), cells = c(sum(halo), sum(ring))) |> knitr::kable()
+
+# share of a zone's cells flagged in the signal's direction, per statistic:
+# low = Gi* cold, LISA LL or LH (a low cell); high = Gi* hot, LISA HH or HL
+flag_share <- function(r, zone, direction) {
+  gi_cls   <- if (direction == "low") "cold" else "hot"
+  lisa_cls <- if (direction == "low") c("LL", "LH") else c("HH", "HL")
+  c(`Gi*` = mean(r$gi05[zone] == gi_cls), LISA = mean(r$lisa05[zone] %in% lisa_cls))
+}
+
+power_runs <- stage_surf |> filter(stage == "Stage 1") |>
+  mutate(reps = pmap(list(dataset, as.character(gear_class), sdat), function(ds, g, s) {
+    range_km <- with(filter(rho0, dataset == ds, gear_class == g),
+                     min(max(rho0_km, qparams$range_min_km), qparams$range_max_km))
+    R <- grf_chol(coords_km, range_km)
+    map_dfr(seq_len(qparams$n_null), function(i) {
+      n0 <- null_surface(R, s$density, seed = i)
+      h <- replace(n0, halo, n0[halo] * qparams$halo_factor)
+      r <- replace(n0, ring, n0[ring] * qparams$ring_factor)
+      run <- \(d, lab) run_cached(paste("power", lab, ds, g, i), ds, d, "queen", qparams$nsim_power, 42)
+      rn <- run(n0, "null"); rh <- run(h, "halo"); rr <- run(r, "ring")
+      bind_rows(
+        tibble(signal = "halo", statistic = c("Gi*", "LISA"),
+               null_share = flag_share(rn, halo, "low"), signal_share = flag_share(rh, halo, "low")),
+        tibble(signal = "ring", statistic = c("Gi*", "LISA"),
+               null_share = flag_share(rn, ring, "high"), signal_share = flag_share(rr, ring, "high"))) |>
+        mutate(rep = i, range_km = range_km,
+               # does the null keep the observed spatial structure?
+               null_I = moran(vst_density(n0, ds), wts$queen$I, length(n0), Szero(wts$queen$I))$I)
+    })
+  })) |>
+  select(dataset, gear_class, reps) |> unnest(reps)
+save_tab(power_runs, "local_c5_power_runs")
+
+# the observed Stage 1 I on y_vst, against the nulls'
+obs_I <- stage_surf |> filter(stage == "Stage 1") |>
+  mutate(obs_I = map2_dbl(dataset, sdat, \(ds, s)
+    moran(vst_density(s$density, ds), wts$queen$I, nrow(s), Szero(wts$queen$I))$I)) |>
+  select(dataset, gear_class, obs_I)
+power_runs |> distinct(dataset, gear_class, rep, range_km, null_I) |>
+  group_by(dataset, gear_class) |>
+  summarise(range_km = first(range_km), null_I_median = median(null_I), .groups = "drop") |>
+  left_join(obs_I, by = c("dataset", "gear_class")) |> kable_round(2)
+
+c5 <- power_runs |>
+  group_by(dataset, gear_class, signal, statistic) |>
+  summarise(power_summary(null_share, signal_share, min_excess = qparams$min_excess),
+            .groups = "drop")
+save_tab(c5, "local_c5_power")
+c5 |> select(dataset, gear_class, signal, statistic, power, mean_excess, fp) |>
+  pivot_wider(names_from = statistic, values_from = c(power, mean_excess, fp)) |>
+  kable_round(2)
+```
+
+### Criterion 6: agreement with the BAG estimates
+
+Deferred to after Phase 5. It compares the change classes in step 3
+(`local_change_area.csv`) with the BAG estimates by band: a method whose
+`lost hot` / `gained hot` area lines up with the modelled gradient change is
+the externally validated one.
+
+## Step 5: scorecard and gate
+
+```{r}
+score_tab <- bind_rows(
+  c1 |> summarise(value = median(kappa_hot, na.rm = TRUE)) |>
+    mutate(criterion = "1 κ, hot vs HH (median; shared)", `Gi*` = value, LISA = value),
+  c2 |> summarise(`Gi*` = weighted.mean(cold_empty_share, cold, na.rm = TRUE),
+                  LISA = weighted.mean(LL_empty_share, LL, na.rm = TRUE)) |>
+    mutate(criterion = "2 share of significant low cells in empty neighbourhoods (lower is better)"),
+  c3 |> filter(season == "all", location != "outside") |>
+    summarise(LISA = sum(cells)) |>
+    mutate(criterion = "3 outliers inside or on lease boundaries, stage surfaces (Gi* has none)", `Gi*` = NA_real_),
+  c4 |> group_by(statistic, type) |> summarise(v = median(keep_share, na.rm = TRUE), .groups = "drop") |>
+    pivot_wider(names_from = statistic, values_from = v) |>
+    mutate(criterion = paste("4 median keep share,", type)),
+  c5 |> group_by(statistic, signal) |> summarise(v = median(power), .groups = "drop") |>
+    pivot_wider(names_from = statistic, values_from = v) |>
+    mutate(criterion = paste("5 median power,", signal))) |>
+  select(criterion, `Gi*`, LISA)
+save_tab(score_tab, "local_scorecard")
+score_tab |> kable_round(2)
+```
+
+**Gate (plan, Phase 3).** If criterion-5 power for the 2 km halo is below
+about 0.5 for both statistics, the hotspot maps are descriptive, and any
+inference about project effects rests on the BAG models.
+
+```{r}
+gate <- c5 |> filter(signal == "halo") |>
+  select(dataset, gear_class, statistic, power) |>
+  pivot_wider(names_from = statistic, values_from = power, names_prefix = "halo_power_") |>
+  mutate(maps_descriptive_only = `halo_power_Gi*` < 0.5 & halo_power_LISA < 0.5)
+save_tab(gate, "local_gate")
+gate |> kable_round(2)
+```
+
+The primary method is decided from the scorecard (plan, step 5) and recorded
+in the plan's decisions log. Criterion 6 can still change it after Phase 5.
+
+## Manifest and provenance
+
+```{r}
+manifest <- tibble(file = outputs, sha256 = map_chr(outputs, file_sha256))
+f_manifest <- file.path(paths$spatial, "manifest_08.csv")
+write_csv(manifest, f_manifest)
+write_provenance(f_manifest, input_files, extra = list(
+  outputs = nrow(manifest), nsim_main = qparams$nsim_main, nsim_robust = qparams$nsim_robust,
+  nsim_power = qparams$nsim_power, n_null = qparams$n_null,
+  p_value = "z-moment permutation: Pr(z != E(Ii)), Pr(z != E(Gi))",
+  spdep = as.character(packageVersion("spdep"))))
+nrow(manifest)
+```
+
+## Session info
+
+```{r}
+sessionInfo()
+```
+
+```{r}
+renv::diagnostics()
+```

@@ -41,15 +41,19 @@ gfw_paths <- list(
   basemap       = "references/basemap/aoi_ocean_utm19n.tif", # map background, EPSG:32619
 
   # Ørsted foundations and cables (05, step 8). The foundation CSVs and GeoJSON
-  # layouts are as supplied (read only); the two references/ tables are
-  # transcribed from published sources, each row citing its source.
+  # layouts are as supplied (read only); the references/ tables are
+  # transcribed from published sources, each row citing its source. SFW's
+  # Ørsted CSV is the primary source; the PSO report's Table 3, transcribed,
+  # is kept as an independent check on its dates.
   layouts       = c(SFW = "data/sf/owf/sfw/turbines/South Fork Wind_25-07-25_25-07-25.geojson",
                     RWF = "data/sf/owf/rwf/turbines/Revolution Wind_26-01-19_26-01-19.geojson",
                     SRW = "data/sf/owf/srw/turbines/Sunrise Wind (Preliminary)_26-01-05_26-01-05.geojson"),
   rwf_foundations = "data/sf/owf/rwf/turbines/REV_Foundation Installation_Dates_Locations_2024-2025.csv",
   srw_foundations = "data/sf/owf/srw/turbines/SRW_Foundation Installation_Dates_Locations_2025.csv",
-  sfw_foundations = "references/sfw_foundation_dates.csv",  # PSO report Table 3
+  sfw_foundations = "data/sf/owf/sfw/turbines/sfw_monopile_install_orsted.csv", # PSO id × position × day
+  sfw_pso_dates = "references/sfw_foundation_dates.csv",    # PSO report Table 3 (check)
   cable_windows = "references/infra_cable_windows.csv",     # project × cable type works windows
+  safety_zones  = "references/infra_safety_zones.csv",      # USCG 500 m zones: rule window per project
   infra         = "data/sf/infra/infrastructure.gpkg"       # written by 05: foundations + cables
 )
 

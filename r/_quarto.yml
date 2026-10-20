@@ -24,3 +24,4 @@ project:
     - 05_prepare_analysis.qmd
     - 06_explore.qmd
     - 07_spatial_global.qmd
+    - 08_spatial_local.qmd

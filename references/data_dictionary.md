@@ -386,12 +386,13 @@ sidecar (input SHA-256s, git commit, `renv.lock` hash, R version, seed,
 | `domain` | Cell active for this dataset and gear in Stage 1 |
 | `area_km2`, `aoi_class`, `x_km`, `y_km` | From the grid; centroid in EPSG:32619, km |
 | `dist_lease_km`, `dist_band`, `nearest_project`, `depth_m`, `depth_sd_m`, `slope_deg`, `bpi_broad`, `d_found_final_km`, `d_cable_km` | Static cell covariates, copied from `cells.gpkg` (defined there) so each table stands alone |
-| `d_found_km`, `n_found_2km`, `active_construction`, `cable_works`, `phase`, `months_since_first_found` | Monthly table only: infrastructure exposure, as in `infra_cell_month.csv` (below) |
-| `d_found_km`, `n_found_2km`, `active_construction_share`, `cable_works_share`, `phase`, `months_since_first_found` | Season-year table only: as in `infra_cell_season_year.csv` (below) |
+| `d_found_km`, `n_found_2km`, `active_construction`, `cable_works`, `sz_share`, `sz_share_install`, `phase`, `months_since_first_found` | Monthly table only: infrastructure exposure, as in `infra_cell_month.csv` (below) |
+| `d_found_km`, `n_found_2km`, `active_construction_share`, `cable_works_share`, `sz_share`, `sz_share_install`, `phase`, `months_since_first_found` | Season-year table only: as in `infra_cell_season_year.csv` (below) |
 
 Rounded when written (decimals): `dist_lease_km`, `x_km`, `y_km`, `depth_m`,
 `depth_sd_m`, `d_found_km`, `d_found_final_km`, `d_cable_km` 3; `area_km2` 6;
-`slope_deg`, `bpi_broad` 4; `y_vst` 6; season-year means and shares 3. Every
+`slope_deg`, `bpi_broad` 4; `y_vst` 6; `sz_share`, `sz_share_install` 4;
+other season-year means and shares 3. Every
 derived field is computed before rounding; `cells.gpkg` keeps full precision.
 
 ### `data/processed/analysis/infra_cell_*.csv`
@@ -411,6 +412,8 @@ Infrastructure exposure per cell, without gear, written by 05 step 8 from
 | `n_found_2km` | Installed foundations within 2 km (season-year: mean) |
 | `active_construction` | A foundation's installation days overlap the month within 5 km. Season-year: `active_construction_share`, the share of months |
 | `cable_works` | A cable route whose works window overlaps the month lies within 2 km. Season-year: `cable_works_share` |
+| `sz_share` | Share of the cell's area (from its polygon, not the centroid) inside an active USCG 500 m safety zone. Each foundation's zone runs from its installation to its project's rule end in `references/infra_safety_zones.csv`, and counts in a month if active on any day of it; zones are unioned, so co-located foundations count once. Inside a zone, non-construction vessels are excluded by regulation. Season-year: mean over the season's months |
+| `sz_share_install` | As `sz_share`, with each zone active only on its foundation's installation days (enforcement-only sensitivity). Season-year: mean |
 | `phase` | Nearest project's `pre`, `construction` or `post_construction` (after its last works day, only if every foundation is installed and every cable window closed). Season-year: the phase in most months, ties to the later |
 | `months_since_first_found` | Months from the nearest project's first foundation (negative before). Season-year: mean |
 
@@ -442,13 +445,13 @@ below. Layer `foundations`, one row per foundation (166):
 
 | Field | Description |
 |---|---|
-| `asset_id` | `<project>-<internal id>`, or `<project>-<grid position>` where there is no internal id (SFW turbines, SRW planned) |
+| `asset_id` | `<project>-<internal id>`, or `<project>-<grid position>` where there is no internal id (SRW planned) |
 | `project` | `SFW`, `RWF`, `SRW` |
 | `asset_type` | `wtg` (turbine) or `oss` (substation: SFW Z01, RWF Z01a / Z01b / Z02, SRW OCS-DC) |
 | `grid_pos` | Ørsted 1 × 1 nm grid position, e.g. `AM06`. RWF Z01a and Z01b share AL11 |
-| `internal_id` | Ørsted id (RWF `B##`/`Z##`, SRW `C##`/`D25`/`OCS-DC`, SFW `Z01`) |
+| `internal_id` | Ørsted id (RWF `B##`/`Z##`, SRW `C##`/`D25`/`OCS-DC`, SFW `A##`/`Z01`, the PSO report's monopile ids) |
 | `status` | `installed` or `planned` (SRW positions with no installation record) |
-| `date_basis` | `exact` (foundation CSV or PSO report), `project_window` (SFW turbines: the 12 share 2023-07-02 to 2023-08-07, as their PSO ids do not map to positions), `planned` |
+| `date_basis` | `exact` (an Ørsted foundation CSV; SFW's dates also equal PSO report Table 3) or `planned` |
 | `foundation_installed`, `foundation_end` | First and last installation day across the foundation's rows in the CSV |
 | `n_date_rows` | CSV rows (one per installation day) for this foundation (SRW OCS-DC: its 8 pin piles) |
 | `wtg_installed`, `first_power` | Not supplied; blank |
@@ -468,14 +471,24 @@ Layer `cables`, one row per route (168):
 | `burial_complete` | Not supplied; blank |
 | `source`, `version_date` | Source of the window; the layout file's date |
 
-### `references/sfw_foundation_dates.csv`, `references/infra_cable_windows.csv`
+### `references/sfw_foundation_dates.csv`, `references/infra_cable_windows.csv`, `references/infra_safety_zones.csv`
 
 Hand-transcribed and tracked; schema checked in
 `r/tests/testthat/test-references.R`. `sfw_foundation_dates.csv`: the SFW
 PSO report's monopile installation dates (`pso_id`, `structure`,
-`first_date`, `last_date`, `source`). `infra_cable_windows.csv`: one row per
+`first_date`, `last_date`, `source`). Since 2026-10-20 it is an independent
+check, not the source: 05 reads SFW from Ørsted's
+`data/sf/owf/sfw/turbines/sfw_monopile_install_orsted.csv` (`USCG_ID` grid
+position, `Orsted_ID` = PSO id, one row per installation day, DMS
+coordinates) and asserts the two agree. A01's `USCG_ID` was delivered
+truncated as `AM0` and corrected to `AM05` in that file on 2026-10-20; 05
+matches positions by distance and checks each id names its match.
+`infra_cable_windows.csv`: one row per
 project × cable type (`lay_start`, `lay_end`, `date_basis`, `source`), each
-citing the public source of its dates.
+citing the public source of its dates. `infra_safety_zones.csv`: one row per
+project for its USCG safety-zone rule (`radius_m` 500, `rule_start`,
+`rule_end`, `zones`, `source` citing the Federal Register rules); SFW's
+window is the enforced period 2023-05-01 to 2024-05-31.
 
 ### `data/processed/analysis/grid_queen.gal`, `grid_weights.rds`
 

@@ -97,6 +97,125 @@ test_that("practical_range() interpolates the first crossing and flags censoring
   expect_error(practical_range(c(3, 1), c(0.5, 0)), "increase")
 })
 
+test_that("local_stats() finds a planted hot block with both statistics", {
+  L <- test_lattice(15, 15)
+  lw_G <- nb2listw(include.self(L$nb), style = "B")
+  # a sparse surface: zeros except a 3 × 3 block of effort and a few strays
+  d <- numeric(nrow(L$g))
+  d[L$g$ix %in% 6:8 & L$g$iy %in% 6:8] <- 5
+  d[c(3, 40, 200)] <- 0.5
+  s <- local_stats(vst_density(d, "afe"), g_scale(d, "afe"), L$lw_W, lw_G, nsim = 999)
+  expect_equal(nrow(s), nrow(L$g))
+  centre <- which(L$g$ix == 7 & L$g$iy == 7)
+  expect_gt(s$gi_z[centre], 0)
+  expect_equal(s$quadrant[centre], "High-High")
+  expect_lt(s$gi_p[centre], 0.01)
+  expect_lt(s$lisa_p[centre], 0.01)
+  # same seed, same result
+  expect_identical(s, local_stats(vst_density(d, "afe"), g_scale(d, "afe"), L$lw_W, lw_G, nsim = 999))
+  # an empty neighbourhood far from the block is low, never a hotspot, and
+  # not significant (regression test: spdep 1.4.2's folded Gi* p flagged
+  # every empty neighbourhood)
+  empty <- which(L$g$ix == 14 & L$g$iy == 14)
+  expect_lt(s$gi_z[empty], 0)
+  expect_gt(s$gi_p[empty], 0.05)
+  expect_gt(s$lisa_p[empty], 0.05)
+  # the z is (Gi − E.Gi) / √Var.Gi: the hot centre and the empty corner sit on
+  # opposite sides of zero
+  expect_gt(s$gi_z[centre], 2)
+  # degenerate surface: NA rows, not an error
+  expect_true(all(is.na(local_stats(rep(0, nrow(L$g)), rep(0, nrow(L$g)), L$lw_W, lw_G)$gi_z)))
+  expect_error(local_stats(d - 1, d - 1, L$lw_W, lw_G, nsim = 99), "non-negative")
+})
+
+test_that("gi_bins() takes the strictest FDR level and the sign of z", {
+  z <- c(4, -4, 2, 0.5, NA)
+  # BH over the 4 non-missing p: adjusted 0.002, 0.002, 0.04, 0.9
+  p <- c(0.001, 0.001, 0.03, 0.9, NA)
+  b <- gi_bins(z, p)
+  expect_equal(b[1:2], c(3L, -3L))
+  expect_equal(b[3], 2L)            # 0.04 clears 5% but not 1%
+  expect_equal(b[4:5], c(0L, 0L))
+  expect_equal(gi_status(c(3L, -1L, 0L)), c("hot", "cold", "ns"))
+})
+
+test_that("lisa_class() maps quadrants and drops non-significant cells", {
+  q <- c("High-High", "Low-Low", "High-Low", "Low-High", "High-High")
+  p <- c(0.0001, 0.0001, 0.0001, 0.0001, 0.9)
+  expect_equal(lisa_class(q, p), c("HH", "LL", "HL", "LH", "ns"))
+  expect_equal(lisa_status(c("HH", "LL", "HL", "ns")), c("hot", "cold", "ns", "ns"))
+})
+
+test_that("change_class() follows the archive's mutually exclusive scheme", {
+  from <- c("hot", "ns", "hot", "hot", "cold", "cold", "ns", "cold", "ns")
+  to   <- c("hot", "hot", "ns", "cold", "hot", "cold", "cold", "ns", "ns")
+  expect_equal(as.character(change_class(from, to)), change_levels)
+})
+
+test_that("cohen_kappa() is 1 for agreement, 0 for chance and NA when undefined", {
+  a <- c(TRUE, TRUE, FALSE, FALSE)
+  expect_equal(cohen_kappa(a, a), 1)
+  expect_equal(cohen_kappa(c(TRUE, FALSE, TRUE, FALSE), c(TRUE, TRUE, FALSE, FALSE)), 0)
+  expect_true(is.na(cohen_kappa(rep(FALSE, 4), rep(FALSE, 4))))
+})
+
+test_that("all_zero_neighbourhood() needs the cell and every neighbour at 0", {
+  L <- test_lattice(5, 5)
+  d <- numeric(25)
+  d[13] <- 1                       # the centre cell of the 5 × 5 lattice
+  z <- all_zero_neighbourhood(d, L$nb)
+  expect_false(z[13])
+  expect_false(z[7])               # a neighbour of the centre
+  expect_true(z[1])                # a corner two steps away
+})
+
+test_that("class_stability() scores kept classes and overlap", {
+  base <- c("hot", "hot", "ns", "cold")
+  alt  <- c("hot", "ns", "hot", "cold")
+  s <- class_stability(base, alt)
+  expect_equal(s$keep_share, 2 / 3)
+  expect_equal(s$jaccard, 2 / 4)
+  expect_true(is.na(class_stability(rep("ns", 3), rep("ns", 3))$keep_share))
+})
+
+test_that("null_surface() keeps the observed values and is spatially smooth", {
+  L <- test_lattice(15, 15)
+  R <- grf_chol(cbind(L$g$ix, L$g$iy), range_km = 6)
+  vals <- c(rep(0, 150), rexp(75))
+  n1 <- null_surface(R, vals, seed = 1)
+  expect_equal(sort(n1), sort(vals))
+  expect_identical(n1, null_surface(R, vals, seed = 1))
+  expect_false(identical(n1, null_surface(R, vals, seed = 2)))
+  # the field's structure survives the rank mapping
+  expect_gt(moran(n1, L$lw_W, length(n1), Szero(L$lw_W))$I, 0.3)
+})
+
+test_that("power_summary() counts paired replicates with at least the minimum excess", {
+  null <- c(0.10, 0.20, 0.30, 0.40)
+  sig  <- c(0.25, 0.25, 0.30, 0.55)        # paired excess 0.15, 0.05, 0, 0.15
+  s <- power_summary(null, sig)
+  expect_equal(s$power, 0.5)               # two replicates reach 10 pp
+  expect_equal(s$any_excess, 0.75)
+  expect_equal(s$mean_excess, mean(sig - null))
+  expect_equal(s$fp, mean(null))
+  expect_equal(s$replicates, 4)
+  expect_equal(power_summary(null, sig, min_excess = 0.05)$power, 0.75)
+  expect_error(power_summary(null, sig[-1]), "pair up")
+})
+
+test_that("cached() computes once and then reads the cache", {
+  dir <- file.path(tempdir(), "cache_test")
+  unlink(dir, recursive = TRUE)
+  calls <- 0
+  f <- function() { calls <<- calls + 1; 42 }
+  expect_equal(cached(dir, "x", list(a = 1), f), 42)
+  expect_equal(cached(dir, "x", list(a = 1), f), 42)
+  expect_equal(calls, 1)
+  # a different key recomputes
+  cached(dir, "x", list(a = 2), f)
+  expect_equal(calls, 2)
+})
+
 test_that("block_bootstrap_I() brackets I and is reproducible", {
   L <- test_lattice(20, 20)
   set.seed(4)

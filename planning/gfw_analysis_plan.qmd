@@ -92,6 +92,20 @@ Six findings from profiling the current outputs (2026-10-06 pull, measured
 
 | Topic | Decision | Consequence for this plan |
 |---|---|---|
+| *2026-10-20, safety-charter exclusions* | | |
+| AMELIA JOYCE (368080240), LILY M (368231710), JACK M (368250590) | **Excluded as safety charters from 2021-05-01, open-ended** (`references/vessel_decisions.csv`: `accept`, Operation `safety`, Identified_By `behavioural_screen`). This reverses the 2026-10-15 decision to keep them. 2021-05-01 is the start of the Ørsted–SSNA safety-vessel contract, the window already used for Beth Anne and Pamela Ann | Found while preparing the ROSA webinar: together they held 55% of Stage 3 mobile AFE hours inside the leases, with 34–57% of their own hours there (AMELIA JOYCE 16.6 h per active day), the PROVIDER pattern (caveat 11). Their hours from May 2021 leave Primary; 03–08 re-run, and the plan's typed figures predate this change |
+| *2026-10-20, Phase 3* | | |
+| Local p-values | **z-moment permutation p** (`Pr(z != E(Ii))`, `Pr(z != E(Gi))`), 999 conditional permutations, for both statistics and every run | No p-value floor, so BH-FDR can reject on sparse surfaces. The rank p (floor 2/1,000) rejected nothing on the fixed and pole-and-line AFE surfaces. The folded p, chosen first, was **withdrawn**: spdep 1.4.2's `localG_perm()` returns 0.001 for empty neighbourhoods where a hand-coded permutation gives about 0.4, so it flagged every empty neighbourhood. The normal approximation is checked by the criterion-5 null runs |
+| Gi\* scale | **The non-negative G scale** (`g_scale()`), as for General G | `localG_perm()` divides by the surface total; on AFE's log `y_vst` that total is negative and every z changes sign |
+| Criterion 5 nulls | **Interim:** Gaussian random field at each gear's *ρ*₀ (clamped 3–10 km), rank-mapped onto the observed Stage 1 values, 40 replicates | Re-run with Phase 6 simulations when they exist |
+| Criterion 5 detection | **Paired:** each replicate's signal run against its own null (same field, same seed); detected if the signal raises the zone's flagged share by **≥ 10 percentage points**. Power = share of replicates detecting. Mean excess and any-excess share reported alongside | An unpaired rule (beating the spread of all null replicates) mostly measures where random clusters fall. The gate (halo power < 0.5 for both → maps descriptive) uses this power |
+| Criterion 6 | **Deferred** until Phase 5 | The primary method chosen in Phase 3 stays provisional |
+| Emerging hot spot analysis | **Skipped for now** (would add `sfdep`) | Optional extension left open |
+| *2026-10-20, SFW crosswalk* | | |
+| SFW foundation source | **Ørsted's `sfw_monopile_install_orsted.csv` is primary**: PSO id (A01–A15, Z01) × layout position (`USCG_ID`) × installation day, with as-built DMS coordinates. **PSO Table 3 (`references/sfw_foundation_dates.csv`) is kept as an independent check**, and `05` asserts the two agree | Every SFW foundation has exact dates (`date_basis = "exact"`); the shared turbine window and its sensitivity run are retired. Verified 2026-10-20: 13 foundations (A10 and Z01 over two days each), dates identical to Table 3, every position within 0.3 m of the as-built layout (mariner notice, 2025-07-25), Z01 on AP06 as inferred |
+| A01's truncated id | The CSV's `USCG_ID` for A01 read **"AM0"**; its coordinates fall on **AM05** (0 m). **Corrected to AM05 in the file by the user, 2026-10-20** | `05` still matches SFW positions by distance and asserts every `USCG_ID` names its match; a reference test now requires every id to be a complete grid name |
+| USCG safety zones | **500 m around every foundation, from its installation to its project's rule end** (`references/infra_safety_zones.csv`): SFW enforced 2023-05-01 to 2024-05-31 (user; 88 FR, 2 May 2023, extended by 88 FR 87716); RWF rule to 2027-05-31; SRW rule to 2028-05-31, so RWF and SRW zones stay on to the end of the window | New covariate `sz_share(t)` (area share of the cell inside an active zone) in the month and season-year tables and the timing model (caveat 17). Inside a zone, lost effort is mandated, not avoidance |
+| Zone enforcement | The RWF and SRW rules enforce zones **only during active construction** (about 48 h to 1 week per location). **Sensitivity**, not the main definition: `sz_share_install` counts each zone on its installation days only | One Phase 8 run; the main covariate follows the installation-to-rule-end timing |
 | *2026-10-20, Phase 2* | | |
 | General G scale for AFE | **log(1 + density / *c*)**, i.e. `y_vst` − log(*c*), with the same per-surface *c*. VP keeps √density | General G needs non-negative values, and AFE's `y_vst` is negative at every zero cell. Moran's I is unchanged by the shift, so I and G read the same surface (`g_scale()` in `r/spatial_helpers.R`; @sec-global) |
 | Correlogram range of 3–5 km | **Borderline: queen stays primary, and a distance-band run is added to Phase 3** at the range rounded up to a whole km | The plan's gate covered < 3 km and > 5 km only. A censored range (I ≥ 0.1 at 20 km) counts as > 5 km. Every band run is capped at 10 km, censored or not (VP fixed's uncensored ~18 km range would otherwise give a 19 km band) |
@@ -101,7 +115,7 @@ Six findings from profiling the current outputs (2026-10-06 pull, measured
 | *2026-10-19, Ørsted infrastructure* | | |
 | Where it is built | **In `05` (Phase 0, step 8)**, not a separate `09`. Layers in `data/sf/infra/infrastructure.gpkg` (writing to `data/sf/infra/` approved) | The exposure covariates sit in the month and season-year analysis tables from the start, so Phases 1 and 5 read one table (@sec-infra) |
 | Multi-day installations | The foundation CSVs (which replaced the Excel files) give **one row per installation day**: first day = `foundation_installed`, last = `foundation_end`; repeated rows must agree on position, structure and depth | Multi-day installs (e.g. RWF Z01a, 17 days) count as under construction for every day they span |
-| SFW turbine ids | The PSO report's A01–A15 have **no published crosswalk** to the layout positions (the COP gives none). The substation Z01 is on **AP06**, where the export cable lands; the 12 turbines share the **turbine window, 2023-07-02 to 2023-08-07** | SFW exposure is exact to the month only at the window's edges. Sensitivity: SFW turbines installed from the window's start (@sec-sensitivity) |
+| SFW turbine ids | *Superseded 2026-10-20 (see "SFW crosswalk" above).* The PSO report's A01–A15 had no published crosswalk to the layout positions; Z01 was placed on AP06 and the 12 turbines shared the turbine window, 2023-07-02 to 2023-08-07 | — |
 | SRW's 40 unrecorded positions | **Planned, not installed.** Sensitivity: installed from May 2026 | The primary covariates count 45 SRW foundations at the end of the window. A second table (`infra_cell_month_srw_planned.csv`) gives the upper-bound exposure |
 | Cable timing | **Static routes + coarse project windows.** Cable-lay dates per route are not published | `d_cable_km` is static. `cable_works(t)` is on only where a window is known (SFW 2023-03 to 2023-09; RWF inter-array from 2025-11) |
 | Substations | **Counted with turbines** in the foundation covariates | A jacket or monopile is the same seabed obstruction to gear; the covariates are renamed `d_found_km`, `n_found_2km` |
@@ -147,8 +161,8 @@ into `data/interim/` or `data/raw/`.
 | `data/processed/gfw/gfw_{vp,afe}_id_classified.csv` | 437,897 / 66,097 rows; 93,295 / 20,241 Primary | Record level: the vessel-concentration, leave-one-vessel-out and per-vessel analyses |
 | `data/sf/fishnet/gfw_grid_utm19n.gpkg` | 3,376 cells | Grid, EPSG:32619, with `area_km2` and `aoi_class` |
 | `data/sf/owf/sfw/SFW.shp`, `rwf/RWF.shp`, `srw/SRW.shp` | 3 leases | Lease polygons in EPSG:3857; **reproject** before use |
-| `data/sf/owf/{sfw,rwf,srw}/turbines/` (Ørsted, received 2026-10) | 166 foundation positions, 168 cable routes | Foundation installation CSVs (RWF, SRW; one row per installation day), mariner layout GeoJSONs (all three) and the SFW PSO report. Built into `data/sf/infra/infrastructure.gpkg` and the exposure covariates by `05` (@sec-infra) |
-| `references/sfw_foundation_dates.csv`, `references/infra_cable_windows.csv` | 13 / 6 | SFW monopile dates transcribed from the PSO report; cable works windows from published sources, each row citing its source |
+| `data/sf/owf/{sfw,rwf,srw}/turbines/` (Ørsted, received 2026-10) | 166 foundation positions, 168 cable routes | Foundation installation CSVs (RWF, SRW, and SFW's `sfw_monopile_install_orsted.csv`; one row per installation day), mariner layout GeoJSONs (all three), the SFW mariner notice (`SFW_infra_locations.pdf`) and the SFW PSO report. Built into `data/sf/infra/infrastructure.gpkg` and the exposure covariates by `05` (@sec-infra) |
+| `references/sfw_foundation_dates.csv`, `references/infra_cable_windows.csv`, `references/infra_safety_zones.csv` | 13 / 6 / 3 | SFW monopile dates transcribed from the PSO report (an independent check on Ørsted's SFW CSV since 2026-10-20); cable works windows from published sources; the USCG 500 m safety-zone rule per project. Each row cites its source |
 | NCEI Coastal Relief Model Vol. 1, `crm_vol1_2023.nc` (AOI subset) | 1 arc-second raster | Depth and terrain covariates (@sec-env) |
 | *Ørsted benthic habitat classification* (to come) | — | Habitat covariates (@sec-env) |
 
@@ -478,6 +492,32 @@ the methods with numbers recomputed at render time, not typed.
     near zero. The archive already recorded this. *Treatment:* report it as a
     property of the statistic, not a finding (@sec-local).
 
+### Regulatory
+
+17. **Inside a safety zone, lost effort is mandated, not avoidance**
+    (2026-10-20). The U.S. Coast Guard set a 500 m safety zone around every
+    SFW, RWF and SRW foundation, from installation through turbine and
+    platform construction (SFW enforced 2023-05-01 to 2024-05-31; RWF and SRW
+    rules run to 2027 and 2028). Non-construction vessels are excluded there,
+    so a fall in effort inside a zone is a regulatory effect. One zone covers
+    about 0.79 km², most of a 0.93 km² cell, so at this grid's resolution the
+    exclusion fills most of each foundation's own cell. *Treatment:*
+    - `sz_share(t)`, the area share of each cell inside an active zone, is
+      in the month and season-year tables (`05`), and enters the timing
+      model as its own term, so *h*(·) and *λ* estimate the response
+      **beyond** the mandated exclusion;
+    - the stage × season BAG is also reported without the cells ever inside
+      a zone, so the inside-band *γ* is not driven by mandated exclusion
+      (@sec-sensitivity);
+    - SFW's zones lapsed on 2024-05-31, leaving 27 months (June 2024 –
+      August 2026) when fishing beside its turbines was legal again. Whether
+      effort returns there is the cleanest test of **lasting** avoidance
+      (@sec-bag);
+    - the rules enforce the zones only during active construction (about
+      48 h to 1 week per location for RWF and SRW, by Local Notice to
+      Mariners), so `sz_share_install` (installation days only) is the
+      enforcement-only lower bound, run as a sensitivity.
+
 ## Recommended treatments and transformations {#sec-treatments}
 
 One principle runs through this section: **transform for descriptive spatial
@@ -508,6 +548,7 @@ appropriate family and an exposure offset.
 | `habitat_*` | Per-cell habitat class shares, once the Ørsted data arrive | Static environmental covariates (@sec-env) |
 | `d_found_final_km`, `d_cable_km` | Distance to the nearest eventual foundation (planned included) and to the nearest cable route | Static; an alternative BAG gradient measured to the structures rather than the lease line (@sec-infra) |
 | `d_found_km`, `n_found_2km`, `active_construction`, `cable_works`, `phase`, `months_since_first_found` | Time-varying foundation and cable exposure (month tables; season-year means and shares) | Timing BAG (@sec-infra) |
+| `sz_share`, `sz_share_install` | Share of the cell's area inside an active USCG 500 m safety zone: installation to rule end, and installation days only (month tables; season-year means) | Timing BAG term for mandated exclusion; sensitivity (caveat 17) |
 
 ### Environmental covariates: bathymetry and benthic habitat {#sec-env}
 
@@ -819,10 +860,11 @@ same commit as the code that first uses it.
    - Build two weights objects: `lw_W` (row-standardised, for Moran's I and
      LISA) and `lw_B_self` (binary, self-inclusive, for General G and Gi\*).
 8. Ørsted infrastructure (@sec-infra):
-   - read the RWF and SRW foundation CSVs, the SFW PSO dates and
-     the three layout GeoJSONs; collapse each foundation's installation-day
-     rows to its first and last day; match CSV positions to layout points (RWF by grid name,
-     SRW by distance) and check each within 100 m;
+   - read the RWF, SRW and SFW foundation CSVs, the SFW PSO dates (as a
+     check) and the three layout GeoJSONs; collapse each foundation's
+     installation-day rows to its first and last day; match CSV positions to
+     layout points (RWF by grid name, SRW and SFW by distance) and check each
+     within 100 m; assert SFW's dates equal PSO Table 3;
    - write `data/sf/infra/infrastructure.gpkg` (layers `foundations`,
      `cables`) with a sidecar;
    - derive the per cell × month exposure covariates and their season-year
@@ -909,6 +951,10 @@ tables sum to the monthly totals. No stage × season stratum or season-year
 spans two stages. The infrastructure layers match their sources (13 / 68 / 85
 foundation positions; 13 / 68 / 45 installed by August 2026), every
 foundation lies in its own lease, and no cell's exposure ever decreases.
+SFW's dates equal PSO Table 3, and each SFW `USCG_ID` names its matched
+position. Safety-zone shares lie in [0, 1], none precedes the first
+foundation (June 2023), no foundation predates its project's zone rule,
+and SFW's zones lapse from June 2024.
 
 ## Phase 1: Exploratory analysis (`06_explore.qmd`) {#sec-phase1}
 
@@ -1170,24 +1216,31 @@ All criteria are fixed before the results are seen.
    - weights: queen vs second-order queen vs distance band (from Phase 2).
 5. **Detection power on a known signal.** Plant synthetic signals in null
    surfaces simulated from the Phase 6 base model, which keeps the observed
-   zero structure and autocorrelation:
+   zero structure and autocorrelation. *Until Phase 6 exists (decision
+   2026-10-20):* interim nulls, a Gaussian random field at each gear's *ρ*₀
+   rank-mapped onto the observed Stage 1 values; re-run with Phase 6
+   simulations when they exist. The planted signals:
    - a 2-km "avoidance halo" (–50% inside the leases);
    - a "spillover ring" (+50% at 2–4 km).
    Measure sensitivity and false-positive rate for each statistic after FDR.
    This is the most direct measure of efficacy for *this* question.
 6. **Stage-change readability.** Do the change classes (`gained hot`,
    `lost hot`, …) from each method line up with the BAG estimates from Phase 5?
-   Agreement with the model is the external validation.
+   Agreement with the model is the external validation. *Deferred until
+   Phase 5 has run; the primary-method choice stays provisional until then.*
 
 ### Steps
 
-1. Run `localmoran_perm(nsim = 999, iseed = 42)` and
-   `localG_perm(nsim = 999, iseed = 42)` on `y_vst` for each dataset × gear ×
-   stage, and for each dataset × gear × stage × season. Apply BH-FDR within
-   each surface at q = 0.05 and q = 0.10.
+1. Run `localmoran_perm(nsim = 999, iseed = 42)` on `y_vst` and
+   `localG_perm(nsim = 999, iseed = 42)` on the non-negative G scale
+   (`g_scale()`) for each dataset × gear × stage, and for each dataset × gear
+   × stage × season. Use the **z-moment permutation p-values**
+   (`Pr(z != E(Ii))`, `Pr(z != E(Gi))`; decision 2026-10-20). Apply BH-FDR
+   within each surface at q = 0.05 and q = 0.10.
 2. Build classes:
    - Gi\* bins −3…+3 (99/95/90%), as in the archive;
-   - LISA quadrants, using `hotspot()` with `p.adjust = "fdr"`.
+   - LISA quadrants (`attr(., "quadr")$mean`) where the FDR-adjusted p
+     clears q.
 3. Stage-change classes S1→S2, S2→S3 and S1→S3, from the stage surfaces and
    **within each season** (Apr–Sep S1 → Apr–Sep S2, and so on). The
    within-season classes are the ones free of the calendar-mix confound
@@ -1202,8 +1255,9 @@ All criteria are fixed before the results are seen.
 # run with both methods so they can be scored against criteria 1–6.
 #
 # Inputs:  `y` (y_vst for one dataset x gear x stage, or x stage x season;
-#          grid row order),
-#          `lw_W` and `lw_B_self` from Phase 0.
+#          grid row order) for LISA, and `y_G` (g_scale(density), the
+#          non-negative G scale) for Gi*; `lw_W` and `lw_B_self` from Phase 0.
+#          As built in r/08 (local_stats() in r/spatial_helpers.R).
 # Outputs: per-cell statistics and class labels, later joined to cells.gpkg
 #          for mapping and for the stage-change classes (step 3).
 
@@ -1217,22 +1271,30 @@ lisa <- localmoran_perm(y, lw_W, nsim = 999, iseed = 42, alternative = "two.side
 # Getis-Ord Gi*: binary weights including the cell itself, so the statistic
 # measures how much of the total sits in the cell's 3 x 3 neighbourhood.
 # Same permutation design, so the two methods differ only in the statistic.
-gi   <- localG_perm(y, lw_B_self, nsim = 999, iseed = 42, alternative = "two.sided")
+# localG_perm() computes Gi* as a share of the surface total, so it needs
+# non-negative values: AFE's log y_vst would reverse the sign of every z.
+gi   <- localG_perm(y_G, lw_B_self, nsim = 999, iseed = 42, alternative = "two.sided")
 
 # Classification (caveat 15). With 3,376 cells tested at once, unadjusted
 # p < 0.05 would flag about 170 cells by chance alone. Benjamini–Hochberg FDR
-# (`p.adjust = "fdr"`) controls the expected share of false discoveries
-# within each surface. Prname picks the permutation-based p-value column, not the
-# analytical one, to stay consistent with the global tests.
-# LISA classes: High-High, Low-Low, High-Low, Low-High; non-significant -> NA
-lisa_class <- hotspot(lisa, Prname = "Pr(z != E(Ii)) Sim", cutoff = 0.05,
-                      p.adjust = "fdr")
-# Gi* classes: hot or cold spot. On zero-floored AFE surfaces cold spots are
-# largely undetectable (caveat 16), so read their absence with care. The
-# 99/95/90% confidence bins used on the poster (-3…+3) are derived separately
-# from the same adjusted p-values (step 2).
-gi_class   <- hotspot(gi, Prname = "Pr(z != E(Gi)) Sim", cutoff = 0.05,
-                      p.adjust = "fdr")
+# controls the expected share of false discoveries within each surface.
+# p-values: the z-moment permutation p (each cell's statistic against its own
+# permutation mean and variance; no floor). Not the rank p ("... Sim"), whose
+# floor of 2/1,000 left the sparse AFE surfaces with no rejections, and not
+# the folded p, which spdep 1.4.2 gets wrong for Gi* on empty neighbourhoods
+# (decision 2026-10-20).
+# LISA classes: High-High, Low-Low, High-Low, Low-High where significant
+lisa_sig <- p.adjust(lisa[, "Pr(z != E(Ii))"], "BH") <= 0.05
+lisa_class <- ifelse(lisa_sig, as.character(attr(lisa, "quadr")$mean), "ns")
+# Gi* classes: hot or cold spot, by the sign of (Gi − E.Gi). On zero-floored
+# AFE surfaces cold spots are largely undetectable (caveat 16), so read their
+# absence with care. The 99/95/90% bins (-3…+3) come from the same adjusted
+# p-values at q = 0.01 / 0.05 / 0.10 (step 2). Note: the internals column
+# labelled "StdDev.Gi" holds this z, not a standard deviation.
+g_int <- attr(gi, "internals")
+gi_z <- (g_int[, "Gi"] - g_int[, "E.Gi"]) / sqrt(g_int[, "Var.Gi"])
+gi_sig <- p.adjust(g_int[, "Pr(z != E(Gi))"], "BH") <= 0.05
+gi_class <- ifelse(gi_sig, ifelse(gi_z > 0, "hot", "cold"), "ns")
 ```
 
 **Expected outcome, to be confirmed by the criteria.**
@@ -1301,14 +1363,14 @@ the decision:
 
 | Project | Positions | Installation dates | Cable routes | Cable works window |
 |---|---|---|---|---|
-| SFW | Layout GeoJSON (2025-07-25), 13 points | PSO report Table 3: OSS Z01 2023-06-19/20; 12 monopiles 2023-07-02 to 2023-08-07 | 12 inter-array + 1 export | 2023-03 to 2023-09 (PSO report) |
+| SFW | Layout GeoJSON (2025-07-25), 13 points | Ørsted CSV (PSO id × position × day), equal to PSO report Table 3: OSS Z01 (AP06) 2023-06-19/20; 12 monopiles each on its own day(s), A12 (AP05) 2023-07-02 to A04 (AM08) 2023-08-07 | 12 inter-array + 1 export | 2023-03 to 2023-09 (PSO report) |
 | RWF | Layout GeoJSON (2026-01-19), 67 points | Ørsted foundation CSV: 65 WTG 2024-05-10 to 2025-05-26 (none Sep 2024 – Apr 2025), OSS Z01a and Z02 (Oct 2024), Z01b (Aug 2025) | 65 inter-array + 3 export | Inter-array from 2025-11 (open); export complete by 2026-08 (no start) |
 | SRW | Preliminary layout GeoJSON (2026-01-05), 85 points | Ørsted foundation CSV: 44 WTG 2025-06-04 to 2025-10-27; OCS-DC jacket (8 pin piles) 2025-09-06 to 09-08 | 84 inter-array + 3 export | Nearshore export by 2025-12 (no start); inter-array unknown |
 
 **Layer schema.** `foundations`: `asset_id`, `project`, `asset_type`
 (`wtg`, `oss`), `grid_pos` (e.g. AM06), `internal_id` (Ørsted's B##/C##/Z##),
-`status` (`installed`, `planned`), `date_basis` (`exact`, `project_window`,
-`planned`), `foundation_installed`, `foundation_end`, `n_date_rows`,
+`status` (`installed`, `planned`), `date_basis` (`exact`, `planned`),
+`foundation_installed`, `foundation_end`, `n_date_rows`,
 `wtg_installed` and `first_power` (not supplied, kept blank), `depth_m`,
 `layout_offset_m`, `source`, `version_date`. `cables`: `asset_id`,
 `project`, `asset_type` (`iac`, `export_cable`), `route_name`, `lay_start`,
@@ -1317,12 +1379,18 @@ the decision:
 
 **Gaps and how they are handled** (decisions 2026-10-19):
 
-- **SFW turbine ids.** The PSO report numbers monopiles A01–A15, the layout
-  uses grid positions, and neither the COP nor the layout file links them.
-  The substation is placed on AP06 (the export cable's landing point) with
-  its exact dates; the 12 turbines share the turbine window. At monthly
-  resolution this misplaces SFW turbines by at most one month (July vs
-  August 2023).
+- **SFW turbine ids** (resolved 2026-10-20). The PSO report numbers
+  monopiles A01–A15 and the layout uses grid positions; Ørsted's
+  `sfw_monopile_install_orsted.csv` links the two, so each SFW foundation
+  has its own installation day(s). Before it arrived, the 12 turbines shared
+  the turbine window, which put seven of them (installed in July) a month
+  late. The CSV's one truncated id (A01 as "AM0", on AM05) was corrected in
+  the file on 2026-10-20.
+- **Safety zones** (2026-10-20). Every foundation had a USCG 500 m safety
+  zone from its installation through turbine and platform construction:
+  SFW's were enforced 2023-05-01 to 2024-05-31; the RWF and SRW rules run to
+  2027-05-31 and 2028-05-31, so their zones stay on to the end of the window.
+  They become `sz_share(t)` (below; caveat 17).
 - **SRW's 40 unrecorded positions** are `planned` and never count as
   installed. Work stopped in December 2025 and resumed in February 2026 with
   turbine erection on installed foundations; no public record shows further
@@ -1344,6 +1412,8 @@ the decision:
 | `n_found_2km(t)` | Installed foundations within 2 km |
 | `active_construction(t)` | A foundation's installation days overlap month *t* within 5 km |
 | `cable_works(t)` | A cable route whose works window overlaps month *t* lies within 2 km |
+| `sz_share(t)` | Share of the cell's area inside an active USCG 500 m safety zone: each foundation's zone from its installation to its project's rule end (`references/infra_safety_zones.csv`: SFW 2024-05-31, RWF 2027-05-31, SRW 2028-05-31). Zones are unioned, so co-located foundations count once |
+| `sz_share_install(t)` | The same, with each zone active only on its foundation's installation days (enforcement-only; sensitivity) |
 | `phase(t)` | Nearest project's `pre` (before its first foundation or cable-lay day), `construction`, or `post_construction` (after its last works day, only if every foundation is installed and every cable window closed) |
 | `months_since_first_found(t)` | Months from the nearest project's first foundation, for event-time plots |
 | `d_found_final_km`, `d_cable_km` | Static: nearest eventual foundation (planned included) and nearest cable route |
@@ -1354,9 +1424,10 @@ and SRW stay in `construction` to the end of the window (RWF's inter-array
 works are open; SRW has unrecorded positions).
 
 For the season-year timing model (fixed AFE), each covariate is aggregated
-over the months of the season: means for distances and counts, the share of
-months for `active_construction` and `cable_works`, and the phase held in
-most months (`infra_cell_season_year.csv` and the season-year tables).
+over the months of the season: means for distances, counts and `sz_share`,
+the share of months for `active_construction` and `cable_works`, and the
+phase held in most months (`infra_cell_season_year.csv` and the season-year
+tables).
 
 `05`'s gate checks the counts against the sources, that each CSV
 position lies within 100 m of its layout point, that every date falls inside
@@ -1398,7 +1469,7 @@ season-year, with *s*<sub>cc</sub>(moy) replaced by the season term
 *α*<sub>k</sub>). Stages are replaced by time-varying exposure:
 
 $$
-\log \mu_{c,t} = \beta_0 + s_{\text{cc}}(\text{moy}_t) + s(\text{year}_t) + h\big(d^{\text{found}}_{c}(t)\big) + \text{phase}_{p(c),t} \times g(d_c) + \lambda \, \text{active}_{c,t} + \mathbf{z}_c^\top \boldsymbol{\delta} + \omega_c + \varepsilon_{c,t} + \log(\text{area}_c)
+\log \mu_{c,t} = \beta_0 + s_{\text{cc}}(\text{moy}_t) + s(\text{year}_t) + h\big(d^{\text{found}}_{c}(t)\big) + \text{phase}_{p(c),t} \times g(d_c) + \lambda \, \text{active}_{c,t} + \kappa \, \text{sz}_{c,t} + \mathbf{z}_c^\top \boldsymbol{\delta} + \omega_c + \varepsilon_{c,t} + \log(\text{area}_c)
 $$
 
 - phase<sub>p,t</sub> ∈ {pre, construction, post_construction} is `phase` from
@@ -1425,6 +1496,17 @@ $$
   (piling noise and vessel exclusion within 5 km), kept apart from the
   lasting presence of the structures in *h*(·). `cable_works(t)` enters the
   same way as a sensitivity, since its windows are coarse.
+- *κ* is the **mandated exclusion** on `sz_share(t)`, the share of the cell
+  inside an active 500 m USCG safety zone (caveat 17). With it in the
+  model, *h*(·) and *λ* describe the response beyond what the zones require.
+  *κ* should be strongly negative where zones are enforced; a *κ* near zero
+  would mean the zones were rarely enforced around non-construction vessels,
+  which the enforcement-only variant `sz_share_install` tests.
+- **SFW after its zones lapsed** (June 2024 – August 2026): with *κ* in the
+  model, *h*(·) near SFW's turbines in this period is effort beside
+  structures that vessels may legally approach. Report it separately from
+  the zone period: a recovery means the construction-era loss was
+  exclusion, a persistent gap means lasting avoidance.
 - *ε*<sub>c,t</sub> is temporal correlation within a cell (AR1 on month or
   year; Phase 6).
 - For the season-year model the offset becomes
@@ -1585,6 +1667,11 @@ gear × dataset. Written to `models/pretrend_*.csv`.
   as inconclusive.
 - **Limited power.** Read every estimate against its gear's minimum
   detectable effect (@sec-bag-power).
+- **Mandated exclusion inside the leases.** From each foundation's
+  installation, its 500 m safety zone covers most of its own cell (caveat
+  17), so part of any Stage 3 fall in the `inside` band is required by
+  regulation. The stage × season BAG is also fitted without the cells ever
+  inside a zone; the timing model carries `sz_share(t)` directly.
 
 ## Phase 6: Statistical models, comparison of approaches (`11_models_frequentist.qmd`, `12_models_inla.qmd`) {#sec-models}
 
@@ -1978,9 +2065,10 @@ grid: variant × outcome, with the estimate and CI.
 | `band × year` pre-trend term, every gear (Phase 1 gate, 2026-10-19) | Parallel pre-construction trends across distance bands, which the Phase 1 tests could not establish with power |
 | Distance bands vs a continuous distance smooth | BAG specification |
 | SRW's 40 unrecorded positions installed from May 2026 (`infra_cell_month_srw_planned.csv`) | Upper bound on SRW exposure (decision 2026-10-19) |
-| SFW turbines installed at the start of their window (2023-07-02) instead of its end | The missing SFW id crosswalk |
 | Exposure radii: `active_construction` at 2 / 5 / 10 km; `n_found` at 1 / 2 / 4 km | Scale of the construction and structure effects |
 | `cable_works(t)` in the timing model | Coarse cable windows |
+| `sz_share_install` (zones on installation days only) in place of `sz_share` | Enforcement-only safety zones: the RWF and SRW rules enforce zones only during active construction (caveat 17) |
+| Stage × season BAG without the cells ever inside a safety zone | Mandated exclusion driving the inside-band *γ* (caveat 17) |
 | Drop the last 3 months of each cell's pre-period | Unrecorded seabed preparation before the first foundation |
 | `d_found_final_km` in place of `dist_lease_km` for the stage × season BAG gradient | Distance to the structures vs to the lease line |
 
@@ -2070,8 +2158,14 @@ first power, per-route cable dates, the remaining SRW foundations) update
       2026-10-19 (@sec-infra).
 - [ ] Sharing terms for the Ørsted foundation data, noted in
       `references/`.
-- [ ] SFW crosswalk from the PSO ids (A01–A15) to layout positions, from
-      Ørsted or the SFW as-built report. Replaces the shared turbine window.
+- [x] SFW crosswalk from the PSO ids (A01–A15) to layout positions:
+      received from Ørsted (`sfw_monopile_install_orsted.csv`) and built in
+      `05`, 2026-10-20. Replaces the shared turbine window.
+- [x] A01's `USCG_ID` ("AM0" → "AM05"): corrected in the SFW CSV by the
+      user, 2026-10-20. Ask Ørsted to carry the fix into any re-delivery.
+- [ ] Safety-zone enforcement periods per foundation for RWF and SRW, from
+      the First District Local Notices to Mariners, if the
+      enforcement-only sensitivity (caveat 17) matters to the results.
 - [ ] SRW: installation dates for the 40 remaining foundations, or
       confirmation that none were installed by August 2026.
 - [ ] Per-route cable lay and burial dates (RWF inter-array end date, RWF

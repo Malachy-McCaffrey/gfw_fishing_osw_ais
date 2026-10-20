@@ -2,8 +2,9 @@
 # tidyverse, spdep, r/paths.R, r/gfw_helpers.R and r/analysis_helpers.R:
 #   source("r/analysis_helpers.R"); source("r/spatial_helpers.R")
 #
-# Every function is a pure function of its arguments (the permutation and
-# bootstrap ones take an explicit seed), so each one is unit-tested in
+# Every function is a pure function of its arguments (the permutation,
+# bootstrap and simulation ones take an explicit seed), apart from cached(),
+# which reads and writes its cache folder. Each one is unit-tested in
 # r/tests/testthat/test-spatial_helpers.R.
 
 # General G scale -----------------------------------------------------------
@@ -223,4 +224,240 @@ block_bootstrap_I <- function(y, nb, x_km, y_km, block_km, B = 999, seed = 42,
   tibble::tibble(block_km = block_km, n_blocks = n_blocks, I_within = I_within,
                  I_boot_se = stats::sd(boot, na.rm = TRUE),
                  I_lo = q[1] + (I_full - I_within), I_hi = q[2] + (I_full - I_within))
+}
+
+# ============================================================================
+# Phase 3: local statistics (08_spatial_local.qmd)
+# ============================================================================
+
+# Local statistics for one surface -------------------------------------------
+# Plan, Phase 3 step 1: Local Moran's I (LISA) and Getis-Ord Gi*, both by
+# conditional permutation (each cell's value held fixed, the others shuffled
+# `nsim` times), with the same seed, so the two differ only in the statistic.
+#
+# Decisions 2026-10-20:
+# - **z-moment permutation p-values** ("Pr(z != E(Ii))", "Pr(z != E(Gi))"):
+#   each cell's statistic is standardised by the mean and variance of its own
+#   conditional-permutation distribution, then given a two-sided normal p.
+#   There is no p-value floor, so BH-FDR over 3,376 cells can still reject on
+#   sparse surfaces at 999 draws. Rejected alternatives:
+#     * the rank p ("... Sim"): floor 2 / (nsim + 1); at 999 draws BH-FDR
+#       rejected nothing on the fixed and pole-and-line AFE surfaces;
+#     * the folded p ("Pr(folded) Sim"): in spdep 1.4.2, localG_perm()
+#       returns the floor (0.001) for cells whose whole neighbourhood is
+#       empty, where a hand-coded conditional permutation gives 0.38–0.43
+#       (about a quarter of the draws tie the observed zero). It flagged
+#       every empty neighbourhood. (LISA's folded p was correct.)
+# - **Gi\* takes the non-negative G scale** (`g_scale()`), as General G does.
+#   localG_perm() computes Gi* as a ratio to the surface total, which is
+#   negative for AFE's log y_vst, and that reverses the sign of every z.
+#   LISA is centred on the mean, so it takes y_vst unchanged.
+# - The z values are (statistic − permutation mean) / √(permutation
+#   variance). Note: the localG_perm() internals column labelled
+#   "StdDev.Gi" holds this z, not a standard deviation, so the variance
+#   column is used directly.
+#
+# `y_I`: values for LISA; `y_G`: non-negative values for Gi*; both in the
+# weights' cell order. `lw_I`: row-standardised weights; `lw_G`: binary,
+# self-included weights. Returns one row per cell; all NA for a constant or
+# missing surface.
+local_stats <- function(y_I, y_G, lw_I, lw_G, nsim = 999, seed = 42) {
+  n <- length(y_I)
+  stopifnot("values and weights differ in length" =
+              n == length(lw_I$neighbours) && n == length(lw_G$neighbours) && length(y_G) == n)
+  out <- tibble::tibble(Ii = rep(NA_real_, n), lisa_z = NA_real_, lisa_p = NA_real_,
+                        quadrant = NA_character_, gi_z = NA_real_, gi_p = NA_real_)
+  if (anyNA(y_I) || stats::var(y_I) == 0) return(out)
+  stopifnot("Gi* needs non-negative values (see g_scale())" = all(y_G >= 0))
+
+  # zero.policy: the distance-band weights can leave a corner cell with no
+  # neighbour; such a cell gets no statistic rather than stopping the run
+  lm <- spdep::localmoran_perm(y_I, lw_I, nsim = nsim, iseed = seed,
+                               alternative = "two.sided", zero.policy = TRUE)
+  gi <- spdep::localG_perm(y_G, lw_G, nsim = nsim, iseed = seed,
+                           alternative = "two.sided", zero.policy = TRUE)
+  g_int <- attr(gi, "internals")
+
+  out$Ii       <- unname(lm[, "Ii"])
+  out$lisa_z   <- unname(lm[, "Z.Ii"])             # (Ii − E.Ii) / √Var.Ii, permutation moments
+  out$lisa_p   <- unname(lm[, "Pr(z != E(Ii))"])
+  # quadrant of each cell against the mean: its own value and its lag
+  out$quadrant <- as.character(attr(lm, "quadr")$mean)
+  out$gi_z     <- unname((g_int[, "Gi"] - g_int[, "E.Gi"]) / sqrt(g_int[, "Var.Gi"]))
+  out$gi_p     <- unname(g_int[, "Pr(z != E(Gi))"])
+  out
+}
+
+# Classes ---------------------------------------------------------------------
+# Benjamini–Hochberg FDR within one surface (caveat 15). A missing p (a cell
+# with no statistic) is never significant.
+fdr_sig <- function(p, q) {
+  sig <- rep(FALSE, length(p))
+  ok <- !is.na(p)
+  sig[ok] <- stats::p.adjust(p[ok], method = "BH") <= q
+  sig
+}
+
+# Gi* confidence bins −3…+3, as in the archive (and ArcGIS Gi_Bin): the sign
+# of z and the strictest FDR level the cell clears, 99% (3), 95% (2) or 90% (1).
+gi_bins <- function(z, p) {
+  bins <- integer(length(z))
+  s <- sign(dplyr::coalesce(z, 0))
+  for (lv in list(c(3, 0.01), c(2, 0.05), c(1, 0.10))) {
+    newly <- bins == 0L & fdr_sig(p, lv[2])
+    bins[newly] <- as.integer(s[newly] * lv[1])
+  }
+  bins
+}
+
+# Gi* status from its bins: hot / cold / ns. Any bin counts, as in the
+# archive's change classes (hot_status() in archive/python/.../transitions.py).
+gi_status <- function(bins) {
+  dplyr::case_when(bins > 0 ~ "hot", bins < 0 ~ "cold", TRUE ~ "ns")
+}
+
+# LISA class at FDR level q: HH, LL, HL, LH, or ns. spdep's quadrant labels
+# name the cell first and its neighbours second ("High-Low": a high cell
+# among low neighbours, an outlier).
+lisa_class <- function(quadrant, p, q = 0.05) {
+  lab <- c("High-High" = "HH", "Low-Low" = "LL", "High-Low" = "HL", "Low-High" = "LH")
+  out <- unname(lab[quadrant])
+  out[!fdr_sig(p, q) | is.na(out)] <- "ns"
+  out
+}
+
+# LISA as hot / cold / ns, for change classes on the same footing as Gi*:
+# a significant high-high cluster is "hot", low-low "cold"; outliers are ns.
+lisa_status <- function(cls) {
+  dplyr::case_when(cls == "HH" ~ "hot", cls == "LL" ~ "cold", TRUE ~ "ns")
+}
+
+# Stage-change classes --------------------------------------------------------
+# The archive's mutually exclusive scheme (change_classes() in
+# archive/python/.../transitions.py), so results compare with the poster.
+# Direct reversals are kept apart from gained / lost.
+change_levels <- c("stable hot", "gained hot", "lost hot", "hot to cold", "cold to hot",
+                   "stable cold", "gained cold", "lost cold", "no change")
+
+change_class <- function(from, to) {
+  out <- dplyr::case_when(
+    from == "hot"  & to == "hot"  ~ "stable hot",
+    from == "ns"   & to == "hot"  ~ "gained hot",
+    from == "hot"  & to == "ns"   ~ "lost hot",
+    from == "hot"  & to == "cold" ~ "hot to cold",
+    from == "cold" & to == "hot"  ~ "cold to hot",
+    from == "cold" & to == "cold" ~ "stable cold",
+    from == "ns"   & to == "cold" ~ "gained cold",
+    from == "cold" & to == "ns"   ~ "lost cold",
+    TRUE                          ~ "no change")
+  factor(out, levels = change_levels)
+}
+
+# Comparison criteria (plan, Phase 3) -------------------------------------------
+
+# Criterion 1: Cohen's κ between two logical classifications of the same
+# cells. NA when chance agreement is 1 (both classify every cell the same
+# way, e.g. neither flags anything), where κ is undefined.
+cohen_kappa <- function(a, b) {
+  stopifnot(length(a) == length(b))
+  po <- mean(a == b)
+  pe <- mean(a) * mean(b) + mean(!a) * mean(!b)
+  if (isTRUE(all.equal(pe, 1))) return(NA_real_)
+  (po - pe) / (1 - pe)
+}
+
+# Criterion 2: cells whose queen neighbourhood, the cell included, holds no
+# effort at all. A "significant" low cluster there says only that the sea is
+# empty, which carries no information about effort.
+all_zero_neighbourhood <- function(density, nb) {
+  vapply(seq_along(density), function(i) {
+    j <- nb[[i]][nb[[i]] > 0]
+    all(density[c(i, j)] == 0)
+  }, logical(1))
+}
+
+# Criterion 4: stability of one alternative run against the baseline. Among
+# the cells significant in the baseline, the share that keep exactly the same
+# class, and the Jaccard overlap of the two significant sets. NA when the
+# baseline has no significant cell.
+class_stability <- function(base, alt, ns = "ns") {
+  sig_b <- base != ns
+  sig_a <- alt != ns
+  tibble::tibble(
+    keep_share = if (any(sig_b)) mean(alt[sig_b] == base[sig_b]) else NA_real_,
+    jaccard = if (any(sig_b | sig_a)) sum(sig_b & sig_a) / sum(sig_b | sig_a) else NA_real_)
+}
+
+# Criterion 5: interim null surfaces -------------------------------------------
+# Decision 2026-10-20: until the Phase 6 model can simulate nulls, each null
+# is a Gaussian random field with an exponential covariance whose practical
+# range is the gear's rho0 (correlation exp(-3) ≈ 0.05 at that distance),
+# reshaped to the observed values by rank: the lowest field value takes the
+# lowest observed density, and so on. That keeps the observed zero share and
+# positive distribution exactly, and a spatial structure at the observed
+# scale, but none of the real surface's geography (in particular, nothing
+# tied to the leases), which is what a null for a lease signal needs.
+
+# Upper Cholesky factor R of the covariance (Σ = R'R), computed once per
+# range and reused for every replicate. A tiny nugget keeps Σ numerically
+# positive definite.
+grf_chol <- function(coords_km, range_km, nugget = 1e-8) {
+  d <- as.matrix(stats::dist(coords_km))
+  sigma <- exp(-3 * d / range_km)
+  diag(sigma) <- 1 + nugget
+  chol(sigma)
+}
+
+# One null surface: a field drawn with `seed`, rank-mapped onto `values`.
+null_surface <- function(R, values, seed) {
+  stopifnot("values and covariance differ in size" = length(values) == ncol(R))
+  set.seed(seed)
+  field <- as.vector(crossprod(R, stats::rnorm(ncol(R))))
+  out <- numeric(length(values))
+  out[order(field)] <- sort(values)
+  out
+}
+
+# Power of one statistic for one planted signal (decision 2026-10-20: paired).
+# Per replicate, the share of signal-zone cells flagged in the signal's
+# direction on the null surface (`null_share`) and on the same surface with
+# the signal planted (`signal_share`). The two runs share the field and the
+# permutation seed, so their difference is due to the signal alone. A
+# replicate detects the signal if the signal raises the flagged share by at
+# least `min_excess` (10 percentage points of the zone); power is the share
+# of replicates that do. An unpaired rule (beating the spread of all nulls)
+# would mostly measure where random clusters fall in each field.
+#   sensitivity  mean flagged share with the signal
+#   fp           mean flagged share without it (clusters the null field
+#                happens to put in the zone, not a test error rate)
+#   mean_excess  mean paired difference; any_excess: share of replicates > 0
+power_summary <- function(null_share, signal_share, min_excess = 0.10) {
+  stopifnot("null and signal runs must pair up" = length(null_share) == length(signal_share))
+  excess <- signal_share - null_share
+  tibble::tibble(sensitivity = mean(signal_share, na.rm = TRUE),
+                 fp = mean(null_share, na.rm = TRUE),
+                 mean_excess = mean(excess, na.rm = TRUE),
+                 any_excess = mean(excess > 0, na.rm = TRUE),
+                 # tolerance: shares are ratios of cell counts, so an excess of
+                 # exactly 0.10 can come out as 0.0999… in floating point
+                 power = mean(excess >= min_excess - 1e-9, na.rm = TRUE),
+                 replicates = sum(!is.na(excess)))
+}
+
+# Result cache ----------------------------------------------------------------
+# Phase 3 runs thousands of permutation tests (about 3 h serially). Each block
+# of runs is saved to `dir` under a hash of everything it depends on (the
+# input values, settings, the spdep version and the helper code), and is
+# recomputed only when that hash changes. The plan's fit_cached() (Phase 5)
+# will do the same for models. `key`: a list of every input to `fun`.
+cached <- function(dir, name, key, fun) {
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  key <- c(key, list(spdep = as.character(utils::packageVersion("spdep")),
+                     code = deparse(local_stats)))
+  f <- file.path(dir, sprintf("%s_%s.rds", name,
+                              substr(digest::digest(key, algo = "sha256"), 1, 16)))
+  if (file.exists(f)) return(readRDS(f))
+  out <- fun()
+  saveRDS(out, f)
+  out
 }

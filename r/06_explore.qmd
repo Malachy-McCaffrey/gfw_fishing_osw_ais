@@ -922,15 +922,17 @@ Descriptive groundwork for the timing BAG (plan, Phase 5 steps 1–2), from the
    (hollow: SRW planned), and the cable routes by type.
 2. **Exposure over time:** cells per month with an installed foundation
    within 2 km, with a foundation going in within 5 km
-   (`active_construction`), and with cable works within 2 km, by the cell's
-   nearest project. This shows how much of the grid each covariate actually
+   (`active_construction`), with cable works within 2 km, and with any area
+   inside an active USCG 500 m safety zone (`sz_share > 0`; there, vessels
+   are excluded by regulation, so lost effort is mandated rather than
+   avoidance), by the cell's nearest project. This shows how much of the grid each covariate actually
    reaches, and so how much contrast the timing model has to work with.
 3. **Event time:** mean monthly density per cell by distance band, against
    months since the nearest project's first foundation (−24 to +24),
    per dataset × gear × project. Season is not removed, so read the band
-   contrasts within each panel, not the absolute level. SFW's 12 turbines
-   carry the project's turbine window, so its month 0 is exact only to within
-   about five weeks; SRW has 14 months after its first foundation.
+   contrasts within each panel, not the absolute level. Every foundation
+   now has exact installation days, SFW's included (Ørsted's crosswalk,
+   decision 2026-10-20); SRW has 14 months after its first foundation.
 
 ```{r}
 #| fig-height: 7
@@ -950,7 +952,7 @@ p <- ggplot() + bm_layer +
                         labels = c(export_cable = "export cable", iac = "inter-array cable"), name = NULL) +
   coord_sf(xlim = bb[c("xmin", "xmax")], ylim = bb[c("ymin", "ymax")], expand = FALSE, datum = NA) +
   labs(title = "Ørsted foundations and cable routes",
-       caption = "Hollow: SRW positions with no installation record (planned). SFW turbines: project window.") +
+       caption = "Hollow: SRW positions with no installation record (planned). All installed foundations have exact dates.") +
   theme_void(base_size = 9)
 save_fig(p, "map_infrastructure", width = 10, height = 6)
 p
@@ -963,7 +965,9 @@ exposure <- infra_month |>
   group_by(year_month, nearest_project) |>
   summarise(`installed foundation within 2 km` = sum(n_found_2km > 0),
             `foundation going in within 5 km` = sum(active_construction),
-            `cable works within 2 km` = sum(cable_works), .groups = "drop") |>
+            `cable works within 2 km` = sum(cable_works),
+            # USCG 500 m safety zones (05, step 8): cells with any area inside one
+            `inside a 500 m safety zone` = sum(sz_share > 0), .groups = "drop") |>
   pivot_longer(-c(year_month, nearest_project), names_to = "exposure", values_to = "cells")
 save_tab(exposure, "exposure_cells_by_month")
 

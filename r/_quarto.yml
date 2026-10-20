@@ -23,3 +23,4 @@ project:
     - 04_classify_aggregate.qmd
     - 05_prepare_analysis.qmd
     - 06_explore.qmd
+    - 07_spatial_global.qmd

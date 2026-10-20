@@ -92,6 +92,12 @@ Six findings from profiling the current outputs (2026-10-06 pull, measured
 
 | Topic | Decision | Consequence for this plan |
 |---|---|---|
+| *2026-10-20, Phase 2* | | |
+| General G scale for AFE | **log(1 + density / *c*)**, i.e. `y_vst` − log(*c*), with the same per-surface *c*. VP keeps √density | General G needs non-negative values, and AFE's `y_vst` is negative at every zero cell. Moran's I is unchanged by the shift, so I and G read the same surface (`g_scale()` in `r/spatial_helpers.R`; @sec-global) |
+| Correlogram range of 3–5 km | **Borderline: queen stays primary, and a distance-band run is added to Phase 3** at the range rounded up to a whole km | The plan's gate covered < 3 km and > 5 km only. A censored range (I ≥ 0.1 at 20 km) counts as > 5 km. Every band run is capped at 10 km, censored or not (VP fixed's uncensored ~18 km range would otherwise give a 19 km band) |
+| *ρ*₀ | **Median of the three stage ranges** per dataset × gear, from the distance correlogram of `y_vst` (2-km annuli to 20 km, threshold I = 0.1) | One prior per dataset × gear model in Phases 6–7, written to `global_rho0.csv` and its sidecar |
+| VP mobile range prior | Its correlogram is **censored** (I ≥ 0.1 at 19 km in every stage), so the Phase 2 *ρ*₀ is a lower bound only. **Phase 7 takes its range prior from the Matérn range of the Phase 6 `sdmTMB` fit** | Phase 6 meshes and CV blocks for VP mobile use the 10 km cap. The other five dataset × gear priors use the Phase 2 *ρ*₀ (@sec-models) |
+| Interval for I | **Cell-block bootstrap**, blocks of side *ρ*₀ clamped to 3–10 km, shifted to centre on the full-grid I | Moran's I is reported with an interval as well as the permutation null band |
 | *2026-10-19, Ørsted infrastructure* | | |
 | Where it is built | **In `05` (Phase 0, step 8)**, not a separate `09`. Layers in `data/sf/infra/infrastructure.gpkg` (writing to `data/sf/infra/` approved) | The exposure covariates sit in the month and season-year analysis tables from the start, so Phases 1 and 5 read one table (@sec-infra) |
 | Multi-day installations | The foundation CSVs (which replaced the Excel files) give **one row per installation day**: first day = `foundation_installed`, last = `foundation_end`; repeated rows must agree on position, structure and depth | Multi-day installs (e.g. RWF Z01a, 17 days) count as under construction for every day they span |
@@ -1069,21 +1075,28 @@ Phase 3 weights and the SPDE range priors.
 #  - General G: are the *high* values concentrated together? It ignores
 #    low-low clustering, so it speaks directly to "is effort clumped".
 #
-# Inputs: `y`, a numeric vector in the same row order as the grid (and hence
-#         the weights); `lw_W` and `lw_B` from Phase 0 / below.
+# Inputs: `y_I` (values for Moran's I) and `y_G` (non-negative values for
+#         General G), numeric vectors in the same row order as the grid (and
+#         hence the weights); `lw_W` and `lw_B` from Phase 0 / below.
 # Output: one-row tibble, bound across surfaces into the Phase 2 summary table.
 
 # Fixed seed so permutation p-values reproduce exactly (FAIR: reusable)
 set.seed(42)
 
-global_stats <- function(y, lw_W, lw_B) {
+global_stats <- function(y_I, lw_W, lw_B, y_G = y_I) {
   # Permutation test: values are shuffled across cells 999 times, keeping the
   # weights fixed. With skewed, zero-heavy surfaces (caveats 1–3) this is safer
   # than the normal approximation.
-  mi <- moran.mc(y, lw_W, nsim = 999)
+  mi <- moran.mc(y_I, lw_W, nsim = 999)
   # General G has no permutation variant in spdep; its z-test is analytical.
-  # It requires non-negative y, which holds for y_vst and density.
-  gg <- globalG.test(y, lw_B)
+  # It requires non-negative values. That holds for raw density and for VP's
+  # y_vst (√density), but NOT for AFE's y_vst, log(density + c), which is
+  # negative wherever density < c, including every zero cell. So G takes
+  # `y_G`: √density for VP, and log(1 + density / c) = y_vst − log(c) for AFE,
+  # y_vst shifted so a zero cell is exactly 0 (decision 2026-10-20). Moran's I
+  # is unchanged by adding a constant, so I and G still read the same surface.
+  # In r/07 this is global_stats(y_I, lw_W, lw_B, y_G = g_scale(density, ds)).
+  gg <- globalG.test(y_G, lw_B)
   # mi$res holds the 999 permuted statistics followed by the observed one, so
   # drop the last element to get the null distribution alone. Its 2.5–97.5%
   # range is the band I would fall in with no spatial structure: a reference
@@ -1110,7 +1123,15 @@ The interval for I itself comes from a cell-block bootstrap, which is cheap.)
 
 - Correlogram range below about 3 km → queen weights are adequate.
 - Range above about 5 km → add a distance-band weights run to Phase 3.
-- Write *ρ*₀ to the provenance sidecar for Phase 7.
+- Range of 3–5 km (borderline, decision 2026-10-20) → queen stays primary,
+  and the distance-band run is added as well, at the range rounded up to a
+  whole km.
+- Range censored (I still ≥ 0.1 at 20 km) → counts as above 5 km.
+- Every distance-band run is capped at 10 km, censored or not, so the band
+  never approaches the AOI's width.
+- *ρ*₀ per dataset × gear is the median of its three stage ranges
+  (censored if two or more are). Write it to `global_rho0.csv` and its
+  provenance sidecar for Phase 7.
 
 ## Phase 3: Local Moran's I vs Getis-Ord Gi\* (`08_spatial_local.qmd`) {#sec-local}
 
@@ -1666,6 +1687,13 @@ gear × dataset. Written to `models/pretrend_*.csv`.
 4. **Priors.** Penalised-complexity priors on range and SD (Fuglstad et al.
    2019), e.g. P(*ρ* < *ρ*₀/2) = 0.05 and P(*σ* > 1) = 0.05, plus a
    **prior-sensitivity refit** that doubles and halves *ρ*₀.
+   - **VP mobile** (decision 2026-10-20): its Phase 2 correlogram is
+     censored (I ≥ 0.1 at 19 km in every stage), so *ρ*₀ is only a lower
+     bound. Its range prior takes *ρ*₀ from the **Matérn range estimated by
+     the Phase 6 `sdmTMB` fit** of the same model instead. That fit itself
+     uses the 10 km cap from Phase 2 for its mesh and CV blocks, since it
+     runs before the range is known. Record the fitted range and its source
+     model in the Phase 7 sidecar.
 5. **Laplace approximation accuracy.** It can be poor for very sparse binary
    data (the occupancy part of a monthly fixed hurdle). Check against
    `control.inla = list(strategy = "laplace")` and posterior predictive

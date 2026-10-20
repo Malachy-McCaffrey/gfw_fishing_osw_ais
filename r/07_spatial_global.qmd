@@ -1,0 +1,554 @@
+---
+title: "MM GFW Global Spatial Autocorrelation (Phase 2)"
+author: "Malachy McCaffrey"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    fig-width: 10
+    fig-height: 6
+params:
+  # Path overrides (see r/paths.R); leave blank to use the project paths.
+  analysis: ""
+  spatial: ""
+  # Permutations for Moran's I, and bootstrap resamples for its interval
+  nsim: 999
+  n_boot: 999
+  # Correlograms (step 3): contiguity orders 1..max_order, and distance
+  # annuli of band_km up to band_max_km
+  max_order: 10
+  band_km: 2
+  band_max_km: 20
+  # I below this marks the practical range (plan, Phase 2 step 3)
+  range_threshold: 0.1
+  # Bootstrap block side (km): the dataset × gear practical range, clamped to
+  # this interval. The floor keeps ≥ ~3 cells across a block; the ceiling
+  # keeps ≥ ~30 blocks in the ~59 × 68 km grid, so resampling has blocks to draw.
+  block_min_km: 3
+  block_max_km: 10
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# run from the repo root (the folder holding renv.lock) so the relative paths
+# in r/paths.R resolve whether the qmd is rendered or run chunk by chunk
+root <- getwd()
+while (!file.exists(file.path(root, "renv.lock")) && dirname(root) != root) root <- dirname(root)
+knitr::opts_knit$set(root.dir = root)
+```
+
+## Objective
+
+Phase 2 of `planning/gfw_analysis_plan.qmd`: how strongly each surface
+clusters, how that changes across stages and seasons, and over what distance.
+The distance feeds the Phase 3 weights and the Matérn range prior (*ρ*₀) of
+Phases 6–7. It reads the Phase 0 outputs (`05_prepare_analysis.qmd`) only.
+
+| Step | Question |
+|---|---|
+| 1 | Moran's I and General G for every dataset × gear × stage (18 surfaces) and × stage × season (36), on `y_vst`, with raw density as a sensitivity |
+| 2 | Moran's I per season-year (22 steps): does clustering itself change as construction goes on? |
+| 3 | Correlograms by contiguity order and by distance: the practical range, *ρ*₀ |
+| 3b | An interval for I itself, by cell-block bootstrap with blocks set from *ρ*₀ |
+| 4 | Summary figures |
+
+Global autocorrelation is strong in every surface (plan, finding 5), so
+these tests confirm clustering rather than discover it. Their value is in
+comparing **effect sizes** across gear, stage and season, and in the **scale**
+of the clustering.
+
+**Scales.** Moran's I is computed on `y_vst` (√density for VP,
+log(density + *c*) for AFE; Phase 1 kept both). General G needs non-negative
+values, so it uses √density for VP and **log(1 + density / *c*)** for AFE.
+That is `y_vst` shifted so a zero cell is exactly 0, with the same *c*
+(decision 2026-10-20, `g_scale()` in `r/spatial_helpers.R`). Moran's I is
+unchanged by the shift, so I and G read the same surface. Season
+standardisation is not used: none of these statistics changes when a surface
+is multiplied by a constant (caveat 8).
+
+**Weights** (05, step 7): `lw_W` (queen, row-standardised) for Moran's I;
+binary queen without self for General G, as Getis & Ord (1992) define it.
+The self-inclusive weights are kept for Gi\* in Phase 3.
+
+Tables and figures go to `reports/spatial/` (gitignored: derived GFW
+products), listed with their hashes in `reports/spatial/manifest_07.csv`
+and its provenance sidecar. *ρ*₀ is also written to
+`tables/global_rho0.csv`, with its own sidecar, for Phase 7 to read.
+
+## Libraries and shared code
+
+```{r}
+library(tidyverse)
+library(sf)
+library(spdep)
+
+source("r/paths.R")
+source("r/gfw_helpers.R")
+source("r/analysis_helpers.R")
+source("r/spatial_helpers.R")
+
+# Quarto parameters (header); `params` is read-only while rendering. Run chunk
+# by chunk, `params` is missing or left over from another session, so the
+# header is read from this file directly instead
+qparams <- if (isTRUE(getOption("knitr.in.progress"))) params else {
+  hdr <- knitr::knit_params(readLines(file.path(root, "r/07_spatial_global.qmd"), warn = FALSE))
+  lapply(hdr, function(p) p$value)
+}
+paths <- gfw_paths_with(qparams)
+
+set.seed(42) # workflow-wide seed (plan, FAIR); the permutation and bootstrap
+             # helpers also reset it per surface, so results do not depend on run order
+
+datasets <- c("vp", "afe")
+ds_label <- c(vp = "VP", afe = "AFE")
+stage_breaks <- dev_stages$start[-1] # 2020-10-01 and 2023-04-01
+
+fig_dir <- file.path(paths$spatial, "figures")
+tab_dir <- file.path(paths$spatial, "tables")
+dir.create(fig_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(tab_dir, recursive = TRUE, showWarnings = FALSE)
+
+# every output is recorded here; the manifest is written at the end
+outputs <- character()
+save_tab <- function(df, name) {
+  f <- file.path(tab_dir, paste0(name, ".csv"))
+  write_csv(df, f, na = "")
+  outputs <<- c(outputs, f)
+  invisible(f)
+}
+save_fig <- function(p, name, width = 10, height = 6) {
+  f <- file.path(fig_dir, paste0(name, ".png"))
+  ggsave(f, p, width = width, height = min(height, 49), dpi = 120, bg = "white", limitsize = FALSE)
+  outputs <<- c(outputs, f)
+  invisible(p)
+}
+
+# rounds every double column for display only; the saved tables keep full precision
+kable_round <- function(df, digits = 3) {
+  df |> mutate(across(where(is.double), \(x) round(x, digits))) |> knitr::kable()
+}
+
+theme_set(theme_minimal(base_size = 10))
+```
+
+## Read the Phase 0 outputs
+
+Only the columns the statistics need are read: the cell id, the surface keys,
+`density` and `y_vst`. The monthly tables are not used: monthly surfaces are
+96–98% zeros, and season-year replaces the monthly I(t) (plan, "Time steps").
+
+```{r}
+table_path <- \(ds, ts) file.path(paths$analysis, sprintf("%s_%s_gear.csv", ds, ts))
+time_steps <- c("stage", "stage_season", "season_year")
+
+# the keys that identify one surface (one map) within a gear, per time step
+surface_keys <- list(stage = "stage", stage_season = c("stage", "season"),
+                     season_year = c("stage", "season", "season_year"))
+
+read_surfaces <- function(ds, ts) {
+  read_csv(table_path(ds, ts),
+           col_select = c(cell_id, gear_class, any_of(c("stage", "season", "season_year")),
+                          months, density, y_vst),
+           col_types = cols(cell_id = "c", gear_class = "c", stage = "c", season = "c",
+                            .default = "d")) |>
+    mutate(gear_class = factor(gear_class, levels = analysis_gears))
+}
+tabs <- map(set_names(datasets), \(ds) map(set_names(time_steps), \(ts) read_surfaces(ds, ts)))
+
+cells <- st_read(file.path(paths$analysis, "cells.gpkg"), quiet = TRUE)
+weights <- readRDS(file.path(paths$analysis, "grid_weights.rds"))
+stopifnot("weights and cells.gpkg are in a different cell order" =
+            identical(weights$cell_id, cells$cell_id))
+
+nb   <- weights$nb
+lw_W <- weights$lw_W
+# General G: binary weights without the cell itself (Getis & Ord 1992)
+lw_B <- nb2listw(nb, style = "B")
+
+# centroids in km (EPSG:32619), for the distance correlogram and the bootstrap blocks
+cell_xy <- st_drop_geometry(cells) |> select(cell_id, x_km, y_km)
+coords_km <- as.matrix(cell_xy[, c("x_km", "y_km")])
+
+# every table must hold each cell once per surface, so values align with the
+# weights by matching on cell_id
+for (ds in datasets) for (ts in time_steps) {
+  n_per_surface <- tabs[[ds]][[ts]] |> count(gear_class, across(all_of(surface_keys[[ts]])))
+  stopifnot("a surface does not hold every cell exactly once" =
+              all(n_per_surface$n == nrow(cells)))
+}
+
+input_files <- c(map(datasets, \(ds) table_path(ds, time_steps)) |> unlist(),
+                 file.path(paths$analysis, c("cells.gpkg", "grid_weights.rds")))
+```
+
+## Step 1: Moran's I and General G per surface
+
+For each surface: Moran's I by permutation (`r qparams$nsim` draws), with the
+permutation null band and a z against that null; General G with its analytic
+z. The sensitivity row (`scale = "raw"`) repeats both on raw density.
+
+```{r}
+# global statistics for every surface of one dataset × time step, on y_vst
+# (G on g_scale) and on raw density
+run_global <- function(t, ds, keys) {
+  t |>
+    select(cell_id, gear_class, all_of(keys), months, density, y_vst) |>
+    nest(sdat = c(cell_id, density, y_vst)) |>
+    mutate(stats = map(sdat, function(s) {
+      # put the values in the weights' cell order
+      s <- s[match(cells$cell_id, s$cell_id), ]
+      bind_rows(
+        global_stats(s$y_vst, lw_W, lw_B, y_G = g_scale(s$density, ds),
+                     nsim = qparams$nsim) |> mutate(scale = "y_vst"),
+        global_stats(s$density, lw_W, lw_B, nsim = qparams$nsim) |> mutate(scale = "raw"))
+    })) |>
+    select(-sdat) |>
+    unnest(stats) |>
+    mutate(dataset = ds, .before = 1)
+}
+
+global <- map_dfr(datasets, \(ds) bind_rows(
+  run_global(tabs[[ds]]$stage, ds, "stage") |> mutate(season = "all"),
+  run_global(tabs[[ds]]$stage_season, ds, c("stage", "season")))) |>
+  mutate(season = factor(season, c("all", "AprSep", "OctMar"))) |>
+  relocate(season, .after = stage) |>
+  arrange(dataset, gear_class, stage, season, scale)
+
+# no surface may be missing a statistic: every stage and stage × season surface has effort
+stopifnot("a stage or stage × season surface has no statistic" = !anyNA(global$I))
+```
+
+Moran's I (z against the permutation null) on `y_vst`, by stage, all months
+and by season:
+
+```{r}
+global |> filter(scale == "y_vst") |>
+  mutate(cell = sprintf("%.2f (%.0f)", I, I_z)) |>
+  select(dataset, gear_class, stage, season, cell) |>
+  pivot_wider(names_from = c(stage, season), values_from = cell, names_sep = " · ") |>
+  knitr::kable()
+```
+
+General G z, same layout:
+
+```{r}
+global |> filter(scale == "y_vst") |>
+  select(dataset, gear_class, stage, season, G_z) |>
+  pivot_wider(names_from = c(stage, season), values_from = G_z, names_sep = " · ") |>
+  kable_round(1)
+```
+
+**Reading I with G.** A high I with an unremarkable G means the clustering
+comes from low values sitting together (empty sea next to empty sea), not
+from effort concentrating. The table lists any surface where I is
+significant and G is not (one-sided, *p* < 0.05):
+
+```{r}
+global |> filter(scale == "y_vst", I_p < 0.05, G_p >= 0.05) |>
+  select(dataset, gear_class, stage, season, I, I_z, G_z, G_p) |> kable_round()
+```
+
+**Sensitivity: raw density against `y_vst`.** On raw density a few extreme
+cells carry the statistic (Phase 1, step 3), so I is expected to be lower and
+more erratic. What matters is whether the *ranking* of surfaces holds:
+
+```{r}
+scale_cmp <- global |>
+  select(dataset, gear_class, stage, season, scale, I, G_z) |>
+  pivot_wider(names_from = scale, values_from = c(I, G_z))
+scale_cmp |>
+  group_by(dataset) |>
+  summarise(surfaces = n(),
+            spearman_I = cor(I_y_vst, I_raw, method = "spearman"),
+            spearman_G_z = cor(G_z_y_vst, G_z_raw, method = "spearman"),
+            median_I_y_vst = median(I_y_vst), median_I_raw = median(I_raw)) |>
+  kable_round()
+
+p <- scale_cmp |>
+  ggplot(aes(I_y_vst, I_raw, colour = gear_class, shape = season)) +
+  geom_abline(linetype = 3) + geom_point() +
+  facet_wrap(~ dataset, labeller = labeller(dataset = ds_label)) +
+  labs(x = "Moran's I on y_vst", y = "Moran's I on raw density", colour = NULL, shape = NULL,
+       title = "Sensitivity: Moran's I on raw density against y_vst (stage and stage × season surfaces)")
+save_fig(p, "global_I_raw_vs_vst", height = 5)
+p
+```
+
+## Step 2: Moran's I per season-year
+
+The 22 season-years are the common descriptive step (plan, "Time steps"):
+Apr–Sep and Oct–Mar are separate series, because a summer surface and a
+winter surface differ for reasons that are not construction. The first
+(2016 Oct–Mar, 3 months) and last (2026 Apr–Sep, 5 months) season-years are
+partial and drawn hollow. A season-year where a gear has no effort at all has
+no statistic.
+
+```{r}
+global_sy <- map_dfr(datasets, \(ds) run_global(tabs[[ds]]$season_year, ds, surface_keys$season_year)) |>
+  # each season-year's midpoint, so the series sit on a calendar axis with the stage boundaries
+  mutate(mid = if_else(season == "AprSep",
+                       as.Date(sprintf("%d-07-01", season_year)),
+                       as.Date(sprintf("%d-01-01", season_year))),
+         partial = months < 6)
+
+global_sy |> filter(scale == "y_vst") |>
+  group_by(dataset, gear_class) |>
+  summarise(season_years = n(), with_statistic = sum(!is.na(I)),
+            min_I = min(I, na.rm = TRUE), max_I = max(I, na.rm = TRUE), .groups = "drop") |>
+  kable_round()
+```
+
+```{r}
+#| fig-height: 7
+p <- global_sy |> filter(scale == "y_vst", !is.na(I)) |>
+  ggplot(aes(mid, I, colour = season)) +
+  geom_vline(xintercept = stage_breaks, linetype = 2, colour = "grey50") +
+  # the permutation null band: where I would sit with no spatial structure
+  geom_ribbon(aes(ymin = I_null_lo, ymax = I_null_hi, fill = season), colour = NA, alpha = 0.15) +
+  geom_line() +
+  geom_point(aes(shape = partial), size = 1.6) +
+  scale_shape_manual(values = c(`FALSE` = 16, `TRUE` = 1), labels = c("full", "partial"), name = NULL) +
+  facet_grid(gear_class ~ dataset, labeller = labeller(dataset = ds_label)) +
+  labs(x = NULL, y = "Moran's I (y_vst)", colour = NULL, fill = NULL,
+       title = "Moran's I per season-year",
+       subtitle = "Dashed: stage boundaries. Band: permutation null (2.5–97.5%)")
+save_fig(p, "global_I_season_year", height = 7)
+p
+```
+
+## Step 3: correlograms and the practical range
+
+Moran's I of each stage surface (`y_vst`) at increasing separation, two ways:
+
+- **by contiguity order** 1–`r qparams$max_order`: order *k* links cells
+  exactly *k* queen steps apart (`nblag`);
+- **by distance**, in `r qparams$band_km`-km annuli of the cell centroids
+  out to `r qparams$band_max_km` km.
+
+The **practical range** is the distance at which the distance correlogram
+first falls below `r qparams$range_threshold`, interpolated between the
+annulus midpoints. A correlogram that never falls below it within
+`r qparams$band_max_km` km is right-censored: its range is at least that far.
+The correlograms use the analytic randomisation test, not permutation: their
+shape is what is needed, and the per-surface permutation test is in step 1.
+
+```{r}
+lag_lw  <- lag_weights(nb, qparams$max_order)
+breaks  <- seq(0, qparams$band_max_km, by = qparams$band_km)
+band_lw <- band_weights(coords_km, breaks)
+band_mid <- head(breaks, -1) + qparams$band_km / 2
+
+# neighbours per cell in each annulus: shows how much each lag rests on
+tibble(band = sprintf("%g–%g km", head(breaks, -1), breaks[-1]),
+       mean_neighbours = map_dbl(band_lw, \(lw) mean(card(lw$neighbours)))) |> kable_round(1)
+```
+
+```{r}
+# one row per dataset × gear × stage × lag
+cg <- map_dfr(datasets, function(ds) {
+  tabs[[ds]]$stage |>
+    select(cell_id, gear_class, stage, y_vst) |>
+    nest(sdat = c(cell_id, y_vst)) |>
+    mutate(cg = map(sdat, function(s) {
+      y <- s$y_vst[match(cells$cell_id, s$cell_id)]
+      bind_rows(
+        correlogram(y, lag_lw) |> mutate(type = "contiguity", lag = seq_along(lag_lw)),
+        correlogram(y, band_lw) |> mutate(type = "distance", lag = band_mid))
+    })) |>
+    select(-sdat) |> unnest(cg) |>
+    mutate(dataset = ds, .before = 1)
+})
+save_tab(cg, "global_correlogram")
+
+# practical range per surface: km from the distance correlogram, and the
+# equivalent contiguity order from the contiguity one
+ranges <- cg |>
+  group_by(dataset, gear_class, stage) |>
+  summarise(
+    dist = list(practical_range(lag[type == "distance"], I[type == "distance"], qparams$range_threshold)),
+    ord  = list(practical_range(lag[type == "contiguity"], I[type == "contiguity"], qparams$range_threshold)),
+    .groups = "drop") |>
+  unnest_wider(dist) |>
+  unnest_wider(ord, names_sep = "_") |>
+  rename(range_order = ord_range_km, order_censored = ord_censored)
+save_tab(ranges, "global_practical_range")
+ranges |> kable_round(1)
+```
+
+```{r}
+#| fig-height: 8
+for (tp in c("distance", "contiguity")) {
+  p <- cg |> filter(type == tp) |>
+    ggplot(aes(lag, I, colour = stage)) +
+    geom_hline(yintercept = 0, colour = "grey50") +
+    geom_hline(yintercept = qparams$range_threshold, linetype = 2, colour = "grey50") +
+    geom_line() + geom_point(size = 1) +
+    facet_grid(gear_class ~ dataset, labeller = labeller(dataset = ds_label)) +
+    labs(x = if (tp == "distance") "separation (km, annulus midpoint)" else "contiguity order",
+         y = "Moran's I (y_vst)", colour = NULL,
+         title = paste("Correlogram by", tp),
+         subtitle = sprintf("Dashed: I = %g, the practical-range threshold", qparams$range_threshold))
+  save_fig(p, paste0("global_correlogram_", tp), height = 8)
+  print(p)
+}
+```
+
+### *ρ*₀ per dataset × gear
+
+Phases 6–7 model each dataset × gear separately, across all stages, so *ρ*₀
+is the **median of the three stage ranges**. It is censored when at least
+two of the three are.
+
+```{r}
+rho0 <- ranges |>
+  group_by(dataset, gear_class) |>
+  summarise(rho0_km = median(range_km),
+            rho0_censored = sum(censored) >= 2,
+            range_min_km = min(range_km), range_max_km = max(range_km),
+            .groups = "drop")
+rho0 |> kable_round(1)
+```
+
+## Step 3b: an interval for I (cell-block bootstrap)
+
+The permutation band in step 1 says where I would fall with no structure; it
+is not an interval for I. Here the grid is cut into square blocks, blocks are
+resampled with replacement `r qparams$n_boot` times, and I is recomputed on
+each resample (`block_bootstrap_I()`). The block side is the dataset × gear
+*ρ*₀, so most of the dependence stays inside a block, clamped to
+`r qparams$block_min_km`–`r qparams$block_max_km` km so blocks are neither
+smaller than a few cells nor so large that too few remain to resample. The
+interval is shifted to centre on the full-grid I, because a resample keeps
+only within-block links.
+
+```{r}
+block_km <- rho0 |>
+  transmute(dataset, gear_class,
+            block_km = pmin(pmax(rho0_km, qparams$block_min_km), qparams$block_max_km))
+block_km |> kable_round(1)
+
+boot <- map_dfr(datasets, function(ds) {
+  bind_rows(tabs[[ds]]$stage |> mutate(season = "all"), tabs[[ds]]$stage_season) |>
+    select(cell_id, gear_class, stage, season, y_vst) |>
+    nest(sdat = c(cell_id, y_vst)) |>
+    left_join(filter(block_km, dataset == ds), by = "gear_class") |>
+    mutate(b = map2(sdat, block_km, function(s, bk) {
+      s <- s[match(cells$cell_id, s$cell_id), ]
+      block_bootstrap_I(s$y_vst, nb, cell_xy$x_km, cell_xy$y_km, block_km = bk,
+                        B = qparams$n_boot)
+    })) |>
+    select(-sdat, -block_km, -dataset) |> unnest(b) |>
+    mutate(dataset = ds, scale = "y_vst", .before = 1)
+}) |>
+  mutate(season = factor(season, levels(global$season)))
+
+global <- global |>
+  left_join(boot, by = c("dataset", "gear_class", "stage", "season", "scale"))
+save_tab(global, "global_stats")
+save_tab(global_sy, "global_season_year")
+
+global |> filter(scale == "y_vst") |>
+  select(dataset, gear_class, stage, season, I, I_lo, I_hi, I_boot_se, n_blocks) |> kable_round()
+```
+
+## Step 4: summary figures
+
+Moran's I with its bootstrap interval, and General G z, by gear × stage; the
+stage × season values sit next to the all-months value of each stage.
+Compare across gears and stages by the size of I, not by its p-value: every
+surface is significant (see step 1).
+
+```{r}
+#| fig-height: 6
+dodge <- position_dodge(width = 0.6)
+season_cols <- c(all = "black", AprSep = "#D55E00", OctMar = "#0072B2")
+
+p <- global |> filter(scale == "y_vst") |>
+  ggplot(aes(stage, I, colour = season)) +
+  geom_pointrange(aes(ymin = I_lo, ymax = I_hi), position = dodge, size = 0.3) +
+  scale_colour_manual(values = season_cols) +
+  facet_grid(dataset ~ gear_class, labeller = labeller(dataset = ds_label)) +
+  labs(x = NULL, y = "Moran's I (y_vst)", colour = NULL,
+       title = "Moran's I by gear × stage, all months and by season",
+       subtitle = "Bars: cell-block bootstrap 95% interval")
+save_fig(p, "global_summary_I", height = 6)
+p
+
+p <- global |> filter(scale == "y_vst") |>
+  ggplot(aes(stage, G_z, colour = season)) +
+  geom_hline(yintercept = qnorm(0.95), linetype = 2, colour = "grey50") +
+  geom_point(position = dodge, size = 2) +
+  scale_colour_manual(values = season_cols) +
+  facet_grid(dataset ~ gear_class, labeller = labeller(dataset = ds_label)) +
+  labs(x = NULL, y = "General G z", colour = NULL,
+       title = "General G z by gear × stage, all months and by season",
+       subtitle = "Dashed: one-sided 5% critical value")
+save_fig(p, "global_summary_G", height = 6)
+p
+```
+
+## Gate
+
+The plan's gate (Phase 2) turns *ρ*₀ into the Phase 3 weights decision:
+
+- range below about 3 km → queen weights are adequate;
+- range above about 5 km → add a distance-band weights run to Phase 3, at
+  that distance.
+
+The plan leaves 3–5 km open. Here it is treated as **borderline**: queen stays
+primary, and the distance-band run is added as well, because it costs little
+in Phase 3 and the stability criterion (Phase 3, criterion 4) already
+compares weights. A censored *ρ*₀ (I still above the threshold at
+`r qparams$band_max_km` km) is above 5 km by definition. Every distance-band
+run is capped at the block ceiling, `r qparams$block_max_km` km, censored or
+not, since a band near the AOI's width would make every cell a neighbour of
+most others (decision 2026-10-20).
+
+```{r}
+gate <- rho0 |>
+  mutate(phase3_weights = case_when(
+           rho0_censored | rho0_km > 5 ~ "add distance-band run",
+           rho0_km < 3                 ~ "queen adequate",
+           TRUE                        ~ "borderline: add distance-band run"),
+         # distance for the Phase 3 band weights, in whole km, capped at the
+         # block ceiling: a wider band (e.g. VP FIXED, whose median stage range
+         # is ~18 km but uncensored) gives each cell over a thousand neighbours,
+         # and Gi* then describes regional averages, not local clusters
+         phase3_band_km = case_when(
+           phase3_weights == "queen adequate" ~ NA_real_,
+           TRUE ~ pmin(ceiling(rho0_km), qparams$block_max_km)))
+gate |> kable_round(1)
+
+f_rho0 <- save_tab(gate, "global_rho0")
+# rho0 in the sidecar too, keyed "<dataset> <gear>", so Phase 7 can read the
+# prior from the provenance record of the file it came from (plan, Phase 2 gate)
+rho0_list <- set_names(as.list(gate$rho0_km), paste(gate$dataset, gate$gear_class))
+write_provenance(f_rho0, input_files, extra = list(
+  rho0_km = rho0_list,
+  rho0_censored = set_names(as.list(gate$rho0_censored), names(rho0_list)),
+  definition = sprintf("median over stages of the distance at which Moran's I of y_vst first falls below %g (%g-km annuli to %g km)",
+                       qparams$range_threshold, qparams$band_km, qparams$band_max_km)))
+```
+
+## Manifest and provenance
+
+```{r}
+manifest <- tibble(file = outputs, sha256 = map_chr(outputs, file_sha256))
+f_manifest <- file.path(paths$spatial, "manifest_07.csv")
+write_csv(manifest, f_manifest)
+write_provenance(f_manifest, input_files, extra = list(
+  outputs = nrow(manifest), nsim = qparams$nsim, n_boot = qparams$n_boot,
+  spdep = as.character(packageVersion("spdep")), rho0_km = rho0_list))
+nrow(manifest)
+```
+
+## Session info
+
+```{r}
+sessionInfo()
+```
+
+```{r}
+renv::diagnostics()
+```

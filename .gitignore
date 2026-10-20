@@ -111,3 +111,7 @@ r/scratchpad/
 # Exploratory outputs from r/06_explore.qmd (figures and tables). They are
 # derived GFW products (CC BY-SA), reproducible from the qmd, so not tracked.
 reports/explore/
+
+# Spatial-statistics outputs from r/07_spatial_global.qmd onward (tables and
+# figures). Derived GFW products, reproducible from the qmds, so not tracked.
+reports/spatial/

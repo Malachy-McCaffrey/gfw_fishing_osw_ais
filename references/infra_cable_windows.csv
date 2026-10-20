@@ -1,0 +1,7 @@
+project,asset_type,lay_start,lay_end,date_basis,source
+SFW,iac,2023-03-01,2023-09-30,project_window,"SFW PSO PAM report (2024): cable installation March to early September 2023"
+SFW,export_cable,2023-03-01,2023-09-30,project_window,"SFW PSO PAM report (2024): cable installation March to early September 2023"
+RWF,iac,2025-11-01,,open_window,"offshoreWIND.biz, 2025-11-19, Cable installation work underway at Orsted's two US offshore wind farm sites; no end date published, so open to the end of the analysis window"
+RWF,export_cable,,2026-08-31,complete_by,"CT Public, 2026-08-17: all export cables complete; lay dates not published"
+SRW,iac,,,unknown,"No public date found (Orsted mariners page, BOEM, Tethys searched 2026-10-19)"
+SRW,export_cable,,2025-12-31,complete_by,"offshoreWIND.biz, 2025-11-19: nearshore export cable installed; offshore section dates not published"

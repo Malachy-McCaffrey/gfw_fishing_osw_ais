@@ -10,6 +10,7 @@ source(file.path(root, "r/paths.R"))
 source(file.path(root, "r/gfw_helpers.R"))
 source(file.path(root, "r/vessel_helpers.R"))
 source(file.path(root, "r/analysis_helpers.R"))
+source(file.path(root, "r/infra_helpers.R"))
 
 # project paths made absolute, for the reference-file tests
 root_paths <- lapply(gfw_paths, \(p) file.path(root, p))

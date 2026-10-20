@@ -74,3 +74,28 @@ test_that("vessel_permit_groups.csv is valid", {
                                          "for-hire", "commercial", "recreational only",
                                          "unmapped codes only")))
 })
+
+test_that("sfw_foundation_dates.csv is valid", {
+  sfw <- read_chr(root_paths$sfw_foundations)
+  expect_true(all(c("pso_id", "structure", "first_date", "last_date", "source") %in% names(sfw)))
+  # 12 turbines and one substation (Z01), each listed once
+  expect_equal(sum(sfw$structure == "WTG"), 12)
+  expect_equal(sfw$pso_id[sfw$structure == "OSS"], "Z01")
+  expect_false(anyDuplicated(sfw$pso_id) > 0)
+  expect_true(all(iso_or_blank(sfw$first_date) & !is.na(sfw$first_date)))
+  expect_true(all(as.Date(sfw$first_date) <= as.Date(sfw$last_date)))
+  expect_false(anyNA(sfw$source))
+})
+
+test_that("infra_cable_windows.csv is valid", {
+  cw <- read_chr(root_paths$cable_windows)
+  expect_true(all(c("project", "asset_type", "lay_start", "lay_end", "date_basis", "source") %in% names(cw)))
+  expect_true(all(cw$project %in% c("SFW", "RWF", "SRW")))
+  expect_true(all(cw$asset_type %in% c("iac", "export_cable")))
+  expect_false(anyDuplicated(paste(cw$project, cw$asset_type)) > 0)
+  expect_true(all(cw$date_basis %in% c("project_window", "open_window", "complete_by", "unknown")))
+  expect_true(all(iso_or_blank(cw$lay_start) & iso_or_blank(cw$lay_end)))
+  both <- !is.na(cw$lay_start) & !is.na(cw$lay_end)
+  expect_true(all(as.Date(cw$lay_start[both]) <= as.Date(cw$lay_end[both])))
+  expect_false(anyNA(cw$source))
+})

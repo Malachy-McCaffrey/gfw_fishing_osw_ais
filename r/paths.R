@@ -37,7 +37,19 @@ gfw_paths <- list(
   analysis      = "data/processed/analysis",
   bathy         = "data/sf/bathy/crm_vol1_2023_aoi.tif", # NCEI CRM Vol. 1 AOI subset, fetched by 05
   explore       = "reports/explore",                     # 06 figures/ and tables/ (gitignored)
-  basemap       = "references/basemap/aoi_ocean_utm19n.tif" # map background, EPSG:32619
+  basemap       = "references/basemap/aoi_ocean_utm19n.tif", # map background, EPSG:32619
+
+  # Ørsted foundations and cables (05, step 8). The foundation CSVs and GeoJSON
+  # layouts are as supplied (read only); the two references/ tables are
+  # transcribed from published sources, each row citing its source.
+  layouts       = c(SFW = "data/sf/owf/sfw/turbines/South Fork Wind_25-07-25_25-07-25.geojson",
+                    RWF = "data/sf/owf/rwf/turbines/Revolution Wind_26-01-19_26-01-19.geojson",
+                    SRW = "data/sf/owf/srw/turbines/Sunrise Wind (Preliminary)_26-01-05_26-01-05.geojson"),
+  rwf_foundations = "data/sf/owf/rwf/turbines/REV_Foundation Installation_Dates_Locations_2024-2025.csv",
+  srw_foundations = "data/sf/owf/srw/turbines/SRW_Foundation Installation_Dates_Locations_2025.csv",
+  sfw_foundations = "references/sfw_foundation_dates.csv",  # PSO report Table 3
+  cable_windows = "references/infra_cable_windows.csv",     # project × cable type works windows
+  infra         = "data/sf/infra/infrastructure.gpkg"       # written by 05: foundations + cables
 )
 
 # gfw_paths with any non-empty Quarto parameter of the same name applied

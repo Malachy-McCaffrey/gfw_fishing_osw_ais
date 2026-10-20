@@ -43,6 +43,7 @@ records, and the vessel crosswalk.
 | 7 | Is AIS uptake spatially uniform before construction? (key BAG assumption) |
 | 8 | Maps |
 | 9 | Temporal completeness: which model time steps the data support |
+| 10 | Construction exposure and event time: how many cells each project's foundations and cable works reach, and effort by band around each project's first foundation |
 
 Figures and tables go to `reports/explore/` (gitignored: derived GFW
 products), listed with their hashes in `reports/explore/manifest.csv` and its
@@ -110,7 +111,7 @@ time_steps <- c("stage", "stage_season", "season_year", "month")
 read_analysis <- function(ds, ts) {
   read_csv(table_path(ds, ts), col_types = cols(
     cell_id = "c", gear_class = "c", stage = "c", season = "c", aoi_class = "c",
-    dist_band = "c", nearest_project = "c", domain = "l", .default = "?")) |>
+    dist_band = "c", nearest_project = "c", domain = "l", phase = "c", .default = "?")) |>
     mutate(gear_class = factor(gear_class, levels = analysis_gears),
            dist_band  = factor(dist_band, levels = dist_band_levels))
 }
@@ -147,11 +148,27 @@ rec_check <- records |> count(dataset, wt = hours, name = "records") |>
 rec_check
 stopifnot("records and Phase 0 tables disagree" = isTRUE(all.equal(rec_check$records, rec_check$tables)))
 
+# Ørsted infrastructure (05, step 8): foundations and cable routes, and the
+# per cell × month exposure covariates
+foundations <- st_read(paths$infra, layer = "foundations", quiet = TRUE)
+cables <- st_read(paths$infra, layer = "cables", quiet = TRUE)
+infra_month <- read_csv(file.path(paths$analysis, "infra_cell_month.csv"),
+                        col_types = cols(cell_id = "c", phase = "c", .default = "?"))
+
+# each project's foundation window (first to last dated foundation), for the
+# time-series shading and the event-time origin
+found_windows <- st_drop_geometry(foundations) |>
+  filter(status == "installed") |>
+  group_by(project) |>
+  summarise(first_found = min(foundation_installed), last_found = max(foundation_end),
+            .groups = "drop")
+found_windows
+
 input_files <- c(map(datasets, \(ds) table_path(ds, time_steps)) |> unlist(),
-                 file.path(paths$analysis, c("cells.gpkg", "grid_weights.rds")),
+                 file.path(paths$analysis, c("cells.gpkg", "grid_weights.rds", "infra_cell_month.csv")),
                  records_path(datasets), paths$crosswalk,
                  file.path(paths$interim_gfw, "gfw_vp_id_cell_month.csv"),
-                 paths$leases, paths$basemap)
+                 paths$leases, paths$basemap, paths$infra)
 ```
 
 ## Step 1: composition
@@ -477,9 +494,9 @@ p
 
 ## Step 4: time series
 
-Monthly Primary hours by gear and distance band, with the stage boundaries,
-and an STL decomposition (periodic season) of each AOI series on the log
-scale.
+Monthly Primary hours by gear and distance band, with the stage boundaries
+and each project's foundation window shaded (05, step 8), and an STL
+decomposition (periodic season) of each AOI series on the log scale.
 
 ```{r}
 #| fig-height: 8
@@ -488,18 +505,26 @@ monthly <- map_dfr(tabs, \(d) d$month |>
   summarise(hours = sum(hours), .groups = "drop"), .id = "dataset")
 save_tab(monthly, "monthly_by_band")
 
+# shaded foundation windows, labelled with the project, drawn under the lines
+found_shade <- list(
+  geom_rect(data = found_windows, aes(xmin = first_found, xmax = last_found, ymin = -Inf, ymax = Inf),
+            inherit.aes = FALSE, fill = "grey60", alpha = 0.25),
+  geom_text(data = found_windows, aes(x = first_found, y = Inf, label = project),
+            inherit.aes = FALSE, vjust = 1.2, hjust = 0, size = 2.3, colour = "grey30"))
+
 p <- monthly |>
-  ggplot(aes(year_month, hours, colour = dist_band)) + geom_line(linewidth = 0.4) +
+  ggplot(aes(year_month, hours, colour = dist_band)) + found_shade + geom_line(linewidth = 0.4) +
   geom_vline(xintercept = stage_breaks, linetype = 2) +
   facet_grid(gear_class ~ dataset, scales = "free_y", labeller = labeller(dataset = ds_label)) +
   labs(x = NULL, y = "hours per month", colour = "band (km)",
-       title = "Monthly Primary hours by distance band; dashed = stage boundaries")
+       title = "Monthly Primary hours by distance band",
+       subtitle = "Dashed: stage boundaries. Shaded: each project's foundation installation window")
 save_fig(p, "timeseries_by_band", height = 8)
 p
 
 p <- monthly |> mutate(where = if_else(dist_band == "inside", "inside leases", "outside")) |>
   group_by(dataset, gear_class, year_month, where) |> summarise(hours = sum(hours), .groups = "drop") |>
-  ggplot(aes(year_month, hours, colour = where)) + geom_line(linewidth = 0.4) +
+  ggplot(aes(year_month, hours, colour = where)) + found_shade + geom_line(linewidth = 0.4) +
   geom_vline(xintercept = stage_breaks, linetype = 2) +
   facet_grid(gear_class ~ dataset, scales = "free_y", labeller = labeller(dataset = ds_label)) +
   labs(x = NULL, y = "hours per month", colour = NULL)
@@ -749,8 +774,12 @@ grid" cannot be confused:
 - **thin dark grey line:** the grid's outer boundary. Outside it is basemap
   only (cells GFW returned no records for, excluded in 02).
 
-The lease outlines are drawn last, as a black line over a white halo, so they
-stay visible over both the darkest and lightest colours of every scale.
+The lease outlines are drawn as a black line over a white halo, so they stay
+visible over both the darkest and lightest colours of every scale. The
+foundation positions go on top (05, step 8): filled for those installed by
+August 2026, hollow for SRW's 40 planned positions. They are drawn on every
+stage panel, including Stages 1–2 before any were built, as a fixed
+reference for where the structures stand.
 
 ```{r}
 basemap <- rast(paths$basemap) |> aggregate(fact = 3)
@@ -776,15 +805,23 @@ map_under <- function() {
        geom_sf(data = cells_geo, fill = zero_fill, colour = NA, inherit.aes = FALSE))
 }
 
-# layers over the data: grid boundary, then the leases as a black line on a
-# wider white halo, which stays visible on dark and light fills alike
+# layers over the data: grid boundary, the leases as a black line on a wider
+# white halo (visible on dark and light fills alike), then the foundations
+# as small white-ringed dots, filled if installed and hollow if planned
+found_inst <- filter(foundations, status == "installed")
+found_plan <- filter(foundations, status == "planned")
 map_over <- function(zero_note = "grid cells with 0 h") {
   list(geom_sf(data = grid_outline, colour = "grey30", linewidth = 0.25, inherit.aes = FALSE),
        geom_sf(data = leases, fill = NA, colour = "white", linewidth = 1.4, inherit.aes = FALSE),
        geom_sf(data = leases, fill = NA, colour = "black", linewidth = 0.6, inherit.aes = FALSE),
+       geom_sf(data = found_plan, shape = 21, fill = NA, colour = "black", size = 0.6,
+               stroke = 0.3, inherit.aes = FALSE),
+       geom_sf(data = found_inst, shape = 21, fill = "black", colour = "white", size = 0.8,
+               stroke = 0.2, inherit.aes = FALSE),
        coord_sf(xlim = bb[c("xmin", "xmax")], ylim = bb[c("ymin", "ymax")], expand = FALSE, datum = NA),
        labs(caption = paste0("Grey: ", zero_note,
-                             ". Black on white: lease areas. Dark grey line: grid boundary.")),
+                             ". Black on white: lease areas. Dark grey line: grid boundary.",
+                             " Dots: foundations installed by Aug 2026 (hollow: SRW planned).")),
        theme_void(base_size = 9))
 }
 
@@ -874,6 +911,91 @@ p <- completeness |>
   labs(x = "active months of 128 (domain cells)", y = "cells", title = "Temporal completeness")
 save_fig(p, "completeness_active_months", height = 5)
 p
+```
+
+## Step 10: construction exposure and event time
+
+Descriptive groundwork for the timing BAG (plan, Phase 5 steps 1–2), from the
+Ørsted foundations and cables (05, step 8):
+
+1. **Infrastructure map:** every foundation coloured by when it went in
+   (hollow: SRW planned), and the cable routes by type.
+2. **Exposure over time:** cells per month with an installed foundation
+   within 2 km, with a foundation going in within 5 km
+   (`active_construction`), and with cable works within 2 km, by the cell's
+   nearest project. This shows how much of the grid each covariate actually
+   reaches, and so how much contrast the timing model has to work with.
+3. **Event time:** mean monthly density per cell by distance band, against
+   months since the nearest project's first foundation (−24 to +24),
+   per dataset × gear × project. Season is not removed, so read the band
+   contrasts within each panel, not the absolute level. SFW's 12 turbines
+   carry the project's turbine window, so its month 0 is exact only to within
+   about five weeks; SRW has 14 months after its first foundation.
+
+```{r}
+#| fig-height: 7
+inst_class <- foundations |>
+  mutate(installed = if_else(status == "planned", "planned (SRW)",
+                             as.character(quarter(foundation_end, type = "year.quarter"))) |>
+           str_replace("\\.", " Q"))
+p <- ggplot() + bm_layer +
+  geom_sf(data = grid_outline, colour = "grey30", linewidth = 0.25) +
+  geom_sf(data = leases, fill = NA, colour = "black", linewidth = 0.5) +
+  geom_sf(data = cables, aes(linetype = asset_type), colour = "grey20", linewidth = 0.3) +
+  geom_sf(data = filter(inst_class, status == "planned"), shape = 21, fill = NA, size = 1.2) +
+  geom_sf(data = filter(inst_class, status == "installed"), aes(fill = installed),
+          shape = 21, colour = "black", size = 1.6, stroke = 0.2) +
+  scale_fill_viridis_d(name = "foundation\ninstalled") +
+  scale_linetype_manual(values = c(export_cable = "solid", iac = "dotted"),
+                        labels = c(export_cable = "export cable", iac = "inter-array cable"), name = NULL) +
+  coord_sf(xlim = bb[c("xmin", "xmax")], ylim = bb[c("ymin", "ymax")], expand = FALSE, datum = NA) +
+  labs(title = "Ørsted foundations and cable routes",
+       caption = "Hollow: SRW positions with no installation record (planned). SFW turbines: project window.") +
+  theme_void(base_size = 9)
+save_fig(p, "map_infrastructure", width = 10, height = 6)
+p
+```
+
+```{r}
+#| fig-height: 6
+exposure <- infra_month |>
+  left_join(st_drop_geometry(cells) |> select(cell_id, nearest_project), by = "cell_id") |>
+  group_by(year_month, nearest_project) |>
+  summarise(`installed foundation within 2 km` = sum(n_found_2km > 0),
+            `foundation going in within 5 km` = sum(active_construction),
+            `cable works within 2 km` = sum(cable_works), .groups = "drop") |>
+  pivot_longer(-c(year_month, nearest_project), names_to = "exposure", values_to = "cells")
+save_tab(exposure, "exposure_cells_by_month")
+
+p <- exposure |> filter(year_month >= as.Date("2022-10-01")) |>
+  ggplot(aes(year_month, cells, colour = nearest_project)) + geom_step(linewidth = 0.5) +
+  facet_wrap(~ exposure, ncol = 1, scales = "free_y") +
+  labs(x = NULL, y = "cells", colour = "nearest project",
+       title = "Cells reached by each infrastructure covariate, by nearest project")
+save_fig(p, "exposure_cells_by_month", height = 6)
+p
+```
+
+```{r}
+#| fig-height: 10
+event <- map_dfr(tabs, \(d) d$month |>
+  filter(between(months_since_first_found, -24, 24)) |>
+  group_by(gear_class, nearest_project, dist_band, months_since_first_found) |>
+  summarise(density = mean(density), cells = n_distinct(cell_id), .groups = "drop"),
+  .id = "dataset")
+save_tab(event, "event_time_by_band")
+
+for (ds in datasets) {
+  p <- event |> filter(dataset == ds) |>
+    ggplot(aes(months_since_first_found, density, colour = dist_band)) +
+    geom_vline(xintercept = 0, linetype = 2) + geom_line(linewidth = 0.4) +
+    facet_grid(gear_class ~ nearest_project, scales = "free_y") +
+    labs(x = "months since the nearest project's first foundation",
+         y = "mean density (h km⁻² month⁻¹)", colour = "band (km)",
+         title = paste(ds_label[[ds]], "density by distance band in event time"))
+  save_fig(p, sprintf("event_time_%s", ds), height = 10)
+  print(p)
+}
 ```
 
 ## Gate

@@ -110,6 +110,7 @@ registry attribute, so this is a lookup, not an inference. Corrections from
 | `data/sf/aoi/Orsted_AOI.shp` | EPSG:4326 | Study boundary — dissolved union of the SFW + RWF + SRW 10 km buffers |
 | `data/sf/owf/sfw/SFW.shp`, `rwf/RWF.shp`, `srw/SRW.shp` | EPSG:3857 | Ørsted lease areas. **Reproject before use.** A cell is `in_lease` (03) when its centroid falls inside one. |
 | `data/sf/owf/vw1/{VW1,VW1_Buffer}.shp`, `srw/SRW_Buffer.shp`, `SNE_OWFs.shp` | EPSG:3857 | **Not used.** Vineyard Wind is not an Ørsted project and lies outside the AOI; `*_Buffer` are AOI-construction intermediates. |
+| `data/sf/owf/{sfw,rwf,srw}/turbines/` | GeoJSON EPSG:4326 | Ørsted, as supplied (read only). Mariner layout GeoJSONs (positions, cable routes, lease; SRW preliminary), RWF and SRW foundation-installation CSVs (one row per installation day; encoding detected, Latin-1 or UTF-8), and the SFW PSO monitoring report (installation dates in Table 3). Built into `data/sf/infra/infrastructure.gpkg` by 05 |
 | `data/sf/fishnet/gfw_grid_utm19n.gpkg` | EPSG:32619 | The analysis grid, written by `02_build_grid.qmd`. One polygon per 0.01° cell present in the raw VP pull (3,376 cells), built from the lower-left corner and reprojected, so each cell is a parallelogram of about 840 m E–W by 1,110 m N–S. |
 
 Grid fields:
@@ -384,11 +385,36 @@ sidecar (input SHA-256s, git commit, `renv.lock` hash, R version, seed,
 | `y_vst` | Variance-stabilised density for the spatial statistics: √`density` (VP); `log(density + c)` (AFE), `c` = half the smallest positive density in the surface (dataset × gear × stratum). Blank on an all-zero surface |
 | `domain` | Cell active for this dataset and gear in Stage 1 |
 | `area_km2`, `aoi_class`, `x_km`, `y_km` | From the grid; centroid in EPSG:32619, km |
-| `dist_lease_km`, `dist_band`, `nearest_project`, `depth_m`, `depth_sd_m`, `slope_deg`, `bpi_broad` | Static cell covariates, copied from `cells.gpkg` (defined there) so each table stands alone |
+| `dist_lease_km`, `dist_band`, `nearest_project`, `depth_m`, `depth_sd_m`, `slope_deg`, `bpi_broad`, `d_found_final_km`, `d_cable_km` | Static cell covariates, copied from `cells.gpkg` (defined there) so each table stands alone |
+| `d_found_km`, `n_found_2km`, `active_construction`, `cable_works`, `phase`, `months_since_first_found` | Monthly table only: infrastructure exposure, as in `infra_cell_month.csv` (below) |
+| `d_found_km`, `n_found_2km`, `active_construction_share`, `cable_works_share`, `phase`, `months_since_first_found` | Season-year table only: as in `infra_cell_season_year.csv` (below) |
 
 Rounded when written (decimals): `dist_lease_km`, `x_km`, `y_km`, `depth_m`,
-`depth_sd_m` 3; `area_km2` 6; `slope_deg`, `bpi_broad` 4; `y_vst` 6. Every
+`depth_sd_m`, `d_found_km`, `d_found_final_km`, `d_cable_km` 3; `area_km2` 6;
+`slope_deg`, `bpi_broad` 4; `y_vst` 6; season-year means and shares 3. Every
 derived field is computed before rounding; `cells.gpkg` keeps full precision.
+
+### `data/processed/analysis/infra_cell_*.csv`
+
+Infrastructure exposure per cell, without gear, written by 05 step 8 from
+`data/sf/infra/infrastructure.gpkg`. Distances are from the cell centroid.
+
+| File | One row per |
+|---|---|
+| `infra_cell_month.csv` | cell × month |
+| `infra_cell_season_year.csv` | cell × season-year |
+| `infra_cell_month_srw_planned.csv` | cell × month; sensitivity with SRW's 40 unrecorded positions installed in May 2026 |
+
+| Field | Description |
+|---|---|
+| `d_found_km` | km to the nearest foundation (WTG or substation) whose last installation day is on or before the month's end. Blank before the first (June 2023). Season-year: mean over the months that have one |
+| `n_found_2km` | Installed foundations within 2 km (season-year: mean) |
+| `active_construction` | A foundation's installation days overlap the month within 5 km. Season-year: `active_construction_share`, the share of months |
+| `cable_works` | A cable route whose works window overlaps the month lies within 2 km. Season-year: `cable_works_share` |
+| `phase` | Nearest project's `pre`, `construction` or `post_construction` (after its last works day, only if every foundation is installed and every cable window closed). Season-year: the phase in most months, ties to the later |
+| `months_since_first_found` | Months from the nearest project's first foundation (negative before). Season-year: mean |
+
+The radii are 05 parameters (`r_count_km`, `r_active_km`, `r_cable_km`).
 
 ### `data/processed/analysis/cells.gpkg`
 
@@ -405,6 +431,51 @@ One row per grid cell, EPSG:32619, with the static covariates.
 | `depth_m`, `depth_sd_m` | Area-weighted mean and SD of depth (m, positive down), NCEI CRM Vol. 1 at 30 m |
 | `slope_deg` | Area-weighted mean slope at 30 m |
 | `bpi_broad` | Broad bathymetric position index: elevation minus its 1–3 km annulus mean, on a 150 m aggregate. Positive = ridges and banks |
+| `d_found_final_km` | km to the nearest eventual foundation of any project, SRW's planned positions included |
+| `d_cable_km` | km to the nearest cable route (inter-array or export) of any project, as drawn in the layout files |
+
+### `data/sf/infra/infrastructure.gpkg`
+
+Ørsted foundations and cable routes, EPSG:32619, written by 05 step 8 from
+the files in `data/sf/owf/*/turbines/` and the two `references/` tables
+below. Layer `foundations`, one row per foundation (166):
+
+| Field | Description |
+|---|---|
+| `asset_id` | `<project>-<internal id>`, or `<project>-<grid position>` where there is no internal id (SFW turbines, SRW planned) |
+| `project` | `SFW`, `RWF`, `SRW` |
+| `asset_type` | `wtg` (turbine) or `oss` (substation: SFW Z01, RWF Z01a / Z01b / Z02, SRW OCS-DC) |
+| `grid_pos` | Ørsted 1 × 1 nm grid position, e.g. `AM06`. RWF Z01a and Z01b share AL11 |
+| `internal_id` | Ørsted id (RWF `B##`/`Z##`, SRW `C##`/`D25`/`OCS-DC`, SFW `Z01`) |
+| `status` | `installed` or `planned` (SRW positions with no installation record) |
+| `date_basis` | `exact` (foundation CSV or PSO report), `project_window` (SFW turbines: the 12 share 2023-07-02 to 2023-08-07, as their PSO ids do not map to positions), `planned` |
+| `foundation_installed`, `foundation_end` | First and last installation day across the foundation's rows in the CSV |
+| `n_date_rows` | CSV rows (one per installation day) for this foundation (SRW OCS-DC: its 8 pin piles) |
+| `wtg_installed`, `first_power` | Not supplied; blank |
+| `depth_m` | Water depth from the CSV (m) |
+| `layout_offset_m` | Distance from the CSV (as-installed) position to the layout point; 0 where the layout point is used |
+| `source`, `version_date` | Source file(s); the layout file's date |
+
+Layer `cables`, one row per route (168):
+
+| Field | Description |
+|---|---|
+| `asset_id` | `<project>-<asset_type>-<route_name>` |
+| `asset_type` | `iac` (inter-array) or `export_cable` |
+| `route_name` | Name in the layout file, e.g. `AM06 to AM05`, `EC1` |
+| `lay_start`, `lay_end` | Project × cable-type works window from `references/infra_cable_windows.csv`; an open window ends at the end of the analysis window |
+| `date_basis` | `project_window`, `open_window`, `complete_by` (end only), `unknown` |
+| `burial_complete` | Not supplied; blank |
+| `source`, `version_date` | Source of the window; the layout file's date |
+
+### `references/sfw_foundation_dates.csv`, `references/infra_cable_windows.csv`
+
+Hand-transcribed and tracked; schema checked in
+`r/tests/testthat/test-references.R`. `sfw_foundation_dates.csv`: the SFW
+PSO report's monopile installation dates (`pso_id`, `structure`,
+`first_date`, `last_date`, `source`). `infra_cable_windows.csv`: one row per
+project × cable type (`lay_start`, `lay_end`, `date_basis`, `source`), each
+citing the public source of its dates.
 
 ### `data/processed/analysis/grid_queen.gal`, `grid_weights.rds`
 

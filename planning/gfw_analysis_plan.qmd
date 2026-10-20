@@ -92,6 +92,13 @@ Six findings from profiling the current outputs (2026-10-06 pull, measured
 
 | Topic | Decision | Consequence for this plan |
 |---|---|---|
+| *2026-10-19, Ørsted infrastructure* | | |
+| Where it is built | **In `05` (Phase 0, step 8)**, not a separate `09`. Layers in `data/sf/infra/infrastructure.gpkg` (writing to `data/sf/infra/` approved) | The exposure covariates sit in the month and season-year analysis tables from the start, so Phases 1 and 5 read one table (@sec-infra) |
+| Multi-day installations | The foundation CSVs (which replaced the Excel files) give **one row per installation day**: first day = `foundation_installed`, last = `foundation_end`; repeated rows must agree on position, structure and depth | Multi-day installs (e.g. RWF Z01a, 17 days) count as under construction for every day they span |
+| SFW turbine ids | The PSO report's A01–A15 have **no published crosswalk** to the layout positions (the COP gives none). The substation Z01 is on **AP06**, where the export cable lands; the 12 turbines share the **turbine window, 2023-07-02 to 2023-08-07** | SFW exposure is exact to the month only at the window's edges. Sensitivity: SFW turbines installed from the window's start (@sec-sensitivity) |
+| SRW's 40 unrecorded positions | **Planned, not installed.** Sensitivity: installed from May 2026 | The primary covariates count 45 SRW foundations at the end of the window. A second table (`infra_cell_month_srw_planned.csv`) gives the upper-bound exposure |
+| Cable timing | **Static routes + coarse project windows.** Cable-lay dates per route are not published | `d_cable_km` is static. `cable_works(t)` is on only where a window is known (SFW 2023-03 to 2023-09; RWF inter-array from 2025-11) |
+| Substations | **Counted with turbines** in the foundation covariates | A jacket or monopile is the same seabed obstruction to gear; the covariates are renamed `d_found_km`, `n_found_2km` |
 | *2026-10-19, BAG power* | | |
 | Simulation power analysis | **Added to Phase 5** (step 3): minimum detectable BAG effect per gear × dataset, from the Phase 6 base model with injected effects | Every BAG estimate is reported against its MDE. A gear with MDE > 50% is reported descriptively (@sec-bag-power). |
 | Pre-trend equivalence test | **Added to Phase 5** (step 4): TOST on band-specific pre-construction trends at cell level, margin tied to the MDE | Parallel trends must be shown, not just not rejected (@sec-bag-pretrend) |
@@ -134,7 +141,8 @@ into `data/interim/` or `data/raw/`.
 | `data/processed/gfw/gfw_{vp,afe}_id_classified.csv` | 437,897 / 66,097 rows; 93,295 / 20,241 Primary | Record level: the vessel-concentration, leave-one-vessel-out and per-vessel analyses |
 | `data/sf/fishnet/gfw_grid_utm19n.gpkg` | 3,376 cells | Grid, EPSG:32619, with `area_km2` and `aoi_class` |
 | `data/sf/owf/sfw/SFW.shp`, `rwf/RWF.shp`, `srw/SRW.shp` | 3 leases | Lease polygons in EPSG:3857; **reproject** before use |
-| *Ørsted turbine and cable data* (to come) | — | Time-varying infrastructure covariates (@sec-infra) |
+| `data/sf/owf/{sfw,rwf,srw}/turbines/` (Ørsted, received 2026-10) | 166 foundation positions, 168 cable routes | Foundation installation CSVs (RWF, SRW; one row per installation day), mariner layout GeoJSONs (all three) and the SFW PSO report. Built into `data/sf/infra/infrastructure.gpkg` and the exposure covariates by `05` (@sec-infra) |
+| `references/sfw_foundation_dates.csv`, `references/infra_cable_windows.csv` | 13 / 6 | SFW monopile dates transcribed from the PSO report; cable works windows from published sources, each row citing its source |
 | NCEI Coastal Relief Model Vol. 1, `crm_vol1_2023.nc` (AOI subset) | 1 arc-second raster | Depth and terrain covariates (@sec-env) |
 | *Ørsted benthic habitat classification* (to come) | — | Habitat covariates (@sec-env) |
 
@@ -492,6 +500,8 @@ appropriate family and an exposure offset.
 | `domain_{gear}` | Cell active for that gear in Stage 1 (VP or AFE > 0) | Model domain (@sec-caveats, item 13) |
 | `depth_m`, `slope_deg`, `depth_sd_m`, `bpi_broad` | Per-cell bathymetry and terrain summaries | Static environmental covariates (@sec-env) |
 | `habitat_*` | Per-cell habitat class shares, once the Ørsted data arrive | Static environmental covariates (@sec-env) |
+| `d_found_final_km`, `d_cable_km` | Distance to the nearest eventual foundation (planned included) and to the nearest cable route | Static; an alternative BAG gradient measured to the structures rather than the lease line (@sec-infra) |
+| `d_found_km`, `n_found_2km`, `active_construction`, `cable_works`, `phase`, `months_since_first_found` | Time-varying foundation and cable exposure (month tables; season-year means and shares) | Timing BAG (@sec-infra) |
 
 ### Environmental covariates: bathymetry and benthic habitat {#sec-env}
 
@@ -655,8 +665,11 @@ for spatial statistics.
   Laplace approximation in INLA, Phase 6 condition 5). Most of its off-season
   months are near-certain zeros.
 - **What season-year costs:** exposure onset is blurred by up to five months.
-  The time-varying covariates for season-year models are computed as the
-  month-weighted mean over the season (@sec-infra).
+  The time-varying covariates for season-year models are the mean over the
+  season's months (distances, counts) and the share of months (construction
+  and cable-works flags), written by `05` to `infra_cell_season_year.csv`
+  and the season-year tables (@sec-infra). The blur matters most for SRW,
+  whose foundations went in over Jun–Oct 2025, across both seasons.
 - **Pole-and-line AFE** is limited by vessels, not by the time step: 162
   domain cells, and one vessel holds 40% of its hours. No step rescues it.
 
@@ -717,11 +730,11 @@ place:
 
 | Step | File | Phase | Writes (gitignored) |
 |---|---|---|---|
-| 05 | `05_prepare_analysis.qmd` | 0: analysis tables, covariates, weights | `data/processed/analysis/` |
+| 05 | `05_prepare_analysis.qmd` | 0: analysis tables, covariates, weights; Ørsted turbines and cables → time-varying covariates | `data/processed/analysis/`, `data/sf/infra/` |
 | 06 | `06_explore.qmd` | 1: EDA | figures, tables |
 | 07 | `07_spatial_global.qmd` | 2: Global Moran's I, General G, correlograms | `spatial/global_*.csv` |
 | 08 | `08_spatial_local.qmd` | 3: Local Moran's I vs Gi\*, change classes | `spatial/local_*.gpkg` |
-| 09 | `09_infrastructure.qmd` | 4: Ørsted turbines and cables → time-varying covariates | `data/sf/infra/`, covariate tables |
+| 09 | — | *Folded into `05` step 8 (decision 2026-10-19); the number is left unused so the later files keep theirs* | — |
 | 10 | `10_bag.qmd` | 5: BAG models | `models/bag_*.rds` |
 | 11 | `11_models_frequentist.qmd` | 6: Tweedie and hurdle GLMMs (`glmmTMB`, `sdmTMB`) | `models/freq_*.rds` |
 | 12 | `12_models_inla.qmd` | 7: INLA-SPDE | `models/inla_*.rds` |
@@ -729,7 +742,8 @@ place:
 | 14 | `14_synthesis.qmd` | 9: results and figures for the thesis | `reports/figures/` |
 
 Shared code: `r/analysis_helpers.R` (derived fields, weights, transforms,
-domain flags, the model cache) and `r/spatial_helpers.R` (wrappers for
+domain flags, the model cache), `r/infra_helpers.R` (foundation CSVs,
+date and coordinate parsing, exposure covariates) and `r/spatial_helpers.R` (wrappers for
 global and local statistics, change classes). Each gets a test file in
 `r/tests/testthat/`.
 
@@ -798,9 +812,22 @@ same commit as the code that first uses it.
      interoperable with GeoDa and PySAL.
    - Build two weights objects: `lw_W` (row-standardised, for Moran's I and
      LISA) and `lw_B_self` (binary, self-inclusive, for General G and Gi\*).
-8. Write `data/processed/analysis/{vp,afe}_{stage,stage_season,season_year,month}_gear.csv` and
-   `cells.gpkg` (geometry plus static covariates, including bathymetry), each with a JSON
-   provenance sidecar (@sec-fair).
+8. Ørsted infrastructure (@sec-infra):
+   - read the RWF and SRW foundation CSVs, the SFW PSO dates and
+     the three layout GeoJSONs; collapse each foundation's installation-day
+     rows to its first and last day; match CSV positions to layout points (RWF by grid name,
+     SRW by distance) and check each within 100 m;
+   - write `data/sf/infra/infrastructure.gpkg` (layers `foundations`,
+     `cables`) with a sidecar;
+   - derive the per cell × month exposure covariates and their season-year
+     aggregates, plus the SRW-planned sensitivity table; assert that
+     exposure only grows over time.
+9. Write `data/processed/analysis/{vp,afe}_{stage,stage_season,season_year,month}_gear.csv`,
+   `cells.gpkg` (geometry plus static covariates, including bathymetry and the
+   distances to the eventual foundations and cable routes) and the
+   `infra_cell_*.csv` covariate tables, each with a JSON provenance sidecar
+   (@sec-fair). The month and season-year tables carry the time-varying
+   infrastructure covariates.
 
 ```{r}
 #| label: phase0-weights
@@ -873,7 +900,9 @@ write.nb.gal(nb_poly, file.path(paths$analysis, "grid_queen.gal"))
 **Gate.** All assertions pass. Hours in each analysis table equal hours in the
 interim table, per gear × time step, and the stage × season and season-year
 tables sum to the monthly totals. No stage × season stratum or season-year
-spans two stages.
+spans two stages. The infrastructure layers match their sources (13 / 68 / 85
+foundation positions; 13 / 68 / 45 installed by August 2026), every
+foundation lies in its own lease, and no cell's exposure ever decreases.
 
 ## Phase 1: Exploratory analysis (`06_explore.qmd`) {#sec-phase1}
 
@@ -941,8 +970,10 @@ assumptions the later phases rest on.
    every time step, so the gears stay comparable within a time step, and the
    rejected transform becomes the Phase 3 robustness run.
 4. **Time series.** Monthly Primary VP and AFE by gear, split inside/outside
-   the leases and by `dist_band`, with the stage boundaries marked. Include
-   STL or cyclic-smooth decompositions of trend and season.
+   the leases and by `dist_band`, with the stage boundaries marked and each
+   project's foundation window shaded (SFW Jun–Aug 2023, RWF May 2024 – Aug
+   2025, SRW Jun–Oct 2025). Include STL or cyclic-smooth decompositions of
+   trend and season.
 5. **Vessel concentration and the pre-window screen.**
    - Lorenz curves and top-*k* shares per gear × stage.
    - Profile any vessel holding more than 10% of a gear × stage total.
@@ -958,15 +989,28 @@ assumptions the later phases rest on.
    trend in active MMSIs per `dist_band` per gear, and in the all-vessel raw VP
    per band (`gfw_vp_id_cell_month.csv`). Do the bands rise in parallel
    *before* construction (Stages 1–2)? Test with a `band × year` interaction
-   restricted to Stages 1–2.
+   restricted to Stages 1–2. (Stages 1–2 end before SFW's first works in
+   March 2023, so they are pre-construction for every project. The Phase 5
+   equivalence test extends each cell's pre-period to its nearest project's
+   first works, @sec-bag-pretrend.)
 8. **Maps.** Density maps per gear × stage and per gear × stage × season, on
-   one shared colour scale per gear and dataset, with the lease outlines and
-   the n_MMSI per cell. Reuse the committed basemap rasters in
+   one shared colour scale per gear and dataset, with the lease outlines, the
+   foundation positions (installed filled, SRW planned hollow) and the n_MMSI
+   per cell. Reuse the committed basemap rasters in
    `references/basemap/`. Maps of differences between stages use
    season-standardised rates, or compare within one season (caveat 8).
 9. **Temporal completeness** per cell × gear (active months / 128, and active
    season-years / 22). This confirms the model time steps in
    @sec-time-steps: monthly for VP and mobile AFE, season-year for fixed AFE.
+10. **Construction exposure and event time** (descriptive groundwork for
+    Phase 5 steps 1–2, needs the `05` step 8 covariates):
+    - a map of every foundation coloured by installation quarter, with the
+      cable routes by type;
+    - cells per month reached by each covariate (`n_found_2km > 0`,
+      `active_construction`, `cable_works`), by nearest project, which shows
+      how much exposure contrast the timing model has;
+    - mean density by band against `months_since_first_found` (−24 to +24),
+      per dataset × gear × project.
 
 **Gate.**
 
@@ -1226,43 +1270,77 @@ the decision:
      densities with `KernSmooth::bkde2D` (already in `renv.lock`). Label it
      as smoothing, not estimation.
 
-## Phase 5: Infrastructure data and BAG models (`09_infrastructure.qmd`, `10_bag.qmd`) {#sec-bag}
+## Phase 5: Infrastructure data and BAG models (`05` step 8, `10_bag.qmd`) {#sec-bag}
 
-### Ørsted turbine and cable data: specification {#sec-infra}
+### Ørsted turbine and cable data {#sec-infra}
 
-Ask Ørsted for, or build, a table with the schema below. Store it under
-`data/sf/infra/` (GeoPackage, EPSG:32619). Document it in
-`references/data_dictionary.md`, and note in `references/` where it came
-from and what terms it was shared under.
+**Received October 2026** and built in `05` (Phase 0, step 8) into
+`data/sf/infra/infrastructure.gpkg` (EPSG:32619), layers `foundations` and
+`cables`. The source files under `data/sf/owf/*/turbines/` are read only.
 
-| Field | Type | Notes |
-|---|---|---|
-| `asset_id` | string | Unique, stable |
-| `project` | SFW / RWF / SRW | |
-| `asset_type` | `wtg` (turbine), `oss` (substation), `iac` (inter-array cable), `export_cable` | |
-| `geometry` | POINT (WTG, OSS) / LINESTRING (cables) | |
-| `foundation_installed`, `wtg_installed`, `first_power` | date | Turbines and substations |
-| `lay_start`, `lay_end`, `burial_complete` | date | Cables |
-| `source`, `version_date` | string / date | Provenance |
+| Project | Positions | Installation dates | Cable routes | Cable works window |
+|---|---|---|---|---|
+| SFW | Layout GeoJSON (2025-07-25), 13 points | PSO report Table 3: OSS Z01 2023-06-19/20; 12 monopiles 2023-07-02 to 2023-08-07 | 12 inter-array + 1 export | 2023-03 to 2023-09 (PSO report) |
+| RWF | Layout GeoJSON (2026-01-19), 67 points | Ørsted foundation CSV: 65 WTG 2024-05-10 to 2025-05-26 (none Sep 2024 – Apr 2025), OSS Z01a and Z02 (Oct 2024), Z01b (Aug 2025) | 65 inter-array + 3 export | Inter-array from 2025-11 (open); export complete by 2026-08 (no start) |
+| SRW | Preliminary layout GeoJSON (2026-01-05), 85 points | Ørsted foundation CSV: 44 WTG 2025-06-04 to 2025-10-27; OCS-DC jacket (8 pin piles) 2025-09-06 to 09-08 | 84 inter-array + 3 export | Nearshore export by 2025-12 (no start); inter-array unknown |
 
-Derived covariates per cell × month (in `09`):
+**Layer schema.** `foundations`: `asset_id`, `project`, `asset_type`
+(`wtg`, `oss`), `grid_pos` (e.g. AM06), `internal_id` (Ørsted's B##/C##/Z##),
+`status` (`installed`, `planned`), `date_basis` (`exact`, `project_window`,
+`planned`), `foundation_installed`, `foundation_end`, `n_date_rows`,
+`wtg_installed` and `first_power` (not supplied, kept blank), `depth_m`,
+`layout_offset_m`, `source`, `version_date`. `cables`: `asset_id`,
+`project`, `asset_type` (`iac`, `export_cable`), `route_name`, `lay_start`,
+`lay_end`, `burial_complete` (blank), `date_basis`, `source`,
+`version_date`. Fields are in `references/data_dictionary.md`.
 
-- `d_wtg_km(t)`: distance to the nearest turbine *foundation installed by
-  month t* (`Inf` before the first one);
-- `n_wtg_2km(t)`: installed turbines within 2 km;
-- `d_cable_km(t)`: distance to the nearest laid cable;
-- `active_construction(t)`: the cell is within *r* km of an asset installed
-  that month;
-- `months_since_first_wtg`: per project, for event-time plots.
+**Gaps and how they are handled** (decisions 2026-10-19):
+
+- **SFW turbine ids.** The PSO report numbers monopiles A01–A15, the layout
+  uses grid positions, and neither the COP nor the layout file links them.
+  The substation is placed on AP06 (the export cable's landing point) with
+  its exact dates; the 12 turbines share the turbine window. At monthly
+  resolution this misplaces SFW turbines by at most one month (July vs
+  August 2023).
+- **SRW's 40 unrecorded positions** are `planned` and never count as
+  installed. Work stopped in December 2025 and resumed in February 2026 with
+  turbine erection on installed foundations; no public record shows further
+  piling by August 2026, and the January–April piling moratorium applies. The
+  sensitivity table installs them in May 2026.
+- **Cable lay dates** are project-level windows, not per route. Only SFW's
+  is closed; RWF's inter-array window is open to the end of the analysis
+  window; the rest have no start date and never switch `cable_works` on.
+- **Turbine erection and first power** were not supplied. The covariates
+  therefore describe **foundations** (the seabed obstruction and the piling
+  noise), and the phases end at the last known works, not at first power.
+
+**Derived covariates per cell × month** (`05`; the month tables and
+`infra_cell_month.csv`):
+
+| Covariate | Definition |
+|---|---|
+| `d_found_km(t)` | Distance to the nearest foundation (WTG or substation) whose last installation day is on or before the end of month *t*; NA before the first (June 2023) |
+| `n_found_2km(t)` | Installed foundations within 2 km |
+| `active_construction(t)` | A foundation's installation days overlap month *t* within 5 km |
+| `cable_works(t)` | A cable route whose works window overlaps month *t* lies within 2 km |
+| `phase(t)` | Nearest project's `pre` (before its first foundation or cable-lay day), `construction`, or `post_construction` (after its last works day, only if every foundation is installed and every cable window closed) |
+| `months_since_first_found(t)` | Months from the nearest project's first foundation, for event-time plots |
+| `d_found_final_km`, `d_cable_km` | Static: nearest eventual foundation (planned included) and nearest cable route |
+
+The radii (2, 5, 2 km) and the SRW sensitivity month are `05` parameters.
+With these data, SFW reaches `post_construction` in October 2023, while RWF
+and SRW stay in `construction` to the end of the window (RWF's inter-array
+works are open; SRW has unrecorded positions).
 
 For the season-year timing model (fixed AFE), each covariate is aggregated
-over the months of the season: means for distances and counts, and the share
-of months for `active_construction`. These are written alongside the monthly
-values (@sec-time-steps).
+over the months of the season: means for distances and counts, the share of
+months for `active_construction` and `cable_works`, and the phase held in
+most months (`infra_cell_season_year.csv` and the season-year tables).
 
-Tests check that every date falls inside the analysis window or is blank, that
-the geometry is valid and in the AOI, and that distances never increase as
-more assets are installed.
+`05`'s gate checks the counts against the sources, that each CSV
+position lies within 100 m of its layout point, that every date falls inside
+the analysis window, that every foundation lies inside its own lease, and
+that no cell's exposure ever decreases.
 
 ### BAG design
 
@@ -1299,15 +1377,33 @@ season-year, with *s*<sub>cc</sub>(moy) replaced by the season term
 *α*<sub>k</sub>). Stages are replaced by time-varying exposure:
 
 $$
-\log \mu_{c,t} = \beta_0 + s_{\text{cc}}(\text{moy}_t) + s(\text{year}_t) + h\big(d^{\text{wtg}}_{c}(t)\big) + \text{phase}_{p(c),t} \times g(d_c) + \mathbf{z}_c^\top \boldsymbol{\delta} + \omega_c + \varepsilon_{c,t} + \log(\text{area}_c)
+\log \mu_{c,t} = \beta_0 + s_{\text{cc}}(\text{moy}_t) + s(\text{year}_t) + h\big(d^{\text{found}}_{c}(t)\big) + \text{phase}_{p(c),t} \times g(d_c) + \lambda \, \text{active}_{c,t} + \mathbf{z}_c^\top \boldsymbol{\delta} + \omega_c + \varepsilon_{c,t} + \log(\text{area}_c)
 $$
 
-- phase<sub>p,t</sub> ∈ {pre, construction, operation} comes from each cell's
-  nearest project's Ørsted dates. The three projects run on different
-  schedules, which gives a **staggered design**: cells near a project that has
-  not started act as concurrent controls for cells near one that has.
-- *h*(·) is the turbine-distance response, fitted only after the first
-  installation.
+- phase<sub>p,t</sub> ∈ {pre, construction, post_construction} is `phase` from
+  `05`: each cell's nearest project's Ørsted dates. The three projects run on
+  different schedules, which gives a **staggered design**: cells near a
+  project that has not started act as concurrent controls for cells near one
+  that has. With the received dates the stagger is SFW (works from March
+  2023), RWF (foundations from May 2024) and SRW (foundations from June 2025),
+  so every project has at least 15 months of data from its start, and RWF and SRW
+  cells serve as not-yet-treated controls for 14 and 27 months after SFW
+  starts. Only SFW reaches `post_construction` inside the window, so the
+  operation-phase contrast rests on SFW's 76 nearest cells (count at render
+  time); RWF and SRW inform the construction phase.
+- **SFW has no gradient of its own.** RWF and SRW surround it, so every
+  SFW-nearest cell is `inside` (62) or `0–2` km (14); none falls in the
+  2–15 km bands or the 8–15 km reference. A project-specific SFW gradient
+  cannot be estimated. SFW enters the timing model only through the shared
+  *g*(*d*<sub>c</sub>) and *h*(·), with RWF/SRW cells as its comparison, and
+  the `phase × g(d)` term should be read as an RWF + SRW gradient. (Found in
+  Phase 1 step 10, 2026-10-19.)
+- *h*(·) is the foundation-distance response on `d_found_km(t)`, fitted only
+  after the first installation (June 2023).
+- *λ* is the short-term construction effect on `active_construction(t)`
+  (piling noise and vessel exclusion within 5 km), kept apart from the
+  lasting presence of the structures in *h*(·). `cable_works(t)` enters the
+  same way as a sensitivity, since its windows are coarse.
 - *ε*<sub>c,t</sub> is temporal correlation within a cell (AR1 on month or
   year; Phase 6).
 - For the season-year model the offset becomes
@@ -1319,8 +1415,10 @@ $$
 1. Descriptive BAG: the rate by `dist_band` × stage, season-standardised, and
    by `dist_band` × stage × season, with bootstrap CIs over cells. Plot the
    gradient profile per stage per gear, one panel per season.
-2. Event-time plot: monthly rate by band around each project's
-   `first foundation` date (−24 to +24 months).
+2. Event-time plot: monthly rate by band around each project's first
+   foundation (`months_since_first_found`, −24 to +24 months). The
+   descriptive version runs in Phase 1 step 10; here add bootstrap CIs over
+   cells and season-adjust with the cyclic month term.
 3. **Simulation power analysis** (@sec-bag-power): the minimum detectable
    BAG effect per modelled gear × dataset. Run it before looking at the real
    *γ*. It sets the equivalence margin for step 4.
@@ -1329,8 +1427,9 @@ $$
    tied to step 3, instead of relying on a non-significant interaction.
 5. Fit the stage × season BAG for each modelled gear × dataset with the family
    from @sec-treatments (NB2 for VP; Tweedie and delta-Gamma for AFE).
-6. Fit the timing BAG with the Ørsted covariates (needs `09`): monthly for VP
-   and mobile AFE, season-year for fixed AFE.
+6. Fit the timing BAG with the Ørsted covariates (in the `05` month and
+   season-year tables): monthly for VP and mobile AFE, season-year for fixed
+   AFE.
 7. Formal gear contrast: a joint MOBILE + FIXED model with a `gear × period ×
    band` interaction, to test whether mobile and fixed gear respond
    differently.
@@ -1411,9 +1510,12 @@ $$
 (log scale). Using cells, not band totals, gives thousands of observations
 instead of 35.
 
-**Pre-construction period.** Stages 1–2 (to March 2023) until the Ørsted
-dates arrive. After `09`, each cell's pre-period ends at its nearest
-project's first seabed preparation, which adds RWF's and SRW's later starts.
+**Pre-construction period.** Each cell's months with `phase == "pre"`: up
+to its nearest project's first foundation or cable-lay day (SFW March 2023,
+RWF May 2024, SRW June 2025). Against Stages 1–2 alone this adds 13 months
+for RWF-nearest cells and 26 for SRW-nearest cells. Seabed preparation dates
+were not supplied, so a pre-period may include some preparatory work just
+before the first foundation; dropping the last 3 pre months is a sensitivity.
 
 **Margin.** A pre-trend matters if, extrapolated over the gap between the
 before and after periods, it would bias the BAG effect by as much as half
@@ -1717,8 +1819,9 @@ m_vp <- sdmTMB(vp_hours ~ 0 + phase * dist_band + s(moy, bs = "cc", k = 8) + s(y
 #    years rather than alternating off and peak seasons, which would not
 #    behave like an AR1 process.
 # `afe_sy_fixed` and `mesh_f` are built like `d` and `mesh`, from
-# afe_season_year_gear.csv and the fixed-gear domain. `phase` and the
-# turbine covariates are season means of the monthly values (09).
+# afe_season_year_gear.csv and the fixed-gear domain. `phase` (the modal
+# phase) and the foundation covariates (season means and shares of the
+# monthly values) are already columns of that table (05, step 8).
 m_fx <- sdmTMB(afe_hours ~ 0 + phase * dist_band + season + s(season_year, k = 5) +
                  s(depth_m, k = 4) + slope_z + bpi_z,
                data = afe_sy_fixed, mesh = mesh_f, family = delta_gamma(),
@@ -1846,6 +1949,12 @@ grid: variant × outcome, with the estimate and CI.
 | Fleet-size covariate (active MMSIs per gear per month) | AIS uptake |
 | `band × year` pre-trend term, every gear (Phase 1 gate, 2026-10-19) | Parallel pre-construction trends across distance bands, which the Phase 1 tests could not establish with power |
 | Distance bands vs a continuous distance smooth | BAG specification |
+| SRW's 40 unrecorded positions installed from May 2026 (`infra_cell_month_srw_planned.csv`) | Upper bound on SRW exposure (decision 2026-10-19) |
+| SFW turbines installed at the start of their window (2023-07-02) instead of its end | The missing SFW id crosswalk |
+| Exposure radii: `active_construction` at 2 / 5 / 10 km; `n_found` at 1 / 2 / 4 km | Scale of the construction and structure effects |
+| `cable_works(t)` in the timing model | Coarse cable windows |
+| Drop the last 3 months of each cell's pre-period | Unrecorded seabed preparation before the first foundation |
+| `d_found_final_km` in place of `dist_lease_km` for the stage × season BAG gradient | Distance to the structures vs to the lease line |
 
 ## Phase 9: Synthesis (`14_synthesis.qmd`) {#sec-synthesis}
 
@@ -1914,7 +2023,7 @@ write_provenance <- function(out_path, inputs, extra = list()) {
 | 3–4 | 2: Global statistics, correlograms (*ρ*₀) | 0 |
 | 4–6 | 3: Local Moran's I vs Gi\* (needs the base model from 6 for the power simulation; run criteria 1–4 first and 5 later) | 2 |
 | — | 4: AKDE, done here (dropped) | — |
-| 5–7 | 5a: Ørsted infrastructure ingest and covariates | Ørsted data |
+| done | 5a: Ørsted infrastructure ingest and covariates (`05` step 8, 2026-10-19) | Ørsted data |
 | When received | Ørsted habitat ingest: coverage check, per-cell shares, refit the affected models | Ørsted habitat |
 | 6–9 | 5b: Stage × season BAG (no Ørsted data needed), then the timing BAG models | 1, 5a |
 | 8–12 | 6: `sdmTMB` / `glmmTMB` Tweedie vs hurdle, CV, diagnostics | 2, 5 |
@@ -1922,14 +2031,26 @@ write_provenance <- function(out_path, inputs, extra = list()) {
 | 16–18 | 8: Sensitivity grid | 3, 6 |
 | 18–20 | 9: Synthesis, FAIR release, DOI | all |
 
-The stage × season BAG and all of Phases 1–3 can go ahead before the Ørsted
-data arrive. Only the timing BAG models (5b, second half: monthly, and
-season-year for fixed AFE) and the turbine-distance covariates wait for them.
+The Ørsted foundation and cable data arrived in October 2026, so nothing in
+the timeline now waits on them. Later Ørsted deliveries (turbine erection,
+first power, per-route cable dates, the remaining SRW foundations) update
+`05` step 8 and the timing models only.
 
 ## Open items
 
-- [ ] Ørsted turbine and cable data in the schema of @sec-infra, and its
-      sharing terms.
+- [x] Ørsted turbine and cable data: received and built in `05` step 8,
+      2026-10-19 (@sec-infra).
+- [ ] Sharing terms for the Ørsted foundation data, noted in
+      `references/`.
+- [ ] SFW crosswalk from the PSO ids (A01–A15) to layout positions, from
+      Ørsted or the SFW as-built report. Replaces the shared turbine window.
+- [ ] SRW: installation dates for the 40 remaining foundations, or
+      confirmation that none were installed by August 2026.
+- [ ] Per-route cable lay and burial dates (RWF inter-array end date, RWF
+      and SRW export cable starts, SRW inter-array).
+- [ ] Turbine erection and first-power dates (`wtg_installed`,
+      `first_power`), to split construction from operation for RWF and SRW.
+- [ ] Seabed preparation dates per project, to end each pre-period precisely.
 - [x] Approve the new dependencies phase by phase (@sec-workflow), approved
       2026-10-18.
 - [x] Pin `mgcv` in `renv.lock` (1.9-3, with `Matrix` 1.7-4 and `nlme`

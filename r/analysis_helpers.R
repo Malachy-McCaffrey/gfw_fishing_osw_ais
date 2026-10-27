@@ -157,6 +157,63 @@ lattice_nb <- function(ix, iy, ids) {
   structure(nb, class = "nb", region.id = ids, type = "queen", sym = TRUE)
 }
 
+# Model cache ---------------------------------------------------------------
+# Plan, "Runtime and caching": the BAG and Phase 6–7 models can take minutes
+# to hours, and R renders are not frozen. fit_cached() saves each fit under a
+# hash of everything it depends on, and refits only when that hash changes.
+# This stands in for `targets` (not a dependency).
+#
+# `key_inputs`: a named list of everything the fit depends on: the data it
+#   is fitted to, the formula, the family, the mesh settings, any options.
+#   Formulas are deparsed before hashing, so two identical formulas created
+#   in different environments give the same key.
+# `fit_fun`: a function of no arguments that fits and returns the model.
+# `packages`: whose installed versions join the key, so upgrading a model
+#   package (e.g. via renv) refits rather than reusing an old fit.
+# `label`: a readable name, stored in the sidecar only (not part of the key).
+#
+# Writes <dir>/<hash>.rds and a <hash>.rds.json sidecar (label, the key's
+# element names, package versions, R version, fit time in seconds).
+# Returns the fit. Not a pure function: it reads and writes `dir`.
+fit_cache_packages <- c("sdmTMB", "glmmTMB", "TMB", "fmesher", "mgcv")
+
+# The cache file a fit_cached() call would use, without fitting. Lets a
+# parallel launcher skip specifications that are already cached. Returns the
+# path, with the full hash and package versions as attributes.
+fit_cache_path <- function(key_inputs, dir = gfw_paths$models, packages = fit_cache_packages) {
+  stopifnot("key_inputs must be a named list" = is.list(key_inputs) && !is.null(names(key_inputs)))
+  # formula environments differ between calls; their text does not
+  key <- lapply(key_inputs, \(x) if (inherits(x, "formula")) paste(deparse(x), collapse = " ") else x)
+  versions <- vapply(packages, function(p) {
+    if (requireNamespace(p, quietly = TRUE)) as.character(utils::packageVersion(p)) else NA_character_
+  }, character(1))
+  hash <- digest::digest(list(key = key, versions = versions, r = R.version.string), algo = "sha256")
+  structure(file.path(dir, paste0(substr(hash, 1, 20), ".rds")), hash = hash, versions = versions)
+}
+
+fit_cached <- function(key_inputs, fit_fun, dir = gfw_paths$models, label = NULL,
+                       packages = fit_cache_packages) {
+  stopifnot("fit_fun must be a function" = is.function(fit_fun))
+  f <- fit_cache_path(key_inputs, dir, packages)
+  hash <- attr(f, "hash")
+  versions <- attr(f, "versions")
+  f <- as.character(f)
+  if (file.exists(f)) return(readRDS(f))
+
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  t0 <- Sys.time()
+  fit <- fit_fun()
+  elapsed <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
+  saveRDS(fit, f)
+  jsonlite::write_json(list(
+    label = if (is.null(label)) NA_character_ else label,
+    hash = hash, written = format(Sys.time(), tz = "UTC", usetz = TRUE),
+    fit_seconds = round(elapsed, 1), key_elements = names(key_inputs),
+    packages = as.list(versions), r_version = R.version.string),
+    paste0(f, ".json"), auto_unbox = TRUE, pretty = TRUE, digits = NA)
+  fit
+}
+
 # Provenance sidecar --------------------------------------------------------
 # Writes <out_path>.json next to an output (plan, "FAIR implementation"): the
 # SHA-256 of every input, the git commit, the renv.lock hash, R version and

@@ -115,3 +115,8 @@ reports/explore/
 # Spatial-statistics outputs from r/07_spatial_global.qmd onward (tables and
 # figures). Derived GFW products, reproducible from the qmds, so not tracked.
 reports/spatial/
+
+# BAG model outputs from r/10_bag.qmd (tables, figures, power-refit cache).
+# Derived GFW products, reproducible from the qmd, so not tracked. The fitted
+# models themselves are cached under data/processed/models/.
+reports/bag/

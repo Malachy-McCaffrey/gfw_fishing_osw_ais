@@ -36,8 +36,10 @@ gfw_paths <- list(
   # analysis tables, covariates and weights (05_prepare_analysis.qmd onward)
   analysis      = "data/processed/analysis",
   bathy         = "data/sf/bathy/crm_vol1_2023_aoi.tif", # NCEI CRM Vol. 1 AOI subset, fetched by 05
+  models        = "data/processed/models",                # fitted models, cached by fit_cached() (10 onward)
   explore       = "reports/explore",                     # 06 figures/ and tables/ (gitignored)
   spatial       = "reports/spatial",                     # 07 onward: figures/ and tables/ (gitignored)
+  bag           = "reports/bag",                         # 10: figures/, tables/, refit cache/ (gitignored)
   basemap       = "references/basemap/aoi_ocean_utm19n.tif", # map background, EPSG:32619
 
   # Ørsted foundations and cables (05, step 8). The foundation CSVs and GeoJSON

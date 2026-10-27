@@ -25,3 +25,4 @@ project:
     - 06_explore.qmd
     - 07_spatial_global.qmd
     - 08_spatial_local.qmd
+    - 10_bag.qmd

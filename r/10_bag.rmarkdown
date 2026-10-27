@@ -1,0 +1,886 @@
+---
+title: "MM GFW Before–After–Gradient Models (Phase 5)"
+author: "Malachy McCaffrey"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    fig-width: 10
+    fig-height: 6
+params:
+  # Path overrides (see r/paths.R); leave blank to use the project paths.
+  analysis: ""
+  processed_gfw: ""
+  models: ""
+  bag: ""
+  # Interim model specification (decision 2026-10-20, option a): Phase 6's
+  # recommended form, refitted when Phase 6 settles the base model.
+  mesh_cutoff_km: 2        # SPDE mesh: no two vertices closer than this
+  # Power analysis (plan, "Simulation power analysis")
+  power_nsim: 100
+  power_effects: !expr c(0, 0.2, 0.3, 0.5)   # !expr: knitr reads a mixed YAML list as a parameter spec
+  workers: 14              # parallel refit processes (callr; no sockets needed)
+  fit_workers: 8           # parallel main-model fits (fewer: the monthly models are large)
+  # Leave-one-vessel-out: top vessels per dataset × gear, plus named hulls
+  lovo_top_k: 10
+  lovo_extra: !expr c("368175660")   # BUCKEYE: kept at the pre-Phase 5 screen, checked here
+  n_boot: 999
+  event_window: 24
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# run from the repo root (the folder holding renv.lock) so the relative paths
+# in r/paths.R resolve whether the qmd is rendered or run chunk by chunk
+root <- getwd()
+while (!file.exists(file.path(root, "renv.lock")) && dirname(root) != root) root <- dirname(root)
+knitr::opts_knit$set(root.dir = root)
+```
+
+## Objective
+
+Phase 5 of `planning/gfw_analysis_plan.qmd`: estimate how the **gradient of
+fishing effort with distance from the leases** changed between the stages
+(Before–After–Gradient, Methratta 2020, 2021), and how effort responded to
+each foundation's installation, its 500 m safety zone and active
+construction.
+
+| Step | Content |
+|---|---|
+| 1 | Descriptive BAG: rate by distance band × stage (season-standardised) and × stage × season, with cell-bootstrap intervals |
+| 2 | Event time: monthly rate by band around each project's first foundation, season-adjusted, with bootstrap intervals |
+| 3 | Simulation power: the minimum detectable BAG effect (MDE) per dataset × gear |
+| 4 | Pre-trend equivalence test (TOST), with margins from step 3 |
+| 5 | Stage × season BAG per dataset × gear |
+| 6 | Timing BAG with the Ørsted covariates (foundation distance, construction, safety zones) |
+| 7 | Formal mobile vs fixed contrast |
+| 8 | Rate ratios with MDEs, predicted densities, diagnostics, leave-one-vessel-out |
+
+**Interim models (decision 2026-10-20).** Phase 6 chooses the final
+spatial structure and families. Until then every model here uses the form
+Phase 6 recommends: `sdmTMB` with an SPDE spatial field (mesh cutoff
+`r params$mesh_cutoff_km` km), NB2 for vessel presence (VP) and Tweedie for
+apparent fishing effort (AFE, with delta-Gamma alongside for the stage ×
+season models). Everything is cached with `fit_cached()`, so Phase 6 can
+refit with its choices by changing the specification only.
+
+**Domains** (caveat 13). Each dataset × gear is modelled on the cells it
+used in Stage 1 (`domain`), so cells that were never fished before
+construction (structural zeros) do not dilute the contrast, and the domain
+cannot depend on the outcome. Pole-and-line AFE is not modelled (plan,
+"Scope per gear"); it appears in the descriptive steps only.
+
+**Reading the results.** Every BAG effect is a rate ratio: the change in a
+band's rate since Stage 1, **relative to the 8–15 km ring**. It measures
+**redistribution** within the study area, not a net change in regional
+effort (plan, "Limits of the within-AOI BAG"). Each estimate is reported
+next to its gear's MDE, so a null reads "no effect larger than the MDE".
+
+## Libraries and shared code
+
+```{r}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(sf)
+  library(sdmTMB)
+  library(DHARMa)
+})
+
+source("r/paths.R")
+source("r/gfw_helpers.R")
+source("r/analysis_helpers.R")
+source("r/bag_helpers.R")
+
+qparams <- if (isTRUE(getOption("knitr.in.progress"))) params else {
+  hdr <- knitr::knit_params(readLines(file.path(root, "r/10_bag.qmd"), warn = FALSE))
+  lapply(hdr, function(p) p$value)
+}
+paths <- gfw_paths_with(qparams)
+
+set.seed(42)
+
+fig_dir <- file.path(paths$bag, "figures")
+tab_dir <- file.path(paths$bag, "tables")
+job_dir <- file.path(paths$bag, "cache")
+for (d in c(fig_dir, tab_dir, job_dir)) dir.create(d, recursive = TRUE, showWarnings = FALSE)
+
+outputs <- character()
+save_tab <- function(df, name) {
+  f <- file.path(tab_dir, paste0(name, ".csv"))
+  write_csv(df, f, na = "")
+  outputs <<- c(outputs, f)
+  invisible(f)
+}
+save_fig <- function(p, name, width = 10, height = 6) {
+  f <- file.path(fig_dir, paste0(name, ".png"))
+  ggsave(f, p, width = width, height = height, dpi = 150, bg = "white")
+  outputs <<- c(outputs, f)
+  invisible(p)
+}
+kable_round <- function(df, digits = 3) {
+  df |> mutate(across(where(is.double), \(x) round(x, digits))) |> knitr::kable()
+}
+theme_set(theme_minimal(base_size = 11))
+
+datasets <- c("vp", "afe")
+ds_label <- c(vp = "VP", afe = "AFE")
+gear_cols <- c(MOBILE = "#2a78d6", FIXED = "#eb6834", POLE_AND_LINE = "#1baf7a")
+stage_cols <- c("Stage 1" = "#86b6ef", "Stage 2" = "#2a78d6", "Stage 3" = "#0d366b")
+```
+
+## Read the Phase 0 tables
+
+```{r}
+tpath <- \(ds, ts) file.path(paths$analysis, sprintf("%s_%s_gear.csv", ds, ts))
+read_tab <- \(ds, ts) read_csv(tpath(ds, ts), show_col_types = FALSE,
+                               col_types = cols(cell_id = "c", gear_class = "c", stage = "c",
+                                                season = "c", phase = "c", dist_band = "c",
+                                                nearest_project = "c", domain = "l", .default = "?"))
+ss    <- map(set_names(datasets), \(ds) read_tab(ds, "stage_season"))
+st    <- map(set_names(datasets), \(ds) read_tab(ds, "stage"))
+month <- map(set_names(datasets), \(ds) read_tab(ds, "month"))
+sy_afe <- read_tab("afe", "season_year")
+
+input_files <- c(map(datasets, \(ds) tpath(ds, c("stage", "stage_season", "month"))) |> unlist(),
+                 tpath("afe", "season_year"))
+
+# the modelled dataset × gear combinations (plan, "Scope per gear")
+ss_models <- tribble(~dataset, ~gear,
+                     "vp", "MOBILE", "vp", "FIXED", "vp", "POLE_AND_LINE",
+                     "afe", "MOBILE", "afe", "FIXED") |>
+  mutate(id = paste(dataset, gear, sep = "_"),
+         family = if_else(dataset == "vp", "nbinom2", "tweedie"))
+ss_models |> knitr::kable()
+```
+
+## Step 1: descriptive BAG
+
+The rate by distance band in each stage (season-standardised, caveat 8: the
+mean of the 12 month-of-year rates, so stages with different calendar mixes
+compare fairly), and in each stage × season. Intervals resample cells within
+each band (`r qparams$n_boot` draws). All cells, all three gears.
+
+```{r}
+#| fig-height: 8
+band_order <- c("inside", "0-2", "2-4", "4-8", "8-15")
+desc_stage <- map_dfr(set_names(datasets), function(ds) {
+  st[[ds]] |>
+    transmute(gear_class, stage, dist_band, hours = rate_std, expo = area_km2) |>
+    group_by(gear_class, stage) |>
+    group_modify(\(g, k) boot_band_rate(g, B = qparams$n_boot)) |> ungroup()
+}, .id = "dataset") |>
+  mutate(dist_band = factor(dist_band, band_order))
+desc_ss <- map_dfr(set_names(datasets), function(ds) {
+  ss[[ds]] |>
+    transmute(gear_class, stage, season, dist_band, hours, expo = months * area_km2) |>
+    group_by(gear_class, stage, season) |>
+    group_modify(\(g, k) boot_band_rate(g, B = qparams$n_boot)) |> ungroup()
+}, .id = "dataset") |>
+  mutate(dist_band = factor(dist_band, band_order))
+save_tab(desc_stage, "bag_descriptive_stage")
+save_tab(desc_ss, "bag_descriptive_stage_season")
+
+gradient_plot <- function(d, title) {
+  ggplot(d, aes(dist_band, rate, colour = stage, group = stage)) +
+    geom_line(linewidth = 0.8) +
+    geom_pointrange(aes(ymin = lo, ymax = hi), size = 0.25, position = position_dodge(width = 0.3)) +
+    scale_colour_manual(values = stage_cols) +
+    labs(x = "distance band (km from the nearest lease; inside = within a lease)",
+         y = "hours per km² per month", colour = NULL, title = title)
+}
+p <- gradient_plot(desc_stage, "Effort gradient by stage (season-standardised; 95% cell-bootstrap intervals)") +
+  facet_grid(dataset ~ gear_class, scales = "free_y", labeller = labeller(dataset = ds_label))
+save_fig(p, "bag_descriptive_stage", height = 7)
+p
+
+for (ds in datasets) {
+  p <- gradient_plot(filter(desc_ss, dataset == ds),
+                     paste(ds_label[[ds]], "effort gradient by stage, within each season")) +
+    facet_grid(season ~ gear_class, scales = "free_y")
+  save_fig(p, sprintf("bag_descriptive_stage_season_%s", ds), height = 7)
+  print(p)
+}
+```
+
+The descriptive BAG ratio: each band's rate divided by the 8–15 km ring's,
+by stage. Its change from Stage 1 is what the models estimate.
+
+```{r}
+desc_ratio <- desc_stage |>
+  group_by(dataset, gear_class, stage) |>
+  mutate(ratio_to_ring = rate / rate[dist_band == "8-15"]) |> ungroup() |>
+  select(dataset, gear_class, stage, dist_band, ratio_to_ring) |>
+  pivot_wider(names_from = stage, values_from = ratio_to_ring)
+save_tab(desc_ratio, "bag_descriptive_ratio_to_ring")
+desc_ratio |> filter(dist_band %in% c("inside", "0-2")) |> kable_round(2)
+```
+
+## Step 2: event time
+
+Monthly density per cell around each project's first foundation
+(`months_since_first_found`, −`r qparams$event_window` to
++`r qparams$event_window`), by distance band and nearest project. Season is
+removed by dividing each value by its dataset × gear × band's month-of-year
+index (that month's mean over the whole series, relative to the overall
+mean). Intervals resample cells (199 draws, enough for a plotted band).
+
+```{r}
+#| fig-height: 9
+event <- map_dfr(set_names(datasets), function(ds) {
+  m <- month[[ds]]
+  idx <- m |> group_by(gear_class, dist_band, moy) |> summarise(mm = mean(density), .groups = "drop") |>
+    group_by(gear_class, dist_band) |> mutate(season_index = mm / mean(mm)) |> ungroup()
+  m |>
+    filter(between(months_since_first_found, -qparams$event_window, qparams$event_window)) |>
+    left_join(select(idx, gear_class, dist_band, moy, season_index), by = c("gear_class", "dist_band", "moy")) |>
+    mutate(adj = if_else(season_index > 0, density / season_index, 0)) |>
+    group_by(gear_class, nearest_project, dist_band) |>
+    group_modify(function(g, k) {
+      cells <- unique(g$cell_id)
+      by_cell <- split(g, g$cell_id)
+      set.seed(42)
+      reps <- map_dfr(seq_len(199), function(b) {
+        bind_rows(by_cell[sample(cells, replace = TRUE)]) |>
+          group_by(months_since_first_found) |> summarise(v = mean(adj), .groups = "drop")
+      })
+      g |> group_by(months_since_first_found) |> summarise(rate = mean(adj), .groups = "drop") |>
+        left_join(reps |> group_by(months_since_first_found) |>
+                    summarise(lo = quantile(v, 0.025), hi = quantile(v, 0.975), .groups = "drop"),
+                  by = "months_since_first_found")
+    }) |> ungroup()
+}, .id = "dataset") |>
+  mutate(dist_band = factor(dist_band, band_order))
+save_tab(event, "bag_event_time")
+
+for (ds in datasets) {
+  p <- event |> filter(dataset == ds, dist_band %in% c("inside", "0-2", "8-15")) |>
+    ggplot(aes(months_since_first_found, rate, colour = dist_band, fill = dist_band)) +
+    geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.15, colour = NA) +
+    geom_line(linewidth = 0.6) + geom_vline(xintercept = 0, linetype = 2) +
+    scale_colour_manual(values = c(inside = "#d03b3b", `0-2` = "#eb6834", `8-15` = "#52514e"),
+                        aesthetics = c("colour", "fill")) +
+    facet_grid(gear_class ~ nearest_project, scales = "free_y") +
+    labs(x = "months since the nearest project's first foundation",
+         y = "season-adjusted density (h km⁻² month⁻¹)", colour = "band (km)", fill = "band (km)",
+         title = paste(ds_label[[ds]], "event time around each project's first foundation"))
+  save_fig(p, sprintf("bag_event_time_%s", ds), height = 9)
+  print(p)
+}
+```
+
+## Model specifications
+
+Every model is written once as a **specification**: its data, formula and
+settings (the cache key for `fit_cached()`) and a self-contained fit
+function. The next section fits every specification not yet cached, in
+parallel; later sections read the fits from the cache. Each fit function
+uses only its own data and namespaced `sdmTMB` calls, so it runs unchanged
+in a separate R process.
+
+**Convergence.** A fit is accepted when the Hessian is positive definite,
+the optimiser converged and the gradients are small (`sanity()`).
+`se_magnitude_ok` is not required: when the depth effect is close to linear,
+the depth smooth's wiggliness parameter goes to zero and its standard error
+is uninformative. That is harmless, and it is the common case for the sparse
+gears.
+
+```{r}
+cutoff <- qparams$mesh_cutoff_km
+
+# a fit specification: the cache key and a fit function that runs anywhere
+make_spec <- function(id, d, formula, family, spatiotemporal = "off", time = NULL, knots = NULL) {
+  force(d); force(formula); force(family); force(spatiotemporal); force(time); force(knots)
+  cut <- cutoff
+  key <- list(data = d, formula = formula, family = family, cutoff = cut, spatial = "on",
+              spatiotemporal = spatiotemporal, time = time, knots = knots)
+  fun <- function() {
+    fam <- switch(family, nbinom2 = sdmTMB::nbinom2(), tweedie = sdmTMB::tweedie(),
+                  delta_gamma = sdmTMB::delta_gamma())
+    mesh <- sdmTMB::make_mesh(d, c("x_km", "y_km"), cutoff = cut)
+    sdmTMB::sdmTMB(formula, data = d, mesh = mesh, family = fam, offset = d$log_expo,
+                   spatial = "on", spatiotemporal = spatiotemporal, time = time, knots = knots,
+                   silent = TRUE)
+  }
+  list(id = id, key = key, fun = fun)
+}
+get_fit <- \(spec) fit_cached(spec$key, spec$fun, dir = paths$models, label = spec$id)
+fit_ok <- \(f) { s <- sanity(f, silent = TRUE); isTRUE(s$hessian_ok && s$eigen_values_ok && s$nlminb_ok && s$gradients_ok) }
+
+# --- stage × season (steps 3, 5) --------------------------------------------
+ss_cols <- c("cell_id", "stage", "stage_num", "season", "dist_band", "hours", "log_expo",
+             "depth_m", "slope_z", "bpi_z", "x_km", "y_km")
+ss_data <- function(ds, g) {
+  ss[[ds]] |> filter(gear_class == g, domain) |> bag_prepare() |>
+    mutate(stage_num = as.integer(stage)) |> select(all_of(ss_cols))
+}
+ss_formula <- hours ~ stage * dist_band + season + s(depth_m, k = 4) + slope_z + bpi_z
+ss_base_formula <- hours ~ stage + dist_band + season + s(depth_m, k = 4) + slope_z + bpi_z
+bag_terms <- c("stageStage 2:dist_bandinside", "stageStage 3:dist_bandinside",
+               "stageStage 2:dist_band0-2", "stageStage 3:dist_band0-2")
+headline_term <- "stageStage 3:dist_bandinside"
+# a spatial field shared by all stages plus an iid field per stage (plan, Phase 6 sketch)
+ss_spec <- \(id, d, formula, family) make_spec(id, d, formula, family, "iid", "stage_num")
+
+# cells with any area in an active safety zone in any month (caveat 17)
+zone_cells <- month$vp |> filter(sz_share > 0) |> distinct(cell_id) |> pull()
+
+ss_sets <- ss_models |>
+  mutate(data = map2(dataset, gear, ss_data),
+         spec = pmap(list(id, data, family), \(id, d, fam) ss_spec(id, d, ss_formula, fam)),
+         spec_base = pmap(list(id, data, family), \(id, d, fam) ss_spec(paste(id, "base"), d, ss_base_formula, fam)),
+         spec_nozone = pmap(list(id, data, family), \(id, d, fam)
+           ss_spec(paste(id, "no zone cells"), filter(d, !cell_id %in% zone_cells), ss_formula, fam)),
+         # AFE: the delta-Gamma hurdle alongside Tweedie (plan, "Response families")
+         spec_dg = pmap(list(id, data, dataset), \(id, d, ds)
+           if (ds == "afe") ss_spec(paste(id, "delta_gamma"), d, ss_formula, "delta_gamma") else NULL))
+ss_sets |> transmute(id, cells = map_int(data, \(d) n_distinct(d$cell_id)), rows = map_int(data, nrow),
+                     positive_rows = map_int(data, \(d) sum(d$hours > 0))) |> knitr::kable()
+
+# --- timing and pre-trend (steps 4, 6) ----------------------------------------
+timing_models <- tribble(~dataset, ~gear, ~step,
+                         "vp", "MOBILE", "month", "vp", "FIXED", "month", "vp", "POLE_AND_LINE", "month",
+                         "afe", "MOBILE", "month", "afe", "FIXED", "season_year") |>
+  mutate(id = paste(dataset, gear, sep = "_"),
+         family = if_else(dataset == "vp", "nbinom2", "tweedie"))
+
+timing_data <- function(ds, g, step) {
+  base <- if (step == "month") month[[ds]] else sy_afe
+  base |> filter(gear_class == g, domain) |> bag_prepare() |>
+    mutate(year_c = if (step == "month") (t_index - 1) / 12 - 5 else season_year - 2021,
+           season = factor(season, c("AprSep", "OctMar")),
+           construction = as.numeric(phase == "construction"),
+           post = as.numeric(phase == "post_construction"),
+           cx_inside = construction * (dist_band == "inside"), cx_0_2 = construction * (dist_band == "0-2"),
+           cx_2_4 = construction * (dist_band == "2-4"), cx_4_8 = construction * (dist_band == "4-8"),
+           post_inside = post * (dist_band == "inside"), post_0_2 = post * (dist_band == "0-2"),
+           found_band = factor(case_when(is.na(d_found_km) | d_found_km > 10 ~ "none",
+                                         d_found_km <= 2 ~ "0-2", d_found_km <= 5 ~ "2-5", TRUE ~ "5-10"),
+                               c("none", "0-2", "2-5", "5-10")),
+           active = if (step == "month") as.numeric(active_construction) else active_construction_share,
+           year_num = if (step == "month") as.numeric(year) else as.numeric(season_year),
+           time_year = as.integer(year_num))
+}
+timing_cols <- c("cell_id", "hours", "log_expo", "dist_band", "phase", "year_c", "construction",
+                 "cx_inside", "cx_0_2", "cx_2_4", "cx_4_8", "post_inside", "post_0_2", "found_band",
+                 "active", "sz_share", "depth_m", "slope_z", "bpi_z", "year_num", "time_year", "x_km", "y_km")
+pretrend_formula <- function(step) {
+  if (step == "month") hours ~ dist_band * year_c + s(moy, bs = "cc", k = 8) + s(depth_m, k = 4) + slope_z + bpi_z
+  else hours ~ dist_band * year_c + season + s(depth_m, k = 4) + slope_z + bpi_z
+}
+timing_formula <- function(step) {
+  common <- "construction + cx_inside + cx_0_2 + cx_2_4 + cx_4_8 + post_inside + post_0_2 + found_band + active + sz_share + dist_band + s(depth_m, k = 4) + slope_z + bpi_z"
+  as.formula(if (step == "month") paste("hours ~", common, "+ s(moy, bs = 'cc', k = 8) + s(year_num, k = 5)")
+             else paste("hours ~", common, "+ season + s(year_num, k = 5)"))
+}
+month_knots <- \(step) if (step == "month") list(moy = c(0.5, 12.5)) else NULL
+
+timing_sets <- timing_models |>
+  mutate(data = pmap(list(dataset, gear, step), \(ds, g, step)
+                       timing_data(ds, g, step) |> select(all_of(timing_cols), any_of(c("moy", "season")))),
+         # pre-trend: pre-construction months, persistent field only
+         spec_pre = pmap(list(id, data, step, family), \(id, d, step, fam)
+           make_spec(paste(id, "pretrend"), filter(d, phase == "pre"), pretrend_formula(step), fam,
+                     knots = month_knots(step))),
+         # timing BAG: persistent field plus an AR1 field over years
+         spec_timing = pmap(list(id, data, step, family), \(id, d, step, fam)
+           make_spec(paste(id, "timing"), d, timing_formula(step), fam, "ar1", "time_year",
+                     knots = month_knots(step))))
+timing_sets |> transmute(id, step, rows = map_int(data, nrow), cells = map_int(data, \(d) n_distinct(d$cell_id)),
+                         pre_rows = map_int(data, \(d) sum(d$phase == "pre"))) |> knitr::kable()
+
+# --- mobile vs fixed (step 7) --------------------------------------------------
+gc_formula <- hours ~ gear * stage * dist_band + gear * season + s(depth_m, k = 4) + slope_z + bpi_z
+gc_specs <- map(set_names(datasets), function(ds) {
+  d <- bind_rows(ss_data(ds, "MOBILE") |> mutate(gear = "MOBILE"),
+                 ss_data(ds, "FIXED") |> mutate(gear = "FIXED")) |>
+    mutate(gear = factor(gear, c("MOBILE", "FIXED")),
+           # each gear × stage gets its own iid field
+           gear_stage = as.integer(interaction(gear, stage, drop = TRUE)))
+  make_spec(paste(ds, "gear contrast"), d, gc_formula, if (ds == "vp") "nbinom2" else "tweedie",
+            "iid", "gear_stage")
+})
+```
+
+## Fit every model (parallel)
+
+Every specification above that is not yet cached is fitted here, up to
+`r qparams$fit_workers` at a time, each in its own R process. A fit that
+fails stops the render with its error. The power and leave-one-vessel-out
+refits (steps 3 and 8) run in their own worker pool.
+
+```{r}
+all_specs <- c(ss_sets$spec, ss_sets$spec_base, ss_sets$spec_nozone, compact(ss_sets$spec_dg),
+               timing_sets$spec_pre, timing_sets$spec_timing, gc_specs)
+run_specs <- function(specs, workers) {
+  todo <- keep(specs, \(s) !file.exists(fit_cache_path(s$key, paths$models)))
+  message(length(todo), " of ", length(specs), " fits to run")
+  # largest data first, so the long fits start early
+  todo <- todo[order(-map_int(todo, \(s) nrow(s$key$data)))]
+  running <- list()
+  while (length(todo) > 0 || length(running) > 0) {
+    while (length(running) < workers && length(todo) > 0) {
+      s <- todo[[1]]; todo <- todo[-1]
+      running[[s$id]] <- callr::r_bg(function(root, spec, dir) {
+        setwd(root)
+        suppressPackageStartupMessages(library(tidyverse))
+        source("r/paths.R"); source("r/gfw_helpers.R"); source("r/analysis_helpers.R")
+        fit_cached(spec$key, spec$fun, dir = dir, label = spec$id)
+        TRUE
+      }, args = list(root = root, spec = s, dir = paths$models), supervise = TRUE)
+    }
+    Sys.sleep(5)
+    for (nm in names(running)) {
+      p <- running[[nm]]
+      if (!p$is_alive()) {
+        if (p$get_exit_status() != 0) stop("fit failed: ", nm, "\n", p$read_all_error())
+        running[[nm]] <- NULL
+      }
+    }
+  }
+}
+t_fit <- system.time(run_specs(all_specs, qparams$fit_workers))[["elapsed"]]
+round(t_fit / 60, 1)
+
+fit_log <- map_dfr(all_specs, function(s) {
+  f <- as.character(fit_cache_path(s$key, paths$models))
+  m <- jsonlite::read_json(paste0(f, ".json"))
+  tibble(model = s$id, rows = nrow(s$key$data), fit_minutes = round(m$fit_seconds / 60, 1),
+         converged = fit_ok(readRDS(f)))
+})
+save_tab(fit_log, "bag_fit_log")
+fit_log |> knitr::kable()
+```
+
+## Step 3: simulation power
+
+For each dataset × gear: fit the **base model** (the stage × season model
+without the BAG terms), simulate `r qparams$power_nsim` new datasets from it
+with **new spatial random fields** each time (`simulate(re_form = ~0)`), so
+spatial uncertainty is included (conservative). Inject a known BAG effect
+*e* ∈ {`r paste(100 * unlist(qparams$power_effects), collapse = ", ")`}%:
+the mean is multiplied by (1 − *e*) in the `inside` and `0–2` km bands in
+Stage 3 (binomial thinning for VP counts, scaling for AFE). The full BAG
+model is refitted to each, and the headline rate ratio (inside × Stage 3)
+is scored: power (95% CI excludes 1), bias, coverage. The same simulated
+datasets are reused across effect sizes, so the curves differ only by the
+effect.
+
+The refits run as `r qparams$workers` separate R processes (`callr`), each
+writing one small result file per refit to `reports/bag/cache/`, so an
+interrupted render resumes where it stopped.
+
+```{r}
+# a job: one response vector to refit with the full stage × season model.
+# Shared by the power analysis and the leave-one-vessel-out refits (step 8)
+run_refit_jobs <- function(spec_id, d, family, jobs, workers = qparams$workers) {
+  # spec on disk, read by every worker; its hash names the result folder, so
+  # a changed specification never reuses old results
+  spec <- list(data = d, formula = ss_formula, family = family, cutoff = qparams$mesh_cutoff_km,
+               term = headline_term, terms = bag_terms)
+  key <- substr(digest::digest(list(spec, as.character(packageVersion("sdmTMB"))), algo = "sha256"), 1, 10)
+  out_dir <- file.path(job_dir, paste(spec_id, key, sep = "_"))
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  spec_file <- file.path(out_dir, "spec.rds")
+  if (!file.exists(spec_file)) saveRDS(spec, spec_file)
+  # each result file is named by its tag and a hash of its response vector,
+  # so a refit is reused only for exactly the same simulated data
+  jobs <- jobs |> mutate(tag0 = tag, tag = paste0(tag, "_", map_chr(y, \(v) substr(digest::digest(v), 1, 8))))
+  todo <- jobs |> mutate(file = file.path(out_dir, paste0(tag, ".rds"))) |> filter(!file.exists(file))
+  if (nrow(todo) > 0) {
+    chunks <- split(todo, rep_len(seq_len(min(workers, nrow(todo))), nrow(todo)))
+    procs <- map(chunks, function(ch) {
+      jf <- tempfile(fileext = ".rds"); saveRDS(ch, jf)
+      callr::r_bg(function(root, spec_file, jobs_file) {
+        setwd(root)
+        suppressPackageStartupMessages({ library(sdmTMB); library(dplyr) })
+        spec <- readRDS(spec_file); jobs <- readRDS(jobs_file)
+        fam <- switch(spec$family, nbinom2 = nbinom2(), tweedie = tweedie())
+        mesh <- make_mesh(spec$data, c("x_km", "y_km"), cutoff = spec$cutoff)
+        for (j in seq_len(nrow(jobs))) {
+          d <- spec$data; d$hours <- jobs$y[[j]]
+          fit <- try(sdmTMB(spec$formula, data = d, mesh = mesh, family = fam, offset = d$log_expo,
+                            spatial = "on", spatiotemporal = "iid", time = "stage_num", silent = TRUE),
+                     silent = TRUE)
+          # the same convergence rule as fit_ok() in the main session
+          ok <- !inherits(fit, "try-error") &&
+            isTRUE(all(unlist(sanity(fit, silent = TRUE))[c("hessian_ok", "eigen_values_ok", "nlminb_ok", "gradients_ok")]))
+          res <- if (ok) {
+            t <- tidy(fit)
+            t[t$term %in% spec$terms, c("term", "estimate", "std.error")]
+          } else data.frame(term = spec$term, estimate = NA_real_, std.error = NA_real_)
+          saveRDS(cbind(res, tag = jobs$tag[j]), file.path(dirname(spec_file), paste0(jobs$tag[j], ".rds")))
+        }
+        TRUE
+      }, args = list(root = root, spec_file = spec_file, jobs_file = jf), supervise = TRUE)
+    })
+    walk(procs, \(p) p$wait())
+    fails <- keep(procs, \(p) p$get_exit_status() != 0)
+    if (length(fails) > 0) stop(length(fails), " refit workers failed: ", fails[[1]]$read_all_error())
+  }
+  # results carry the caller's original tag
+  map_dfr(seq_len(nrow(jobs)), \(j) readRDS(file.path(out_dir, paste0(jobs$tag[j], ".rds"))) |>
+            mutate(tag = jobs$tag0[j]))
+}
+```
+
+```{r}
+power_runs <- ss_sets |>
+  mutate(res = pmap(list(id, data, family, spec_base), function(id, d, fam, sb) {
+    base <- get_fit(sb)
+    sims <- simulate(base, nsim = qparams$power_nsim, re_form = ~0, seed = 42)
+    in_effect <- d$stage == "Stage 3" & d$dist_band %in% c("inside", "0-2")
+    type <- if (fam == "nbinom2") "count" else "continuous"
+    jobs <- expand_grid(effect = unlist(qparams$power_effects), sim = seq_len(qparams$power_nsim)) |>
+      mutate(tag = sprintf("power_e%02d_s%03d", round(100 * effect), sim),
+             y = map2(effect, sim, \(e, i) inject_effect(sims[, i], if_else(in_effect, 1 - e, 1),
+                                                         type, seed = i)))
+    run_refit_jobs(id, d, fam, jobs) |>
+      filter(term == headline_term) |>
+      left_join(select(jobs, tag, effect, sim), by = "tag")
+  })) |>
+  select(id, dataset, gear, res) |> unnest(res)
+save_tab(power_runs, "bag_power_runs")
+
+power <- power_runs |>
+  group_by(id, dataset, gear, effect) |>
+  summarise(power_from_refits(estimate, std.error, first(effect)) |> select(-effect), .groups = "drop")
+save_tab(power, "bag_power")
+mde <- power |> group_by(id, dataset, gear) |>
+  summarise(mde = mde_of(effect, power), fpr = power[effect == 0], .groups = "drop") |>
+  mutate(descriptive_only = is.na(mde) | mde > 0.5)
+save_tab(mde, "bag_mde")
+power |> kable_round(3)
+mde |> kable_round(2)
+
+p <- ggplot(power, aes(100 * effect, power, colour = gear)) +
+  geom_hline(yintercept = c(0.05, 0.8), linetype = c(3, 2), colour = "grey50") +
+  geom_line() + geom_point() +
+  scale_colour_manual(values = gear_cols) +
+  facet_wrap(~ dataset, labeller = labeller(dataset = ds_label)) +
+  labs(x = "injected effect: % reduction inside and 0–2 km in Stage 3", y = "power",
+       colour = NULL, title = "BAG power curves (interim base model)")
+save_fig(p, "bag_power_curves", height = 4.5)
+p
+```
+
+## Step 4: pre-trend equivalence test
+
+Each cell's pre-construction months (`phase == "pre"`) at the timing model's
+step (monthly; season-year for fixed AFE), with a band-specific linear
+trend *θ*<sub>b</sub> relative to the 8–15 km ring. A band is equivalent if
+its 90% CI lies inside ±*δ*, with *δ* from the gear's MDE extrapolated over
+the gap between the Stage 1 and Stage 3 midpoints (`pretrend_margin()`).
+The spatial field here is persistent only (no time-varying field), since
+the trend terms are the subject.
+
+```{r}
+mid <- \(s) dev_stages$start[dev_stages$stage == s] + (dev_stages$end[dev_stages$stage == s] - dev_stages$start[dev_stages$stage == s]) / 2
+dt_years <- as.numeric(mid("Stage 3") - mid("Stage 1")) / 365.25
+dt_years
+
+pretrend <- timing_sets |>
+  mutate(res = pmap(list(id, spec_pre), function(id, sp) {
+    fit <- get_fit(sp)
+    m <- mde$mde[mde$id == id]
+    delta <- pretrend_margin(if (length(m)) m else NA_real_, dt_years)
+    tidy(fit) |> filter(str_detect(term, "^dist_band.*:year_c$")) |>
+      mutate(band = str_remove_all(term, "dist_band|:year_c")) |>
+      rowwise() |> mutate(tost_band(estimate, std.error, delta)) |> ungroup() |>
+      select(band, est, se, lo90, hi90, lo95, hi95, delta, outcome)
+  })) |>
+  select(id, dataset, gear, res) |> unnest(res)
+save_tab(pretrend, "bag_pretrend")
+pretrend_gate <- pretrend |> group_by(id, dataset, gear) |>
+  summarise(verdict = pretrend_verdict(outcome), delta = first(delta), .groups = "drop")
+save_tab(pretrend_gate, "bag_pretrend_verdict")
+pretrend_gate |> kable_round(4)
+
+p <- ggplot(pretrend, aes(est, band)) +
+  geom_rect(aes(xmin = -delta, xmax = delta, ymin = -Inf, ymax = Inf), fill = "grey92", inherit.aes = FALSE,
+            data = distinct(pretrend, id, dataset, gear, delta)) +
+  geom_vline(xintercept = 0, colour = "grey50") +
+  geom_linerange(aes(xmin = lo95, xmax = hi95), colour = "grey55") +
+  geom_linerange(aes(xmin = lo90, xmax = hi90), linewidth = 1.2, colour = "black") +
+  geom_point(size = 2) +
+  facet_wrap(~ id, ncol = 3, scales = "free_x") +
+  labs(x = "band trend relative to the 8–15 km ring (log scale per year)", y = NULL,
+       title = "Pre-construction trends: 90% (thick) and 95% (thin) CIs; grey = equivalence margin ±δ")
+save_fig(p, "bag_pretrend", height = 5)
+p
+```
+
+## Step 5: stage × season BAG
+
+```{r}
+ss_fits <- ss_sets |>
+  mutate(fit = map(spec, get_fit),
+         fit_dg = map(spec_dg, \(s) if (is.null(s)) NULL else get_fit(s)))
+ss_fits |> transmute(id, converged = map_lgl(fit, fit_ok),
+                     converged_delta_gamma = map_lgl(fit_dg, \(f) if (is.null(f)) NA else fit_ok(f))) |>
+  knitr::kable()
+
+bag_rr <- ss_fits |>
+  mutate(rr = map(fit, \(f) rate_ratios(tidy(f), bag_terms))) |>
+  select(id, dataset, gear, rr) |> unnest(rr) |>
+  mutate(stage = str_extract(term, "Stage [23]"), band = if_else(str_detect(term, "inside"), "inside", "0-2")) |>
+  left_join(select(mde, id, mde, descriptive_only), by = "id")
+save_tab(bag_rr, "bag_rate_ratios")
+bag_rr |> select(id, stage, band, rr, rr_lo, rr_hi, p, mde, descriptive_only) |> kable_round(3)
+```
+
+The delta-Gamma parts for AFE: whether a cell is fished (binomial) and how
+much given fished (Gamma). Opposite signs would mean the hurdle is needed on
+substance (Phase 6).
+
+```{r}
+dg_rr <- ss_fits |> filter(dataset == "afe") |>
+  mutate(rr = map(fit_dg, \(f) bind_rows(
+    rate_ratios(tidy(f, model = 1), bag_terms) |> mutate(part = "occupancy (odds ratio)"),
+    rate_ratios(tidy(f, model = 2), bag_terms) |> mutate(part = "intensity given fished")))) |>
+  select(id, rr) |> unnest(rr)
+save_tab(dg_rr, "bag_delta_gamma_parts")
+dg_rr |> select(id, part, term, rr, rr_lo, rr_hi, p) |> kable_round(3)
+```
+
+### Without the cells ever inside a safety zone
+
+Caveat 17: from installation, a foundation's 500 m zone covers most of its
+cell, so part of any Stage 3 fall in the `inside` band is mandated. This
+refit drops every cell with any area in an active zone in any month.
+
+```{r}
+length(zone_cells)
+bag_rr_nozone <- ss_sets |>
+  mutate(rr = map(spec_nozone, \(s) rate_ratios(tidy(get_fit(s)), bag_terms))) |>
+  select(id, rr) |> unnest(rr)
+save_tab(bag_rr_nozone, "bag_rate_ratios_no_zone_cells")
+bag_rr_nozone |> select(id, term, rr, rr_lo, rr_hi) |> kable_round(3)
+```
+
+### Predicted densities by band × stage
+
+Population-level predictions (no random fields), at the domain's mean
+terrain, in hours per km² per month, per season.
+
+```{r}
+#| fig-height: 7
+pred_grid <- function(fit, d) {
+  nd <- expand_grid(stage = factor(bag_stage_levels, bag_stage_levels),
+                    dist_band = factor(bag_band_levels, bag_band_levels),
+                    season = factor(c("AprSep", "OctMar"), c("AprSep", "OctMar"))) |>
+    mutate(depth_m = mean(d$depth_m), slope_z = 0, bpi_z = 0, x_km = mean(d$x_km), y_km = mean(d$y_km),
+           stage_num = as.integer(stage))
+  p <- predict(fit, newdata = nd, re_form = NA, se_fit = TRUE, offset = rep(0, nrow(nd)))
+  nd |> mutate(rate = exp(p$est), lo = exp(p$est - 1.96 * p$est_se), hi = exp(p$est + 1.96 * p$est_se))
+}
+pred <- ss_fits |> mutate(p = map2(fit, data, pred_grid)) |> select(id, dataset, gear, p) |> unnest(p) |>
+  mutate(dist_band = factor(dist_band, band_order))
+save_tab(pred, "bag_predicted_density")
+p <- ggplot(pred, aes(dist_band, rate, colour = stage, group = stage)) +
+  geom_line() + geom_pointrange(aes(ymin = lo, ymax = hi), size = 0.2, position = position_dodge(0.3)) +
+  scale_colour_manual(values = stage_cols) +
+  facet_grid(id ~ season, scales = "free_y") +
+  labs(x = "distance band", y = "predicted hours per km² per month", colour = NULL,
+       title = "Model-predicted gradient by stage (interim stage × season BAG)")
+save_fig(p, "bag_predicted_density", height = 9)
+p
+```
+
+### Residual diagnostics (DHARMa)
+
+```{r}
+diag <- ss_fits |>
+  mutate(res = map(fit, function(f) {
+    set.seed(42)
+    r <- dharma_residuals(simulate(f, nsim = 250, type = "mle-mvn"), f, return_DHARMa = TRUE, plot = FALSE)
+    cell_r <- recalculateResiduals(r, group = f$data$cell_id)
+    xy <- f$data |> distinct(cell_id, x_km, y_km)
+    xy <- xy[match(unique(f$data$cell_id), xy$cell_id), ]
+    tibble(uniformity_p = testUniformity(r, plot = FALSE)$p.value,
+           dispersion_p = testDispersion(r, plot = FALSE)$p.value,
+           zero_inflation_p = testZeroInflation(r, plot = FALSE)$p.value,
+           spatial_autocorr_p = testSpatialAutocorrelation(cell_r, x = xy$x_km, y = xy$y_km, plot = FALSE)$p.value)
+  })) |>
+  select(id, res) |> unnest(res)
+save_tab(diag, "bag_dharma")
+diag |> kable_round(4)
+```
+
+## Step 6: timing BAG
+
+Stages are replaced by each cell's own exposure, from the Ørsted dates
+(`05` step 8):
+
+- `phase`: the nearest project's pre / construction / post-construction,
+  coded as a construction indicator plus construction × band terms (the BAG
+  terms of this model), and post-construction × band terms. Only SFW reaches
+  post-construction, and every SFW-nearest cell is inside a lease or within
+  2 km, so the post terms exist for those two bands only and are relative to
+  the area-wide trend, not to the outer ring;
+- `found_band`: distance to the nearest installed foundation, 0–2, 2–5 and
+  5–10 km, against "none within 10 km" (the plan's *h*(·), as bands);
+- `active_construction`: a foundation going in that month within 5 km (*λ*);
+- `sz_share`: share of the cell inside an active USCG safety zone (*κ*),
+  so the foundation terms measure the response beyond the mandated
+  exclusion;
+- a cyclic month-of-year smooth and a year smooth (AIS uptake and regional
+  trend; season and season-year trend for fixed AFE).
+
+The spatial field is persistent plus an AR1 field over years (plan, Phase
+6 sketch).
+
+```{r}
+timing_terms <- c("cx_inside", "cx_0_2", "post_inside", "post_0_2", "found_band0-2", "found_band2-5",
+                  "found_band5-10", "active", "sz_share")
+timing_fits <- timing_sets |> mutate(fit = map(spec_timing, get_fit))
+timing_fits |> transmute(id, step, converged = map_lgl(fit, fit_ok)) |> knitr::kable()
+
+timing_rr <- timing_fits |>
+  mutate(rr = map(fit, function(f) {
+    t <- tidy(f)
+    rate_ratios(t, intersect(timing_terms, t$term))
+  })) |>
+  select(id, dataset, gear, step, rr) |> unnest(rr)
+save_tab(timing_rr, "bag_timing_rate_ratios")
+timing_rr |> select(id, term, rr, rr_lo, rr_hi, p) |> kable_round(3)
+
+p <- timing_rr |> filter(str_detect(term, "found_band")) |>
+  mutate(dist = factor(str_remove(term, "found_band"), c("0-2", "2-5", "5-10"))) |>
+  ggplot(aes(dist, rr, colour = gear)) +
+  geom_hline(yintercept = 1, colour = "grey50") +
+  geom_pointrange(aes(ymin = rr_lo, ymax = rr_hi), position = position_dodge(0.4)) +
+  scale_colour_manual(values = gear_cols) + scale_y_log10() +
+  facet_wrap(~ dataset, labeller = labeller(dataset = ds_label)) +
+  labs(x = "distance to the nearest installed foundation (km)",
+       y = "rate ratio vs none within 10 km (log scale)", colour = NULL,
+       title = "Turbine-distance response h(·), beyond the safety zones and active construction")
+save_fig(p, "bag_timing_found_distance", height = 4.5)
+p
+```
+
+## Step 7: mobile vs fixed
+
+A joint stage × season model per dataset, each gear on its own domain, with
+a `gear × stage × band` interaction. The three-way terms test whether fixed
+gear's BAG effect differs from mobile gear's.
+
+```{r}
+gear_contrast <- map_dfr(gc_specs, function(s) {
+  fit <- get_fit(s)
+  rate_ratios(tidy(fit), paste0("gearFIXED:", bag_terms)) |> mutate(converged = fit_ok(fit))
+}, .id = "dataset")
+save_tab(gear_contrast, "bag_gear_contrast")
+gear_contrast |> select(dataset, term, rr, rr_lo, rr_hi, p) |> kable_round(3)
+```
+
+## Step 8: leave-one-vessel-out
+
+The headline stage × season BAG refitted without each of the top
+`r qparams$lovo_top_k` vessels per dataset × gear (by Primary hours in the
+modelled stages), and without BUCKEYE (368175660), which the pre-Phase 5
+screen kept but flagged. Each vessel's hours are removed from the cells,
+stages and seasons it used.
+
+```{r}
+records_path <- \(ds) file.path(paths$processed_gfw, sprintf("gfw_%s_id_classified.csv", ds))
+vessel_hours <- map_dfr(set_names(datasets), \(ds)
+  read_csv(records_path(ds), col_types = cols(.default = "c"),
+           col_select = c(MMSI, `Vessel Name`, cell_id, gear_class, in_primary, hours, date)) |>
+    filter(in_primary == "TRUE") |>
+    mutate(hours = as.numeric(hours), m = floor_date(as.Date(date), "month"),
+           stage = stage_of(m), season = season_of(m)) |>
+    group_by(MMSI, vessel = `Vessel Name`, cell_id, gear_class, stage, season) |>
+    summarise(hours = sum(hours), .groups = "drop"), .id = "dataset")
+input_files <- c(input_files, records_path(datasets))
+
+lovo_vessels <- vessel_hours |>
+  group_by(dataset, gear_class, MMSI) |>
+  summarise(vessel = first(vessel), hours = sum(hours), .groups = "drop") |>
+  group_by(dataset, gear_class) |>
+  mutate(rank = rank(-hours, ties.method = "first")) |>
+  filter(rank <= qparams$lovo_top_k | MMSI %in% as.character(unlist(qparams$lovo_extra))) |>
+  ungroup()
+
+lovo <- ss_sets |>
+  mutate(res = pmap(list(id, dataset, gear, data, family), function(id, ds, g, d, fam) {
+    vs <- filter(lovo_vessels, dataset == ds, gear_class == g)
+    if (nrow(vs) == 0) return(NULL)
+    jobs <- tibble(MMSI = vs$MMSI) |>
+      mutate(tag = paste0("lovo_", MMSI),
+             y = map(MMSI, function(v) {
+               h <- vessel_hours |> filter(dataset == ds, gear_class == g, MMSI == v) |>
+                 select(cell_id, stage, season, h_v = hours)
+               dd <- left_join(select(d, cell_id, stage, season, hours) |> mutate(stage = as.character(stage),
+                                                                                  season = as.character(season)),
+                               h, by = c("cell_id", "stage", "season"))
+               y <- dd$hours - coalesce(dd$h_v, 0)
+               y <- pmax(0, y)
+               if (fam == "nbinom2") round(y) else y
+             }))
+    # vessel names are attached in the next chunk, from the tag
+    run_refit_jobs(id, d, fam, jobs) |> filter(term == headline_term)
+  })) |>
+  select(id, res) |> unnest(res)
+```
+
+```{r}
+lovo <- lovo |> mutate(MMSI = str_remove(tag, "^lovo_")) |> select(-any_of(c("vessel", "hours"))) |>
+  left_join(distinct(lovo_vessels, MMSI, vessel), by = "MMSI") |>
+  left_join(bag_rr |> filter(term == headline_term) |> select(id, full_estimate = estimate), by = "id") |>
+  mutate(rr = exp(estimate), shift = estimate - full_estimate)
+save_tab(lovo, "bag_lovo")
+lovo |> group_by(id) |>
+  summarise(full_rr = exp(first(full_estimate)), min_rr = min(rr, na.rm = TRUE), max_rr = max(rr, na.rm = TRUE),
+            most_influential = vessel[which.max(abs(shift))], .groups = "drop") |>
+  kable_round(3)
+lovo |> filter(MMSI == "368175660") |> select(id, vessel, rr, shift) |> kable_round(3)
+```
+
+## Summary and gate
+
+```{r}
+summary_tab <- bag_rr |>
+  filter(term == headline_term) |>
+  select(id, dataset, gear, rr, rr_lo, rr_hi, p, mde, descriptive_only) |>
+  left_join(select(pretrend_gate, id, pretrend = verdict), by = "id") |>
+  left_join(bag_rr_nozone |> filter(term == headline_term) |> select(id, rr_no_zone = rr), by = "id")
+save_tab(summary_tab, "bag_summary")
+summary_tab |> kable_round(3)
+```
+
+Gate (plan, Phase 5):
+
+- A dataset × gear with **MDE above 50%** (or none reached) is reported
+  descriptively, with its MDE, not as a hypothesis test (`descriptive_only`).
+- A **non-parallel** pre-trend verdict adds the `band × year` pre-trend term
+  to that gear's BAG models; **inconclusive** makes the with- and without-term
+  models co-primary. The pre-trend term is a Phase 8 sensitivity for every
+  gear regardless (decision 2026-10-19).
+- These are interim fits (decision 2026-10-20): Phase 6 confirms or replaces
+  the spatial structure and families, and the power analysis and Phase 3's
+  criterion 5 are then re-run on its base model.
+
+## Manifest and provenance
+
+```{r}
+manifest <- tibble(file = outputs, sha256 = map_chr(outputs, file_sha256))
+f_manifest <- file.path(paths$bag, "manifest_10.csv")
+write_csv(manifest, f_manifest)
+write_provenance(f_manifest, input_files, extra = list(
+  outputs = nrow(manifest), interim_spec = "sdmTMB; spatial on; iid stage fields (stage x season); ar1 year fields (timing)",
+  mesh_cutoff_km = qparams$mesh_cutoff_km, power_nsim = qparams$power_nsim,
+  sdmTMB = as.character(packageVersion("sdmTMB")), DHARMa = as.character(packageVersion("DHARMa"))))
+nrow(manifest)
+```
+
+## Session info
+
+```{r}
+sessionInfo()
+```
+
+```{r}
+renv::diagnostics()
+```
+

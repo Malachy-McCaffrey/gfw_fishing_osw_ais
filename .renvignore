@@ -10,3 +10,7 @@ planning/
 # Python environment
 r/scratchpad/
 .venv/
+
+# Generated outputs: figures, tables and the Phase 3+ result caches (over a
+# thousand .rds files), which hold no code to scan
+reports/

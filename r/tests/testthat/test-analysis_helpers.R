@@ -113,3 +113,32 @@ test_that("top_k_share() and lorenz_points() describe concentration", {
   expect_equal(lz$p_total[c(1, 6)], c(0, 1))
   expect_equal(lz$p_total[2], 0.05)
 })
+
+test_that("fit_cached() fits once, reuses the cache, and refits when the key changes", {
+  dir <- file.path(tempdir(), "fit_cache_test")
+  unlink(dir, recursive = TRUE)
+  calls <- 0
+  fit <- function() { calls <<- calls + 1; list(value = 42) }
+  d <- data.frame(y = 1:3)
+  # a formula built in another environment hashes the same
+  key <- function(f) list(data = d, formula = f, family = "nbinom2")
+  f1 <- local(y ~ x)
+  f2 <- local({ a <- 1; y ~ x })
+
+  expect_equal(fit_cached(key(f1), fit, dir = dir, packages = "stats")$value, 42)
+  expect_equal(fit_cached(key(f2), fit, dir = dir, packages = "stats")$value, 42)
+  expect_equal(calls, 1)
+  # one fit file and its JSON sidecar, which names the key's elements
+  rds <- list.files(dir, pattern = "\\.rds$")
+  expect_length(rds, 1)
+  meta <- jsonlite::read_json(file.path(dir, paste0(rds, ".json")))
+  expect_equal(unlist(meta$key_elements), c("data", "formula", "family"))
+
+  # new data, or a different package set (e.g. an upgrade), refits
+  fit_cached(list(data = data.frame(y = 1:4), formula = f1, family = "nbinom2"), fit,
+             dir = dir, packages = "stats")
+  expect_equal(calls, 2)
+  fit_cached(key(f1), fit, dir = dir, packages = c("stats", "utils"))
+  expect_equal(calls, 3)
+  expect_error(fit_cached(list(1), fit, dir = dir), "named list")
+})

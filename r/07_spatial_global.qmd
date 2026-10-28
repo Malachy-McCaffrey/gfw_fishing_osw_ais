@@ -45,7 +45,7 @@ knitr::opts_knit$set(root.dir = root)
 Phase 2 of `planning/gfw_analysis_plan.qmd`: how strongly each surface
 clusters, how that changes across stages and seasons, and over what distance.
 The distance feeds the Phase 3 weights and the Matérn range prior (*ρ*₀) of
-Phases 6–7. It reads the Phase 0 outputs (`05_prepare_analysis.qmd`) only.
+Phases 5–6. It reads the Phase 0 outputs (`05_prepare_analysis.qmd`) only.
 
 | Step | Question |
 |---|---|
@@ -64,7 +64,7 @@ of the clustering.
 log(density + *c*) for AFE; Phase 1 kept both). General G needs non-negative
 values, so it uses √density for VP and **log(1 + density / *c*)** for AFE.
 That is `y_vst` shifted so a zero cell is exactly 0, with the same *c*
-(decision 2026-10-20, `g_scale()` in `r/spatial_helpers.R`). Moran's I is
+(decision 2026-10-20, D-027, `g_scale()` in `r/spatial_helpers.R`). Moran's I is
 unchanged by the shift, so I and G read the same surface. Season
 standardisation is not used: none of these statistics changes when a surface
 is multiplied by a constant (caveat 8).
@@ -76,7 +76,7 @@ The self-inclusive weights are kept for Gi\* in Phase 3.
 Tables and figures go to `reports/spatial/{pipeline}/` (gitignored: derived GFW
 products), listed with their hashes in `reports/spatial/{pipeline}/manifest_07.csv`
 and its provenance sidecar. *ρ*₀ is also written to
-`tables/global_rho0.csv`, with its own sidecar, for Phase 7 to read.
+`tables/global_rho0.csv`, with its own sidecar, for Phase 6 to read.
 
 ## Libraries and shared code
 
@@ -398,7 +398,7 @@ for (tp in c("distance", "contiguity")) {
 
 ### *ρ*₀ per dataset × gear
 
-Phases 6–7 model each dataset × gear separately, across all stages, so *ρ*₀
+Phases 5–6 model each dataset × gear separately, across all stages, so *ρ*₀
 is the **median of the three stage ranges**. It is censored when at least
 two of the three are.
 
@@ -505,7 +505,7 @@ compares weights. A censored *ρ*₀ (I still above the threshold at
 `r qparams$band_max_km` km) is above 5 km by definition. Every distance-band
 run is capped at the block ceiling, `r qparams$block_max_km` km, censored or
 not, since a band near the AOI's width would make every cell a neighbour of
-most others (decision 2026-10-20).
+most others (decision 2026-10-20, D-028).
 
 ```{r}
 gate <- rho0 |>
@@ -523,7 +523,7 @@ gate <- rho0 |>
 gate |> kable_round(1)
 
 f_rho0 <- save_tab(gate, "global_rho0")
-# rho0 in the sidecar too, keyed "<dataset> <gear>", so Phase 7 can read the
+# rho0 in the sidecar too, keyed "<dataset> <gear>", so Phase 6 can read the
 # prior from the provenance record of the file it came from (plan, Phase 2 gate)
 rho0_list <- set_names(as.list(gate$rho0_km), paste(gate$dataset, gate$gear_class))
 write_provenance(f_rho0, input_files, extra = list(

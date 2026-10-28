@@ -1,5 +1,5 @@
 ---
-title: "MM GFW Before–After–Gradient Models (Phase 5)"
+title: "MM GFW Before–After–Gradient Models (Phase 4)"
 author: "Malachy McCaffrey"
 date: today
 format:
@@ -16,8 +16,8 @@ params:
   processed_gfw: ""
   models: ""
   bag: ""
-  # Interim model specification (decision 2026-10-20, option a): Phase 6's
-  # recommended form, refitted when Phase 6 settles the base model.
+  # Interim model specification (decision 2026-10-20, D-047, option a): Phase 5's
+  # recommended form, refitted when Phase 5 settles the base model.
   mesh_cutoff_km: 2        # SPDE mesh: no two vertices closer than this
   # Power analysis (plan, "Simulation power analysis")
   power_nsim: 100
@@ -26,7 +26,7 @@ params:
   fit_workers: 8           # parallel main-model fits (fewer: the monthly models are large)
   # Leave-one-vessel-out: top vessels per dataset × gear, plus named hulls
   lovo_top_k: 10
-  lovo_extra: !expr c("368175660")   # BUCKEYE: kept at the pre-Phase 5 screen, checked here
+  lovo_extra: !expr c("368175660")   # BUCKEYE: kept at the pre-Phase 4 screen, checked here
   n_boot: 999
   event_window: 24
 ---
@@ -42,7 +42,7 @@ knitr::opts_knit$set(root.dir = root)
 
 ## Objective
 
-Phase 5 of `planning/gfw_analysis_plan.qmd`: estimate how the **gradient of
+Phase 4 of `planning/gfw_analysis_plan.qmd`: estimate how the **gradient of
 fishing effort with distance from the leases** changed between the stages
 (Before–After–Gradient, Methratta 2020, 2021), and how effort responded to
 each foundation's installation, its 500 m safety zone and active
@@ -59,12 +59,12 @@ construction.
 | 7 | Formal mobile vs fixed contrast |
 | 8 | Rate ratios with MDEs, predicted densities, diagnostics, leave-one-vessel-out, fleet-size sensitivity |
 
-**Interim models (decision 2026-10-20).** Phase 6 chooses the final
+**Interim models (decision 2026-10-20, D-047).** Phase 5 chooses the final
 spatial structure and families. Until then every model here uses the form
-Phase 6 recommends: `sdmTMB` with an SPDE spatial field (mesh cutoff
+Phase 5 recommends: `sdmTMB` with an SPDE spatial field (mesh cutoff
 `r params$mesh_cutoff_km` km), NB2 for vessel presence (VP) and Tweedie for
 apparent fishing effort (AFE, with delta-Gamma alongside for the stage ×
-season models). Everything is cached with `fit_cached()`, so Phase 6 can
+season models). Everything is cached with `fit_cached()`, so Phase 5 can
 refit with its choices by changing the specification only.
 
 **Domains** (caveat 13). Each dataset × gear is modelled on the cells it
@@ -324,7 +324,7 @@ ss_base_formula <- hours ~ stage + dist_band + season + s(depth_m, k = 4) + slop
 bag_terms <- c("stageStage 2:dist_bandinside", "stageStage 3:dist_bandinside",
                "stageStage 2:dist_band0-2", "stageStage 3:dist_band0-2")
 headline_term <- "stageStage 3:dist_bandinside"
-# a spatial field shared by all stages plus an iid field per stage (plan, Phase 6 sketch)
+# a spatial field shared by all stages plus an iid field per stage (plan, Phase 5 sketch)
 ss_spec <- \(id, d, formula, family) make_spec(id, d, formula, family, "iid", "stage_num")
 
 # cells with any area in an active safety zone in any month (caveat 17)
@@ -695,7 +695,7 @@ bag_rr |> select(id, stage, band, rr, rr_lo, rr_hi, p, mde, descriptive_only) |>
 
 The delta-Gamma parts for AFE: whether a cell is fished (binomial) and how
 much given fished (Gamma). Opposite signs would mean the hurdle is needed on
-substance (Phase 6).
+substance (Phase 5).
 
 ```{r}
 dg_rr <- ss_fits |> filter(dataset == "afe") |>
@@ -842,7 +842,7 @@ gear_contrast |> select(dataset, term, rr, rr_lo, rr_hi, p) |> kable_round(3)
 
 The headline stage × season BAG refitted without each of the top
 `r qparams$lovo_top_k` vessels per dataset × gear (by Primary hours in the
-modelled stages), and without BUCKEYE (368175660), which the pre-Phase 5
+modelled stages), and without BUCKEYE (368175660), which the pre-Phase 4
 screen kept but flagged. Each vessel's hours are removed from the cells,
 stages and seasons it used.
 
@@ -919,7 +919,7 @@ the outcome. Two refits per dataset × gear:
   trend. This is the more informative of the two.
 
 A BAG rate ratio that moves by more than 10% is flagged. This is the same
-threshold the plan uses for the environmental covariates (Phase 5 success
+threshold the plan uses for the environmental covariates (Phase 4 success
 criteria). The fleet count can itself respond to the projects (vessels
 leaving the AOI lower it), so this is a sensitivity, not a correction.
 
@@ -991,15 +991,15 @@ save_tab(summary_tab, "bag_summary")
 summary_tab |> kable_round(3)
 ```
 
-Gate (plan, Phase 5):
+Gate (plan, Phase 4):
 
 - A dataset × gear with **MDE above 50%** (or none reached) is reported
   descriptively, with its MDE, not as a hypothesis test (`descriptive_only`).
 - A **non-parallel** pre-trend verdict adds the `band × year` pre-trend term
   to that gear's BAG models; **inconclusive** makes the with- and without-term
-  models co-primary. The pre-trend term is a Phase 8 sensitivity for every
-  gear regardless (decision 2026-10-19).
-- These are interim fits (decision 2026-10-20): Phase 6 confirms or replaces
+  models co-primary. The pre-trend term is a Phase 7 sensitivity for every
+  gear regardless (decision 2026-10-19, D-018).
+- These are interim fits (decision 2026-10-20, D-047): Phase 5 confirms or replaces
   the spatial structure and families, and the power analysis and Phase 3's
   criterion 5 are then re-run on its base model.
 

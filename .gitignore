@@ -108,6 +108,17 @@ r/scratchpad/
 # Quarto project cache (r/_quarto.yml)
 .quarto/
 
+# Rendered R workflow output. The HTML is already ignored (*.html above); these
+# are its companion folders (figure PNGs and page libraries) and the
+# intermediate .rmarkdown files the rmarkdown engine can leave behind. All are
+# rebuilt by rendering the qmds. The archived Python renders under
+# archive/reports/_freeze/ stay tracked on purpose (see README).
+r/*_files/
+r/*.rmarkdown
+planning/*_files/
+# R's default graphics device output when a plot runs outside a render
+Rplots.pdf
+
 # Exploratory outputs from r/06_explore.qmd (figures and tables). They are
 # derived GFW products (CC BY-SA), reproducible from the qmd, so not tracked.
 reports/explore/

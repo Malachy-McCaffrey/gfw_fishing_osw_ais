@@ -158,7 +158,7 @@ lattice_nb <- function(ix, iy, ids) {
 }
 
 # Model cache ---------------------------------------------------------------
-# Plan, "Runtime and caching": the BAG and Phase 6–7 models can take minutes
+# Plan, "Runtime and caching": the BAG and Phase 5–6 models can take minutes
 # to hours, and R renders are not frozen. fit_cached() saves each fit under a
 # hash of everything it depends on, and refits only when that hash changes.
 # This stands in for `targets` (not a dependency).

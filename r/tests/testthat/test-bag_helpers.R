@@ -1,4 +1,4 @@
-# Tests for r/bag_helpers.R (Phase 5)
+# Tests for r/bag_helpers.R (Phase 4)
 
 test_that("bag_prepare() sets the BAG reference levels and z-scores terrain", {
   d <- tibble(stage = c("Stage 2", "Stage 1", "Stage 3", "Stage 1"),

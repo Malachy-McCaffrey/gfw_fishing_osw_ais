@@ -124,7 +124,7 @@ correlogram <- function(y, lw_list) {
 # Practical range ---------------------------------------------------------------
 # Plan, Phase 2 step 3: the distance at which a correlogram first drops below
 # `threshold` (0.1). It sets the Phase 3 weight sensitivity and the empirical
-# Matérn range rho0 for Phases 6–7.
+# Matérn range rho0 for Phases 5–6.
 #
 # `dist_km`: each lag's representative distance (band midpoints), increasing;
 # `I`: Moran's I at each lag. The crossing is interpolated linearly between
@@ -389,7 +389,7 @@ class_stability <- function(base, alt, ns = "ns") {
 }
 
 # Criterion 5: interim null surfaces -------------------------------------------
-# Decision 2026-10-20: until the Phase 6 model can simulate nulls, each null
+# Decision 2026-10-20: until the Phase 5 model can simulate nulls, each null
 # is a Gaussian random field with an exponential covariance whose practical
 # range is the gear's rho0 (correlation exp(-3) ≈ 0.05 at that distance),
 # reshaped to the observed values by rank: the lowest field value takes the
@@ -448,7 +448,7 @@ power_summary <- function(null_share, signal_share, min_excess = 0.10) {
 # Phase 3 runs thousands of permutation tests (about 3 h serially). Each block
 # of runs is saved to `dir` under a hash of everything it depends on (the
 # input values, settings, the spdep version and the helper code), and is
-# recomputed only when that hash changes. The plan's fit_cached() (Phase 5)
+# recomputed only when that hash changes. The plan's fit_cached() (Phase 4)
 # will do the same for models. `key`: a list of every input to `fun`.
 cached <- function(dir, name, key, fun) {
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)

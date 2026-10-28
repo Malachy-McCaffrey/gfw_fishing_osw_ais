@@ -1,4 +1,4 @@
-# Helpers for the BAG models (Phase 5, 10_bag.qmd). Source after the
+# Helpers for the BAG models (Phase 4, 10_bag.qmd). Source after the
 # tidyverse, r/paths.R, r/gfw_helpers.R and r/analysis_helpers.R:
 #   source("r/analysis_helpers.R"); source("r/bag_helpers.R")
 #

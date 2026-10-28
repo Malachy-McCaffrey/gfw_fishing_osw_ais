@@ -20,7 +20,7 @@ params:
   r_active_km: 5      # active_construction: a foundation going in this month within this distance
   r_cable_km: 2       # cable_works: a cable route with works this month within this distance
   # SRW sensitivity: month the 40 positions with no installation record are
-  # assumed installed (decision 2026-10-19)
+  # assumed installed (decision 2026-10-19, D-024)
   srw_planned_from: "2026-05-01"
 ---
 
@@ -513,13 +513,13 @@ come from three kinds of source, all read only:
 | RWF | layout GeoJSON (67 points) | Ørsted foundation CSV (65 WTG + 3 OSS foundations) | layout routes; inter-array works from 2025-11 (open) |
 | SRW | preliminary layout GeoJSON (85 points) | Ørsted foundation CSV (44 WTG + the OCS-DC jacket's 8 pin piles) | layout routes; no works dates |
 
-Rules, each decided on 2026-10-19:
+Rules, each decided on 2026-10-19 unless dated otherwise (`planning/decisions.md`, D-022 to D-026):
 
 - **Multi-day installations.** The foundation CSVs give one row per
   installation day, repeating the foundation's other fields. A foundation's
   `foundation_installed` is its first day and `foundation_end` its last, and
   its repeated rows must agree on structure, position and depth.
-- **SFW** (decision 2026-10-20): Ørsted's `sfw_monopile_install_orsted.csv`
+- **SFW** (decision 2026-10-20, D-032): Ørsted's `sfw_monopile_install_orsted.csv`
   ties each PSO monopile id (A01–A15, Z01) to its layout position and its
   installation days, so every SFW foundation has exact dates
   (`date_basis = "exact"`). It replaces the shared turbine window
@@ -541,7 +541,7 @@ Rules, each decided on 2026-10-19:
   (A01's, delivered as "AM0", was corrected to AM05 in the file on
   2026-10-20; the distance match is kept so a future truncation cannot
   misplace a foundation).
-- **Safety zones** (decision 2026-10-20): the U.S. Coast Guard set a 500 m
+- **Safety zones** (decision 2026-10-20, D-034): the U.S. Coast Guard set a 500 m
   safety zone around every SFW, RWF and SRW foundation
   (`references/infra_safety_zones.csv`, one rule per project). A zone is
   active from its foundation's installation to its project's rule end: SFW
@@ -550,7 +550,7 @@ Rules, each decided on 2026-10-19:
   non-construction vessels are excluded by regulation, so lost effort there is
   mandated, not avoidance. The rules enforce the zones only during active
   construction, so an enforcement-only variant (installation days only) is
-  kept for the Phase 8 sensitivity run.
+  kept for the Phase 7 sensitivity run.
 
 Per cell × month covariates, from cell centroids (the safety-zone shares
 from the cell polygons):
@@ -672,7 +672,7 @@ check("SFW: installation dates equal PSO report Table 3 for all 13 monopiles",
         isTRUE(all(sfw_vs_pso$foundation_installed == sfw_vs_pso$first_date &
                      sfw_vs_pso$foundation_end == sfw_vs_pso$last_date)))
 
-# SRW positions with no installation record: planned (decision 2026-10-19)
+# SRW positions with no installation record: planned (decision 2026-10-19, D-024)
 srw_planned <- srw_lay |> filter(!grid_pos %in% srw$grid_pos) |>
   mutate(asset_type = "wtg", layout_offset_m = 0)
 
@@ -797,7 +797,7 @@ cable_long <- tibble(cell_id = rep(grid$cell_id, length(months)),
                      year_month = rep(months, each = nrow(grid)),
                      cable_works = c(cable_works))
 
-# USCG 500 m safety zones (decision 2026-10-20): one rule per project. A zone
+# USCG 500 m safety zones (decision 2026-10-20, D-034): one rule per project. A zone
 # is active from its foundation's installation to its project's rule end;
 # a planned foundation has none
 sz_rules <- read_csv(paths$safety_zones, col_types = cols(.default = "c")) |>

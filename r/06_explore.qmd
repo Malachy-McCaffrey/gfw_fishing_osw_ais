@@ -233,7 +233,7 @@ Per surface (dataset × gear × stratum) at every time step: percent zero,
 mean, variance, var/mean, skewness (type 2), and quantiles of the positive
 values. The Tweedie power is the slope of log variance on log mean across
 cells, from each cell's 128 monthly values. A profile-likelihood estimate
-needs `glmmTMB`, which is installed at Phase 5; it is deferred to there.
+needs `glmmTMB`, which is installed at Phase 4; it is deferred to there.
 
 ```{r}
 surface_keys <- list(stage = "stage", stage_season = c("stage", "season"),
@@ -604,7 +604,7 @@ the 12 months before its first window, against the rest of the Primary fleet
 in the same 12 months. Hulls above **twice** the fleet share are flagged, as
 PROVIDER would have been before its window moved (caveat 11). A share on a
 handful of hours is noise, so a hull needs at least **20 pre-window hours**
-in the dataset to be flagged (decision 2026-10-19: the first render flagged
+in the dataset to be flagged (decision 2026-10-19, D-017: the first render flagged
 Cailyn & Maren, 338389953, on 5 VP hours, 2 of them in the leases; no action
 was taken on it).
 
@@ -692,14 +692,14 @@ Test: a quasi-Poisson GLM of each indicator on `band + year` against
 `band × year`, by F test. A significant interaction means the bands do not
 trend in parallel.
 
-**Reading the result (decision 2026-10-19).** With 35 band-years per test
+**Reading the result (decision 2026-10-19, D-018).** With 35 band-years per test
 and large year-to-year variation, a non-significant interaction is weak
 evidence of parallel trends, not proof. The **raw all-vessel series is not
 an uptake measure**: inside the leases it rises several-fold to a 2019–2020
 peak and falls back in 2021, while the other bands roughly double. That
 pattern is pre-construction project traffic (site surveys), not AIS
 adoption. The BAG therefore proceeds within the AOI as planned, and a
-`band × year` pre-trend term is added for every gear as a **Phase 8
+`band × year` pre-trend term is added for every gear as a **Phase 7
 sensitivity run**, whatever these tests say.
 
 ```{r}
@@ -917,7 +917,7 @@ p
 
 ## Step 10: construction exposure and event time
 
-Descriptive groundwork for the timing BAG (plan, Phase 5 steps 1–2), from the
+Descriptive groundwork for the timing BAG (plan, Phase 4 steps 1–2), from the
 Ørsted foundations and cables (05, step 8):
 
 1. **Infrastructure map:** every foundation coloured by when it went in
@@ -934,7 +934,7 @@ Descriptive groundwork for the timing BAG (plan, Phase 5 steps 1–2), from the
    per dataset × gear × project. Season is not removed, so read the band
    contrasts within each panel, not the absolute level. Every foundation
    now has exact installation days, SFW's included (Ørsted's crosswalk,
-   decision 2026-10-20); SRW has 14 months after its first foundation.
+   decision 2026-10-20, D-032); SRW has 14 months after its first foundation.
 
 ```{r}
 #| fig-height: 7
@@ -1016,8 +1016,8 @@ Phase 1's gate is three decisions, not assertions:
    hours to be flagged.
 3. **Parallel pre-construction trends** (step 7) → proceed with the
    within-AOI BAG. Otherwise add a `band × year` pre-trend term to every BAG
-   model and say so. Whatever the tests say, the pre-trend term is a Phase 8
-   sensitivity run for every gear (decision 2026-10-19).
+   model and say so. Whatever the tests say, the pre-trend term is a Phase 7
+   sensitivity run for every gear (decision 2026-10-19, D-018).
 
 ```{r}
 gate <- list(

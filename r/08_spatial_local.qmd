@@ -15,7 +15,7 @@ params:
   analysis: ""
   spatial: ""
   processed_gfw: ""
-  # Permutations (decision 2026-10-20): 999 throughout. The z-moment p has
+  # Permutations (decision 2026-10-20, D-036): 999 throughout. The z-moment p has
   # no floor, so more draws only refine each cell's permutation mean and
   # variance; one count everywhere keeps the main, robustness and power runs
   # calibrated alike
@@ -58,7 +58,7 @@ are seen, then adopt one as the primary hotspot method.
 | 1 | Both statistics on every dataset × gear × stage (18) and × stage × season (36) surface, BH-FDR at q = 0.05 and 0.10 within each surface |
 | 2 | Classes and maps: Gi\* bins −3…+3, LISA quadrants |
 | 3 | Stage-change classes S1→S2, S2→S3, S1→S3, overall and within each season (the archive's scheme) |
-| 4 | Criteria 1–5 (criterion 6 waits for Phase 5) |
+| 4 | Criteria 1–5 (criterion 6 waits for Phase 4) |
 | 5 | Scorecard and gate |
 
 | Criterion | Question |
@@ -68,9 +68,9 @@ are seen, then adopt one as the primary hotspot method.
 | 3 Unique information | LISA's HL / LH outliers inside the leases and on their boundaries |
 | 4 Stability | Classes kept across permutation seeds, weights, and a leave-one-vessel-out jackknife |
 | 5 Power | Detection of a planted 2 km avoidance halo and a 2–4 km spillover ring |
-| 6 Agreement with BAG | **Deferred**: needs the Phase 5 estimates |
+| 6 Agreement with BAG | **Deferred**: needs the Phase 4 estimates |
 
-**Settings (decisions 2026-10-20).**
+**Settings (decisions 2026-10-20, D-036 to D-039).**
 
 - **z-moment permutation p-values** (`Pr(z != E(Ii))`, `Pr(z != E(Gi))`),
   999 conditional permutations: each cell's statistic is standardised by its
@@ -91,7 +91,7 @@ are seen, then adopt one as the primary hotspot method.
 - **Criterion 5 uses interim nulls:** a Gaussian random field at each
   gear's *ρ*₀, reshaped by rank to the observed Stage 1 values. It keeps the
   zero share, the positive distribution and the spatial scale, but none of
-  the real geography. It is re-run with Phase 6 model simulations later.
+  the real geography. It is re-run with Phase 5 model simulations later.
 
 Every permutation run is cached in `reports/spatial/{pipeline}/cache/` under a hash of
 its inputs (`cached()`), so a re-render recomputes only what changed. The
@@ -277,7 +277,7 @@ counts |> filter(season == "all") |> knitr::kable()
 ```
 
 Per-cell results go to `local_{vp,afe}.gpkg` (one layer, every surface,
-long format) for Phase 5 and the thesis maps.
+long format) for Phase 4 and the thesis maps.
 
 ```{r}
 for (ds in datasets) {
@@ -620,7 +620,7 @@ HL); at q = 0.05. Each replicate's null and signal runs share the field and
 the permutation seed, so their difference is the signal's doing. **A
 replicate detects the signal if it raises the flagged share by at least
 `r 100 * qparams$min_excess` percentage points of the zone** (paired;
-decision 2026-10-20); power is the share of replicates that do
+decision 2026-10-20, D-039); power is the share of replicates that do
 (`power_summary()`). `fp` is the flagged share with no signal: clusters the
 null field happens to put in the zone, not a test error rate.
 `r qparams$nsim_power` permutations per run.
@@ -684,7 +684,7 @@ c5 |> select(dataset, gear_class, signal, statistic, power, mean_excess, fp) |>
 
 ### Criterion 6: agreement with the BAG estimates
 
-Deferred to after Phase 5. It compares the change classes in step 3
+Deferred to after Phase 4. It compares the change classes in step 3
 (`local_change_area.csv`) with the BAG estimates by band: a method whose
 `lost hot` / `gained hot` area lines up with the modelled gradient change is
 the externally validated one.
@@ -726,7 +726,7 @@ gate |> kable_round(2)
 ```
 
 The primary method is decided from the scorecard (plan, step 5) and recorded
-in the plan's decisions log. Criterion 6 can still change it after Phase 5.
+in `planning/decisions.md` (D-036 to D-041). Criterion 6 can still change it after Phase 4.
 
 ## Manifest and provenance
 

@@ -25,6 +25,28 @@ execute:
 > Review the repo and generate a step-by-step iterative work /plan with high /effort that encompasses exploratory analysis, spatial analysis, and statistical analysis. I want you to evaluate the data structure and distribution, identifying any caveats or limitations. Then recommend the most appropriate treatments or transformations of the vessel presence and apparent fishing effort data. I am most interested in analyzing cell x stage x gear and cell x month x gear relationships for the primary sets. For the spatial analysis, begin with Global Moran's I and Getis-Ord General G, then compare the efficacy of a Local Moran's I vs. Getis-Ord Gi* analysis. Following these tests, I want to assess the value of calculating and visualizing an autocorrelated kernel density estimate. I will gather turbine and cable location data with installation dates from Orsted, so we can also execute the BAG spatial-temporal models. Provide me with a comparison of approaches for a Tweedie GLMM, Hurdle model, or an Bayesian INLA-SPDE, including what conditions each of these approaches would require. I want the subsequent workflow to be written in R and grounded in FAIR data principles. Name the plan as gfw_analysis_plan.qmd in \planning. Include this prompt at the top of the document. If you have any questions, interview me.
 :::
 
+## Status {#sec-status}
+
+As of 2026-10-28. Decision IDs refer to [`planning/decisions.md`](decisions.md).
+
+| Phase | Notebook | Status | Outcome recorded in |
+|---|---|---|---|
+| 0: analysis tables, covariates, weights; Ørsted infrastructure (step 8) | `05_prepare_analysis.qmd` | **Done** (2026-10-19; infrastructure revised 2026-10-20) | Its gate; D-021 to D-026, D-032 to D-035 |
+| 1: exploratory analysis | `06_explore.qmd` | **Done**, gate passed 2026-10-19 | D-016 to D-018 |
+| 2: global spatial autocorrelation | `07_spatial_global.qmd` | **Done** (2026-10-20) | D-027 to D-031 |
+| 3: Local Moran's I vs Gi\* | `08_spatial_local.qmd` | **Done** (2026-10-20), except criterion 6, deferred to Phase 4; the primary method stays provisional | D-036 to D-041 |
+| 4: BAG models | `10_bag.qmd` | **In progress** on interim models (Phase 5's recommended form), refitted once Phase 5 settles the base model | D-047 to D-052 |
+| 5: frequentist models | `11_models_frequentist.qmd` | Not started | @sec-models |
+| 6: INLA-SPDE | `12_models_inla.qmd` | Not started | @sec-models |
+| 7: sensitivity | `13_sensitivity.qmd` | Not started | @sec-sensitivity |
+| 8: synthesis | `14_synthesis.qmd` | Not started | @sec-synthesis |
+| Data: GFW pipeline v5 | `01`, then `01a_compare_pipelines.qmd` | **In progress**: versioned layout and v4 roster done; v5 pull and comparison next | `planning/gfw_pipeline_v5_plan.qmd`; D-053 to D-057 |
+
+Every number typed in this plan was measured on the 2026-10-06 pull, which
+is GFW pipeline **v4**. If v5 is adopted (D-053), they are re-measured. The
+split of this plan into a plan and a methods document waits for that
+decision and for Phase 5 (D-058).
+
 ## Summary
 
 The R workflow (`r/01`–`r/04`) ends with zero-filled cell tables for the
@@ -88,75 +110,12 @@ Six findings from profiling the current outputs (2026-10-06 pull, measured
    interview, BAG supports inference about **redistribution relative to the
    outer ring**, not about net change in regional effort.
 
-### Decisions log
+### Decisions
 
-| Topic | Decision | Consequence for this plan |
-|---|---|---|
-| *2026-10-20, Phase 5 setup* | | |
-| Phase 5 before Phase 6 | **Option (a): run Phase 5 now on an interim model**, the form Phase 6 recommends (`sdmTMB` with an SPDE spatial field; stage × season: a shared field plus an iid field per stage; timing models: a shared field plus an AR1 field over years; NB2 for VP, Tweedie for AFE, with delta-Gamma alongside for the AFE stage × season models). Refit when Phase 6 settles the base model | Every fit is cached under its full specification (`fit_cached()`), so Phase 6 changes only the specification. The power analysis and Phase 3 criterion 5 are re-run on Phase 6's base model |
-| Mesh | **2 km cutoff** (783 vertices for VP mobile) | Same headline estimate as a 1 km cutoff (rate ratio 1.01 vs 0.98, SE 0.15 both) at half the fitting time (168 vs 348 s) |
-| Power simulations | **100 per effect size** (not 200), effects 0, 20, 30 and 50%, run as parallel worker processes (`callr`) | About 2,000 refits; 200 would double a multi-hour run. Raise for any gear whose curve crosses 0.8 between two tested effects |
-| Convergence rule | A fit counts as converged when `sanity()` reports a positive-definite Hessian, positive eigenvalues, optimiser convergence and small gradients. `se_magnitude_ok` is not required | When depth acts linearly, the depth smooth's wiggliness parameter collapses to zero and its SE is uninformative; this is harmless |
-| Dependencies | **Installed** 2026-10-20: `glmmTMB` 1.1.15.2, `DHARMa` 0.5.0, `marginaleffects` 1.0.0 (with `sandwich`); already present: `sdmTMB` 1.1.0, `fmesher` 0.8.0, `TMB`, `mgcv` 1.9-3. Recorded with `renv::snapshot()` once `10_bag.qmd` uses them | `mgcv` was **not** in `renv.lock` despite the 2026-10-18 entry below; the snapshot restores it |
-| Model cache | **`fit_cached()` built** (`r/analysis_helpers.R`, with `fit_cache_path()`): fits in `data/processed/models/<hash>.rds` with a JSON sidecar (fit time, package versions); `reports/` added to `.renvignore` | — |
-| *2026-10-20, pre-Phase 5 charter screen* | | |
-| Systematic charter-like vessel screen | **Run before Phase 5** (`r/scratchpad/charter_screen.R`, results in `charter_screen_2026-10-20.csv`). Every Primary vessel × dataset × gear in Stages 2–3, flagged if its lease share was > 2× its fleet's on ≥ 20 h (A) **and** it ran ≥ 12 h per active day (B) or had no Stage 1 history (C). 36 vessels flagged | The BAG headline is the inside-the-leases contrast that charter vessels distort. Flagged vessels held 32–56% of fixed and a third of mobile Stage 2–3 inside-lease AFE hours |
-| ARGO (338350046), TRADITION (368361590), GULF STREAM (368128790) | **Excluded as safety charters from 2021-05-01**, as for AMELIA JOYCE and the others: same review status (safety suggested, kept 2026-10-15) plus the full pattern (A + B + C: 12.5–18.9 h per active day, 54–73% inside) | Consistency with the 2026-10-20 exclusions |
-| SANDRA JANE (367327960) | **Excluded as a safety charter from 2021-05-01** (new row). Never reviewed before; survey period 19.6 h per active day, 47% inside the leases, first fishing record 2021-05-03 (the safety contract's start), 23% of mobile AFE inside-lease hours in Stage 2. Its 134 h of earlier fishing are kept | — |
-| BUCKEYE (368175660) and the A + C-only vessels | **Kept.** BUCKEYE's long days appear only in AFE (VP 7.9 h/day). The A + C vessels fish normal-length days and are most likely new AIS carriers fishing in or near the leases, the behaviour Phase 5 measures | Their influence is reported through the Phase 5 leave-one-vessel-out runs, not removed |
-| *2026-10-20, safety-charter exclusions* | | |
-| AMELIA JOYCE (368080240), LILY M (368231710), JACK M (368250590) | **Excluded as safety charters from 2021-05-01, open-ended** (`references/vessel_decisions.csv`: `accept`, Operation `safety`, Identified_By `behavioural_screen`). This reverses the 2026-10-15 decision to keep them. 2021-05-01 is the start of the Ørsted–SSNA safety-vessel contract, the window already used for Beth Anne and Pamela Ann | Found while preparing the ROSA webinar: together they held 55% of Stage 3 mobile AFE hours inside the leases, with 34–57% of their own hours there (AMELIA JOYCE 16.6 h per active day), the PROVIDER pattern (caveat 11). Their hours from May 2021 leave Primary; 03–08 re-run, and the plan's typed figures predate this change |
-| *2026-10-20, Phase 3* | | |
-| Local p-values | **z-moment permutation p** (`Pr(z != E(Ii))`, `Pr(z != E(Gi))`), 999 conditional permutations, for both statistics and every run | No p-value floor, so BH-FDR can reject on sparse surfaces. The rank p (floor 2/1,000) rejected nothing on the fixed and pole-and-line AFE surfaces. The folded p, chosen first, was **withdrawn**: spdep 1.4.2's `localG_perm()` returns 0.001 for empty neighbourhoods where a hand-coded permutation gives about 0.4, so it flagged every empty neighbourhood. The normal approximation is checked by the criterion-5 null runs |
-| Gi\* scale | **The non-negative G scale** (`g_scale()`), as for General G | `localG_perm()` divides by the surface total; on AFE's log `y_vst` that total is negative and every z changes sign |
-| Criterion 5 nulls | **Interim:** Gaussian random field at each gear's *ρ*₀ (clamped 3–10 km), rank-mapped onto the observed Stage 1 values, 40 replicates | Re-run with Phase 6 simulations when they exist |
-| Criterion 5 detection | **Paired:** each replicate's signal run against its own null (same field, same seed); detected if the signal raises the zone's flagged share by **≥ 10 percentage points**. Power = share of replicates detecting. Mean excess and any-excess share reported alongside | An unpaired rule (beating the spread of all null replicates) mostly measures where random clusters fall. The gate (halo power < 0.5 for both → maps descriptive) uses this power |
-| Criterion 6 | **Deferred** until Phase 5 | The primary method chosen in Phase 3 stays provisional |
-| Emerging hot spot analysis | **Skipped for now** (would add `sfdep`) | Optional extension left open |
-| *2026-10-20, SFW crosswalk* | | |
-| SFW foundation source | **Ørsted's `sfw_monopile_install_orsted.csv` is primary**: PSO id (A01–A15, Z01) × layout position (`USCG_ID`) × installation day, with as-built DMS coordinates. **PSO Table 3 (`references/sfw_foundation_dates.csv`) is kept as an independent check**, and `05` asserts the two agree | Every SFW foundation has exact dates (`date_basis = "exact"`); the shared turbine window and its sensitivity run are retired. Verified 2026-10-20: 13 foundations (A10 and Z01 over two days each), dates identical to Table 3, every position within 0.3 m of the as-built layout (mariner notice, 2025-07-25), Z01 on AP06 as inferred |
-| A01's truncated id | The CSV's `USCG_ID` for A01 read **"AM0"**; its coordinates fall on **AM05** (0 m). **Corrected to AM05 in the file by the user, 2026-10-20** | `05` still matches SFW positions by distance and asserts every `USCG_ID` names its match; a reference test now requires every id to be a complete grid name |
-| USCG safety zones | **500 m around every foundation, from its installation to its project's rule end** (`references/infra_safety_zones.csv`): SFW enforced 2023-05-01 to 2024-05-31 (user; 88 FR, 2 May 2023, extended by 88 FR 87716); RWF rule to 2027-05-31; SRW rule to 2028-05-31, so RWF and SRW zones stay on to the end of the window | New covariate `sz_share(t)` (area share of the cell inside an active zone) in the month and season-year tables and the timing model (caveat 17). Inside a zone, lost effort is mandated, not avoidance |
-| Zone enforcement | The RWF and SRW rules enforce zones **only during active construction** (about 48 h to 1 week per location). **Sensitivity**, not the main definition: `sz_share_install` counts each zone on its installation days only | One Phase 8 run; the main covariate follows the installation-to-rule-end timing |
-| *2026-10-20, Phase 2* | | |
-| General G scale for AFE | **log(1 + density / *c*)**, i.e. `y_vst` − log(*c*), with the same per-surface *c*. VP keeps √density | General G needs non-negative values, and AFE's `y_vst` is negative at every zero cell. Moran's I is unchanged by the shift, so I and G read the same surface (`g_scale()` in `r/spatial_helpers.R`; @sec-global) |
-| Correlogram range of 3–5 km | **Borderline: queen stays primary, and a distance-band run is added to Phase 3** at the range rounded up to a whole km | The plan's gate covered < 3 km and > 5 km only. A censored range (I ≥ 0.1 at 20 km) counts as > 5 km. Every band run is capped at 10 km, censored or not (VP fixed's uncensored ~18 km range would otherwise give a 19 km band) |
-| *ρ*₀ | **Median of the three stage ranges** per dataset × gear, from the distance correlogram of `y_vst` (2-km annuli to 20 km, threshold I = 0.1) | One prior per dataset × gear model in Phases 6–7, written to `global_rho0.csv` and its sidecar |
-| VP mobile range prior | Its correlogram is **censored** (I ≥ 0.1 at 19 km in every stage), so the Phase 2 *ρ*₀ is a lower bound only. **Phase 7 takes its range prior from the Matérn range of the Phase 6 `sdmTMB` fit** | Phase 6 meshes and CV blocks for VP mobile use the 10 km cap. The other five dataset × gear priors use the Phase 2 *ρ*₀ (@sec-models) |
-| Interval for I | **Cell-block bootstrap**, blocks of side *ρ*₀ clamped to 3–10 km, shifted to centre on the full-grid I | Moran's I is reported with an interval as well as the permutation null band |
-| *2026-10-19, Ørsted infrastructure* | | |
-| Where it is built | **In `05` (Phase 0, step 8)**, not a separate `09`. Layers in `data/sf/infra/infrastructure.gpkg` (writing to `data/sf/infra/` approved) | The exposure covariates sit in the month and season-year analysis tables from the start, so Phases 1 and 5 read one table (@sec-infra) |
-| Multi-day installations | The foundation CSVs (which replaced the Excel files) give **one row per installation day**: first day = `foundation_installed`, last = `foundation_end`; repeated rows must agree on position, structure and depth | Multi-day installs (e.g. RWF Z01a, 17 days) count as under construction for every day they span |
-| SFW turbine ids | *Superseded 2026-10-20 (see "SFW crosswalk" above).* The PSO report's A01–A15 had no published crosswalk to the layout positions; Z01 was placed on AP06 and the 12 turbines shared the turbine window, 2023-07-02 to 2023-08-07 | — |
-| SRW's 40 unrecorded positions | **Planned, not installed.** Sensitivity: installed from May 2026 | The primary covariates count 45 SRW foundations at the end of the window. A second table (`infra_cell_month_srw_planned.csv`) gives the upper-bound exposure |
-| Cable timing | **Static routes + coarse project windows.** Cable-lay dates per route are not published | `d_cable_km` is static. `cable_works(t)` is on only where a window is known (SFW 2023-03 to 2023-09; RWF inter-array from 2025-11) |
-| Substations | **Counted with turbines** in the foundation covariates | A jacket or monopile is the same seabed obstruction to gear; the covariates are renamed `d_found_km`, `n_found_2km` |
-| *2026-10-19, BAG power* | | |
-| Simulation power analysis | **Added to Phase 5** (step 3): minimum detectable BAG effect per gear × dataset, from the Phase 6 base model with injected effects | Every BAG estimate is reported against its MDE. A gear with MDE > 50% is reported descriptively (@sec-bag-power). |
-| Pre-trend equivalence test | **Added to Phase 5** (step 4): TOST on band-specific pre-construction trends at cell level, margin tied to the MDE | Parallel trends must be shown, not just not rejected (@sec-bag-pretrend) |
-| *2026-10-19, Phase 1 gate* | | |
-| Transforms | **Kept**: √ for VP, log(density + *c*) for AFE. No dataset × gear met the step 3 switch rule | `y_vst` in `05` unchanged |
-| Pre-window screen | Cailyn & Maren (338389953) was flagged on 5 VP h (2 in the leases): **no action**. A hull now needs **≥ 20 pre-window hours** to be flagged | No hull goes back to `03`; the Stage 1 baseline stands |
-| Pre-construction trends | No band × year test rejected parallel trends, but power is low, and the raw all-vessel series is dominated by project survey traffic inside the leases (2018–2020). **Proceed with the within-AOI BAG**, and add a **band × year pre-trend term for every gear as a Phase 8 sensitivity run** | The raw all-vessel series is not used as an uptake measure |
-| *2026-10-18, third follow-up* | | |
-| Descriptive time steps | **The same for every gear and dataset:** stage (default), stage × season (Apr–Sep / Oct–Mar) and season-year (22 steps) | Moran's I, General G, LISA, Gi\* and the maps are comparable across gears, because none of them changes with the time step. The seasons are Apr–Sep and Oct–Mar because both stage boundaries fall between them (@sec-time-steps). |
-| Model time steps | **A shared stage × season BAG model** for every modelled gear. **Timing models:** monthly for VP and mobile AFE, season-year for fixed AFE | The BAG effects are comparable across gears. Monthly resolution is kept only where the data support it (@sec-time-steps). |
-| Season standardisation | **Level comparisons only** (stage rate tables, density-difference maps, descriptive BAG). Raw rates for the spatial statistics. **Never in the models**, which carry a season term instead | The standardisation costs at most 4% of effective sample size, so its noise is negligible. The spatial statistics are unaffected by multiplying a surface by a constant, so they gain little from it. Rescaled hours are no longer counts, which would break NB2 (caveat 8). |
-| *2026-10-18, second follow-up* | | |
-| PROVIDER (367717050) | Charter window moved back to **2020-06-18** (`references/vessel_decisions.csv`; reasoning in its `Notes`) | Its June–September 2020 hours leave Primary Stage 1. 03 and 04 re-run, and every number in this plan re-measured afterwards. |
-| `.renvignore` | Added: `planning/`, plus the gitignored `r/scratchpad/` and `.venv/` | renv's dependency scan no longer counts the plan's example chunks as used packages. When `.renvignore` exists, renv reads it instead of `.gitignore`, so the gitignored code folders are listed too. |
-| *2026-10-18, follow-up* | | |
-| Dependencies | **Approved, phase by phase** | Each package in @sec-workflow is installed and snapshotted when its phase starts. |
-| `mgcv` | **Pinned** in `renv.lock`: 1.9-3, with `Matrix` 1.7-4 and `nlme` 3.1-168 | Available to Phases 5–6 with a recorded version |
-| PROVIDER (367717050) | Charter window changed to **2020-10-01 onward**; 03 and 04 re-run | Its Stage 2–3 hours are out of Primary. Stage 1 2020 is still open (caveat 11 in @sec-caveats). Numbers in this plan were re-measured after the change. |
-| Land | **The AOI does not touch land** | No barrier model. The SPDE field is stationary over open water (@sec-models). |
-| Bathymetry | **Added as a model covariate** | NCEI CRM Vol. 1 (2023, 1 arc-second), with derived terrain covariates (@sec-env) |
-| Benthic habitat | **Pending from Ørsted** | Specification and coverage rules in @sec-env. Models are built so the habitat terms can be added when the data arrive. |
-| *2026-10-18, interview* | | |
-| Stage 3 | **Keep the three stages** in `dev_stages` | Stage tables stay as built. Project timing enters only through the time-varying infrastructure covariates in the monthly BAG models (@sec-bag). |
-| Control area | **Within-AOI gradient only** | BAG uses the 8–15 km ring as the reference. Inference is limited to redistribution, stated in every write-up (@sec-bag-limits). |
-| AKDE | **Assess, then drop** | @sec-akde records why AKDE does not fit these data, and what replaces it for visualisation. |
-| Timeline | **Thesis, about 3–6 months** | Full scope. INLA-SPDE is the confirmatory and extension model; the frequentist models are primary (@sec-models). |
+Every decision is recorded, with its ID, in
+[`planning/decisions.md`](decisions.md). Notes in this plan and in the qmds
+cite those IDs, e.g. "(decision 2026-10-20, D-047)". The log was moved
+there from this section on 2026-10-28 (D-058).
 
 ## What the analysis reads {#sec-inputs}
 
@@ -437,7 +396,7 @@ the methods with numbers recomputed at render time, not typed.
     (AFE). PROVIDER made up 1,452 of the 2,878 h (50%) of Primary mobile AFE
     in June–September 2020.
 
-    **Decision (2026-10-18):** `valid_from` moved from 2020-10-01 to
+    **Decision (2026-10-18, D-011):** `valid_from` moved from 2020-10-01 to
     **2020-06-18** in `references/vessel_decisions.csv`.
 
     *Reasoning:*
@@ -472,7 +431,7 @@ the methods with numbers recomputed at render time, not typed.
     *Treatment:*
     - Make the pre-window screen a standing check in `06` (Phase 1, step 5),
       so every charter window is tested against the activity just before it.
-    - Phase 8 keeps the "exclude 2020" run, for COVID and the stage boundary.
+    - Phase 7 keeps the "exclude 2020" run, for COVID and the stage boundary.
 
 ### Statistical
 
@@ -577,7 +536,7 @@ Adding them to the models does three things:
 Both covariates are **static**. They cannot confound the period × distance
 (BAG) interaction, which varies over time. They can be collinear with the
 distance *main effect*, and with the spatial field (spatial confounding).
-Phase 6 checks both (below).
+Phase 5 checks both (below).
 
 #### Bathymetry: NCEI Coastal Relief Model Vol. 1 (2023)
 
@@ -650,7 +609,7 @@ it cannot enter the full-AOI models. The rules:
 
 ### Time steps {#sec-time-steps}
 
-**Decision (2026-10-18):** one set of time steps for all descriptive work,
+**Decision (2026-10-18, D-013, D-014):** one set of time steps for all descriptive work,
 and model time steps that differ by gear only where the data require it.
 
 **Seasons are Apr–Sep and Oct–Mar.** Both stage boundaries (2020-10-01 and
@@ -721,7 +680,7 @@ for spatial statistics.
   for a monthly hurdle model.
 - **Fixed AFE moves to season-year:** with 1,381 positives over 465 cells,
   monthly occupancy is too sparse for a stable binomial part (and for the
-  Laplace approximation in INLA, Phase 6 condition 5). Most of its off-season
+  Laplace approximation in INLA, Phase 5 condition 5). Most of its off-season
   months are near-certain zeros.
 - **What season-year costs:** exposure onset is blurred by up to five months.
   The time-varying covariates for season-year models are the mean over the
@@ -793,7 +752,7 @@ place:
 | 06 | `06_explore.qmd` | 1: EDA | figures, tables |
 | 07 | `07_spatial_global.qmd` | 2: Global Moran's I, General G, correlograms | `spatial/global_*.csv` |
 | 08 | `08_spatial_local.qmd` | 3: Local Moran's I vs Gi\*, change classes | `spatial/local_*.gpkg` |
-| 09 | — | *Folded into `05` step 8 (decision 2026-10-19); the number is left unused so the later files keep theirs* | — |
+| 09 | — | *Folded into `05` step 8 (decision 2026-10-19, D-021); the number is left unused so the later files keep theirs* | — |
 | 10 | `10_bag.qmd` | 5: BAG models | `models/bag_*.rds` |
 | 11 | `11_models_frequentist.qmd` | 6: Tweedie and hurdle GLMMs (`glmmTMB`, `sdmTMB`) | `models/freq_*.rds` |
 | 12 | `12_models_inla.qmd` | 7: INLA-SPDE | `models/inla_*.rds` |
@@ -1054,7 +1013,7 @@ assumptions the later phases rest on.
    per band (`gfw_vp_id_cell_month.csv`). Do the bands rise in parallel
    *before* construction (Stages 1–2)? Test with a `band × year` interaction
    restricted to Stages 1–2. (Stages 1–2 end before SFW's first works in
-   March 2023, so they are pre-construction for every project. The Phase 5
+   March 2023, so they are pre-construction for every project. The Phase 4
    equivalence test extends each cell's pre-period to its nearest project's
    first works, @sec-bag-pretrend.)
 8. **Maps.** Density maps per gear × stage and per gear × stage × season, on
@@ -1067,7 +1026,7 @@ assumptions the later phases rest on.
    season-years / 22). This confirms the model time steps in
    @sec-time-steps: monthly for VP and mobile AFE, season-year for fixed AFE.
 10. **Construction exposure and event time** (descriptive groundwork for
-    Phase 5 steps 1–2, needs the `05` step 8 covariates):
+    Phase 4 steps 1–2, needs the `05` step 8 covariates):
     - a map of every foundation coloured by installation quarter, with the
       cable routes by type;
     - cells per month reached by each covariate (`n_found_2km > 0`,
@@ -1115,7 +1074,7 @@ Phase 3 weights and the SPDE range priors.
    and by distance band (0–2, 2–4, … 20 km). The distance where I falls to
    about 0.1 gives:
    - the candidate neighbourhood for the Phase 3 weight sensitivity;
-   - an empirical prior for the Matérn range in Phase 7 (*ρ*₀).
+   - an empirical prior for the Matérn range in Phase 6 (*ρ*₀).
 4. Summary figure: I and G z by gear × stage, with the stage × season values
    alongside. Season standardisation is not used here: these statistics do
    not change when a surface is multiplied by a constant (caveat 8).
@@ -1151,7 +1110,7 @@ global_stats <- function(y_I, lw_W, lw_B, y_G = y_I) {
   # y_vst (√density), but NOT for AFE's y_vst, log(density + c), which is
   # negative wherever density < c, including every zero cell. So G takes
   # `y_G`: √density for VP, and log(1 + density / c) = y_vst − log(c) for AFE,
-  # y_vst shifted so a zero cell is exactly 0 (decision 2026-10-20). Moran's I
+  # y_vst shifted so a zero cell is exactly 0 (decision 2026-10-20, D-027). Moran's I
   # is unchanged by adding a constant, so I and G still read the same surface.
   # In r/07 this is global_stats(y_I, lw_W, lw_B, y_G = g_scale(density, ds)).
   gg <- globalG.test(y_G, lw_B)
@@ -1181,7 +1140,7 @@ The interval for I itself comes from a cell-block bootstrap, which is cheap.)
 
 - Correlogram range below about 3 km → queen weights are adequate.
 - Range above about 5 km → add a distance-band weights run to Phase 3.
-- Range of 3–5 km (borderline, decision 2026-10-20) → queen stays primary,
+- Range of 3–5 km (borderline, decision 2026-10-20, D-028) → queen stays primary,
   and the distance-band run is added as well, at the range rounded up to a
   whole km.
 - Range censored (I still ≥ 0.1 at 20 km) → counts as above 5 km.
@@ -1189,7 +1148,7 @@ The interval for I itself comes from a cell-block bootstrap, which is cheap.)
   never approaches the AOI's width.
 - *ρ*₀ per dataset × gear is the median of its three stage ranges
   (censored if two or more are). Write it to `global_rho0.csv` and its
-  provenance sidecar for Phase 7.
+  provenance sidecar for Phase 6.
 
 ## Phase 3: Local Moran's I vs Getis-Ord Gi\* (`08_spatial_local.qmd`) {#sec-local}
 
@@ -1227,19 +1186,19 @@ All criteria are fixed before the results are seen.
    - permutation seeds;
    - weights: queen vs second-order queen vs distance band (from Phase 2).
 5. **Detection power on a known signal.** Plant synthetic signals in null
-   surfaces simulated from the Phase 6 base model, which keeps the observed
-   zero structure and autocorrelation. *Until Phase 6 exists (decision
-   2026-10-20):* interim nulls, a Gaussian random field at each gear's *ρ*₀
-   rank-mapped onto the observed Stage 1 values; re-run with Phase 6
+   surfaces simulated from the Phase 5 base model, which keeps the observed
+   zero structure and autocorrelation. *Until Phase 5 exists (decision
+   2026-10-20, D-038):* interim nulls, a Gaussian random field at each gear's *ρ*₀
+   rank-mapped onto the observed Stage 1 values; re-run with Phase 5
    simulations when they exist. The planted signals:
    - a 2-km "avoidance halo" (–50% inside the leases);
    - a "spillover ring" (+50% at 2–4 km).
    Measure sensitivity and false-positive rate for each statistic after FDR.
    This is the most direct measure of efficacy for *this* question.
 6. **Stage-change readability.** Do the change classes (`gained hot`,
-   `lost hot`, …) from each method line up with the BAG estimates from Phase 5?
+   `lost hot`, …) from each method line up with the BAG estimates from Phase 4?
    Agreement with the model is the external validation. *Deferred until
-   Phase 5 has run; the primary-method choice stays provisional until then.*
+   Phase 4 has run; the primary-method choice stays provisional until then.*
 
 ### Steps
 
@@ -1247,7 +1206,7 @@ All criteria are fixed before the results are seen.
    `localG_perm(nsim = 999, iseed = 42)` on the non-negative G scale
    (`g_scale()`) for each dataset × gear × stage, and for each dataset × gear
    × stage × season. Use the **z-moment permutation p-values**
-   (`Pr(z != E(Ii))`, `Pr(z != E(Gi))`; decision 2026-10-20). Apply BH-FDR
+   (`Pr(z != E(Ii))`, `Pr(z != E(Gi))`; decision 2026-10-20, D-036). Apply BH-FDR
    within each surface at q = 0.05 and q = 0.10.
 2. Build classes:
    - Gi\* bins −3…+3 (99/95/90%), as in the archive;
@@ -1294,7 +1253,7 @@ gi   <- localG_perm(y_G, lw_B_self, nsim = 999, iseed = 42, alternative = "two.s
 # permutation mean and variance; no floor). Not the rank p ("... Sim"), whose
 # floor of 2/1,000 left the sparse AFE surfaces with no rejections, and not
 # the folded p, which spdep 1.4.2 gets wrong for Gi* on empty neighbourhoods
-# (decision 2026-10-20).
+# (decision 2026-10-20, D-036).
 # LISA classes: High-High, Low-Low, High-Low, Low-High where significant
 lisa_sig <- p.adjust(lisa[, "Pr(z != E(Ii))"], "BH") <= 0.05
 lisa_class <- ifelse(lisa_sig, as.character(attr(lisa, "quadr")$mean), "ns")
@@ -1330,42 +1289,7 @@ cube is dense enough: **mobile VP** (40% of domain cell-season-years active)
 and, as exploratory, mobile AFE (17%). Report the other gears as too sparse,
 not as "no trend".
 
-## Phase 4: Autocorrelated kernel density estimation, assessed and dropped {#sec-akde}
-
-**Decision (interview, 2026-10-18): drop AKDE.** The assessment that supports
-the decision:
-
-- **What AKDE needs.** AKDE (Fleming et al. 2015; `ctmm`) estimates an
-  individual's utilisation distribution from *timestamped relocations*. It
-  fits a continuous-time movement model to the empirical variogram of those
-  fixes, then corrects the kernel bandwidth for autocorrelation. It needs:
-  - irregular or regular fixes with times, per individual;
-  - enough fixes to resolve the home-range crossing time;
-  - range residency (a stationary home range).
-- **What these data are.** The 4Wings extract is vessel × 0.01° cell ×
-  *day* aggregates. It has no within-day timestamps, no positions finer than
-  the cell, and an unknown number of fixes behind each "1 h". Building
-  pseudo-fixes from cell centroids and dates would:
-  - impose a 1-day time step and an approximately 1 km spatial quantum,
-    making the variogram an artefact of the aggregation;
-  - violate range residency for transiting and multi-port vessels;
-  - answer a different question (*individual vessel ranges*) from the one in
-    this plan (*where effort is, by cell, and how it changes*).
-- **Value against cost.** AKDE would add no inferential value over the
-  cell-level models and would add a methodological weakness reviewers would
-  pick up. It would be valid only with point-level AIS, for example
-  MarineCadastre 1-minute AIS for selected vessels, and that is out of scope.
-- **What replaces it for visualisation.**
-  1. Model-based smoothed density surfaces: the predicted mean from the
-     Phase 6 or 7 spatial-field models, with uncertainty.
-  2. **Posterior exceedance-probability maps** from INLA,
-     P(density > baseline 90th percentile), as a model-based hotspot surface
-     that connects Phases 3 and 7.
-  3. For display only, a fixed-bandwidth kernel smooth of cell-centroid
-     densities with `KernSmooth::bkde2D` (already in `renv.lock`). Label it
-     as smoothing, not estimation.
-
-## Phase 5: Infrastructure data and BAG models (`05` step 8, `10_bag.qmd`) {#sec-bag}
+## Phase 4: Infrastructure data and BAG models (`05` step 8, `10_bag.qmd`) {#sec-bag}
 
 ### Ørsted turbine and cable data {#sec-infra}
 
@@ -1389,7 +1313,7 @@ the decision:
 `lay_end`, `burial_complete` (blank), `date_basis`, `source`,
 `version_date`. Fields are in `references/data_dictionary.md`.
 
-**Gaps and how they are handled** (decisions 2026-10-19):
+**Gaps and how they are handled** (decisions 2026-10-19, D-022 to D-026):
 
 - **SFW turbine ids** (resolved 2026-10-20). The PSO report numbers
   monopiles A01–A15 and the layout uses grid positions; Ørsted's
@@ -1474,7 +1398,7 @@ $$
   `s(depth_m)`, slope, BPI and, once available, habitat shares.
 - *γ*<sub>s</sub> are the **BAG effects**. The change in the inside / 0–2 km
   rate ratio between Stage 1 and Stages 2 and 3 is the headline estimate.
-- *ω*<sub>c</sub> is a spatial random effect (Phase 6 decides its form).
+- *ω*<sub>c</sub> is a spatial random effect (Phase 5 decides its form).
 
 **Timing model: cell × month × gear** (VP and mobile AFE; fixed AFE at cell ×
 season-year, with *s*<sub>cc</sub>(moy) replaced by the season term
@@ -1520,7 +1444,7 @@ $$
   the zone period: a recovery means the construction-era loss was
   exclusion, a persistent gap means lasting avoidance.
 - *ε*<sub>c,t</sub> is temporal correlation within a cell (AR1 on month or
-  year; Phase 6).
+  year; Phase 5).
 - For the season-year model the offset becomes
   log(months<sub>t</sub> · area<sub>c</sub>), because the first and last
   season-years are partial (3 and 5 months).
@@ -1562,7 +1486,7 @@ fixed AFE cannot be read.
 
 **Base model.** The BAG model of step 5 (or 6) **without the BAG term**
 *γ*<sub>s</sub>, fitted to all stages per gear × dataset with the family and
-spatial structure chosen in Phase 6. It therefore runs once Phase 6 has
+spatial structure chosen in Phase 5. It therefore runs once Phase 5 has
 settled the base model (the Phase 3 power simulation has the same dependency,
 @sec-timeline).
 
@@ -1602,7 +1526,7 @@ the cell table, and inject the effect. Report how much it lowers power.
 - The MDE sets the pre-trend equivalence margin (@sec-bag-pretrend).
 
 No new dependency: `simulate()` for `glmmTMB` and `sdmTMB` fits does the
-simulation, and the refits use the Phase 6 code.
+simulation, and the refits use the Phase 5 code.
 
 ### Pre-trend equivalence test {#sec-bag-pretrend}
 
@@ -1615,7 +1539,7 @@ that would matter**.
 **Model.** The pre-construction data at the timing model's time step (cell ×
 month for VP and mobile AFE, cell × season-year for fixed AFE), with the
 season or cyclic month term, offset, covariates and spatial structure from
-Phase 6, plus a band-specific linear trend:
+Phase 5, plus a band-specific linear trend:
 
 $$
 \log \mu_{c,t} = \ldots + \theta_{b(c)} \cdot \text{year}_t
@@ -1653,7 +1577,7 @@ so no multiplicity correction is needed.
 
 | Result | Meaning | Action |
 |---|---|---|
-| Every band's 90% CI inside (−*δ*, *δ*) | Parallel trends shown | Primary BAG without a pre-trend term. The pre-trend sensitivity (Phase 8) still runs. |
+| Every band's 90% CI inside (−*δ*, *δ*) | Parallel trends shown | Primary BAG without a pre-trend term. The pre-trend sensitivity (Phase 7) still runs. |
 | Some CI crosses ±*δ*, none excludes 0 | Inconclusive: too little information | Report the BAG with and without the pre-trend term as co-primary, and say so. |
 | Some 95% CI excludes 0 and its estimate lies outside ±*δ* | Non-parallel trends | Add the `band × year` pre-trend term to every BAG model for that gear (the Phase 1 rule), and report the extrapolated bias. |
 
@@ -1685,7 +1609,7 @@ gear × dataset. Written to `models/pretrend_*.csv`.
   regulation. The stage × season BAG is also fitted without the cells ever
   inside a zone; the timing model carries `sz_share(t)` directly.
 
-## Phase 6: Statistical models, comparison of approaches (`11_models_frequentist.qmd`, `12_models_inla.qmd`) {#sec-models}
+## Phase 5: Statistical models, comparison of approaches (`11_models_frequentist.qmd`, `12_models_inla.qmd`) {#sec-models}
 
 ### The three candidate approaches
 
@@ -1786,13 +1710,13 @@ gear × dataset. Written to `models/pretrend_*.csv`.
 4. **Priors.** Penalised-complexity priors on range and SD (Fuglstad et al.
    2019), e.g. P(*ρ* < *ρ*₀/2) = 0.05 and P(*σ* > 1) = 0.05, plus a
    **prior-sensitivity refit** that doubles and halves *ρ*₀.
-   - **VP mobile** (decision 2026-10-20): its Phase 2 correlogram is
+   - **VP mobile** (decision 2026-10-20, D-030): its Phase 2 correlogram is
      censored (I ≥ 0.1 at 19 km in every stage), so *ρ*₀ is only a lower
      bound. Its range prior takes *ρ*₀ from the **Matérn range estimated by
-     the Phase 6 `sdmTMB` fit** of the same model instead. That fit itself
+     the Phase 5 `sdmTMB` fit** of the same model instead. That fit itself
      uses the 10 km cap from Phase 2 for its mesh and CV blocks, since it
      runs before the range is known. Record the fitted range and its source
-     model in the Phase 7 sidecar.
+     model in the Phase 6 sidecar.
 5. **Laplace approximation accuracy.** It can be poor for very sparse binary
    data (the occupancy part of a monthly fixed hurdle). Check against
    `control.inla = list(strategy = "laplace")` and posterior predictive
@@ -1840,17 +1764,17 @@ A **tiered strategy**, chosen by data shape rather than by habit:
    results, for the mobile and fixed stage × season models and the mobile
    monthly model. It adds:
    - full posteriors for the BAG rate ratios;
-   - **exceedance-probability maps** that replace AKDE visually (@sec-akde);
+   - **exceedance-probability maps** as a model-based hotspot surface;
    - a check that the frequentist conclusions survive a different inferential
      framework and the prior-sensitivity refits.
 
 ### Model specifications (sketch)
 
 ```{r}
-#| label: phase6-sdmtmb
-# Phase 6 (11_models_frequentist.qmd): primary frequentist BAG models in
+#| label: phase5-sdmtmb
+# Phase 5 (11_models_frequentist.qmd): primary frequentist BAG models in
 # sdmTMB, which fits GLMMs with an SPDE (Matérn) spatial field by Laplace
-# approximation in TMB. A sketch: formulas are final, tuning is set at Phase 6.
+# approximation in TMB. A sketch: formulas are final, tuning is set at Phase 5.
 #
 # Inputs:  analysis tables from Phase 0 (data/processed/analysis/
 #          afe_stage_season_gear.csv, vp_month_gear.csv,
@@ -1905,7 +1829,7 @@ m_tw <- sdmTMB(afe_hours ~ 0 + stage * dist_band + season + s(depth_m, k = 4) + 
 # cell is fished at all (binomial) and (2) how much, given fished (Gamma).
 # Same formula and fields for both parts. If the BAG effects have opposite
 # signs in the two parts (e.g. fewer cells fished but more effort in each),
-# the hurdle is needed whatever the CV says (Phase 6, step 2).
+# the hurdle is needed whatever the CV says (Phase 5, step 2).
 m_dg <- update(m_tw, family = delta_gamma())
 
 # ---- VP, cell x month, mobile gear (timing model) ---------------------------
@@ -1940,7 +1864,7 @@ m_vp <- sdmTMB(vp_hours ~ 0 + phase * dist_band + s(moy, bs = "cc", k = 8) + s(y
 #  - the offset counts the months in each season-year, because the first
 #    (Jan–Mar 2016) and last (Apr–Aug 2026) are partial;
 #  - delta_gamma: a hurdle model, because occupancy and intensity probably
-#    respond differently near turbines (Phase 6, hurdle condition 1);
+#    respond differently near turbines (Phase 5, hurdle condition 1);
 #  - time = "season_year" with an AR1 field. The two seasons of a
 #    season-year (Oct–Mar, then Apr–Sep) share one field, so the AR1 links
 #    years rather than alternating off and peak seasons, which would not
@@ -1967,8 +1891,8 @@ cv_tw <- sdmTMB_cv(..., fold_ids = spatial_block_folds(d, size_km = rho0), k_fol
 ```
 
 ```{r}
-#| label: phase7-inla
-# Phase 7 (12_models_inla.qmd): confirmatory Bayesian INLA-SPDE fit of the
+#| label: phase6-inla
+# Phase 6 (12_models_inla.qmd): confirmatory Bayesian INLA-SPDE fit of the
 # headline AFE stage x season model. Same data `d` (mobile domain, cell x
 # stage x season, from the sdmTMB chunk) and the same BAG and season terms,
 # so differences reflect the inferential framework, not the specification.
@@ -1980,7 +1904,7 @@ cv_tw <- sdmTMB_cv(..., fold_ids = spatial_block_folds(d, size_km = rho0), k_fol
 #          maps (from posterior samples, config = TRUE) and WAIC/CPO.
 library(INLA); library(fmesher)
 
-# Mesh design rules from Phase 6, step 3:
+# Mesh design rules from Phase 5, step 3:
 #  - max.edge = c(inner, outer): triangles no longer than rho0/5 inside the
 #    data region, so the field resolves features well below its range; coarser
 #    (rho0) in the buffer, where accuracy matters less;
@@ -1996,7 +1920,7 @@ mesh <- fm_mesh_2d(loc = cbind(d$x_km, d$y_km), max.edge = c(rho0 / 5, rho0),
 #    anchors the prior, which shrinks toward smoother fields;
 #  - P(sigma > 1) = 0.05: on the log scale, a field SD above 1 (a factor of
 #    ~2.7 between cells) is a priori unlikely.
-# Phase 6 refits with rho0 doubled and halved to show that the BAG results
+# Phase 5 refits with rho0 doubled and halved to show that the BAG results
 # do not hinge on this choice.
 spde <- inla.spde2.pcmatern(mesh, prior.range = c(rho0 / 2, 0.05),
                             prior.sigma = c(1, 0.05))
@@ -2038,9 +1962,9 @@ record-level Primary data to **cell × stage × MMSI**, with zeros for vessels
 active in the gear that stage. Fit the BAG with an `(1 | MMSI)` random
 effect, or a random slope on distance by vessel. This splits *fleet-wide
 redistribution* from *a few vessels moving*. It is costly in rows and is
-optional; the leave-one-vessel-out jackknife (Phase 8) is the minimum.
+optional; the leave-one-vessel-out jackknife (Phase 7) is the minimum.
 
-**Gate for Phases 6–7.**
+**Gate for Phases 5–6.**
 
 - Residual Moran's I is not significant at q = 0.05.
 - DHARMa uniformity and dispersion pass, or any failures are explained.
@@ -2051,7 +1975,7 @@ optional; the leave-one-vessel-out jackknife (Phase 8) is the minimum.
 - Tweedie and hurdle agree in sign on the marginal BAG effect, or the
   disagreement is reported as a finding.
 
-## Phase 8: Sensitivity (`13_sensitivity.qmd`) {#sec-sensitivity}
+## Phase 7: Sensitivity (`13_sensitivity.qmd`) {#sec-sensitivity}
 
 Run the headline Gi\* change classes, the stage × season BAG rate ratios and the
 timing-model turbine-distance curve on each variant. Report the results as a
@@ -2074,9 +1998,9 @@ grid: variant × outcome, with the estimate and CI.
 | Mobile AFE timing model at season-year instead of monthly | Time-step robustness of the turbine-distance curve |
 | Alternative transform (√ ↔ log) and weights (queen / 2-order / distance band) | Phase 3 robustness |
 | Fleet-size covariate (active MMSIs per gear per month) | AIS uptake |
-| `band × year` pre-trend term, every gear (Phase 1 gate, 2026-10-19) | Parallel pre-construction trends across distance bands, which the Phase 1 tests could not establish with power |
+| `band × year` pre-trend term, every gear (Phase 1 gate, 2026-10-19, D-018) | Parallel pre-construction trends across distance bands, which the Phase 1 tests could not establish with power |
 | Distance bands vs a continuous distance smooth | BAG specification |
-| SRW's 40 unrecorded positions installed from May 2026 (`infra_cell_month_srw_planned.csv`) | Upper bound on SRW exposure (decision 2026-10-19) |
+| SRW's 40 unrecorded positions installed from May 2026 (`infra_cell_month_srw_planned.csv`) | Upper bound on SRW exposure (decision 2026-10-19, D-024) |
 | Exposure radii: `active_construction` at 2 / 5 / 10 km; `n_found` at 1 / 2 / 4 km | Scale of the construction and structure effects |
 | `cable_works(t)` in the timing model | Coarse cable windows |
 | `sz_share_install` (zones on installation days only) in place of `sz_share` | Enforcement-only safety zones: the RWF and SRW rules enforce zones only during active construction (caveat 17) |
@@ -2084,7 +2008,7 @@ grid: variant × outcome, with the estimate and CI.
 | Drop the last 3 months of each cell's pre-period | Unrecorded seabed preparation before the first foundation |
 | `d_found_final_km` in place of `dist_lease_km` for the stage × season BAG gradient | Distance to the structures vs to the lease line |
 
-## Phase 9: Synthesis (`14_synthesis.qmd`) {#sec-synthesis}
+## Phase 8: Synthesis (`14_synthesis.qmd`) {#sec-synthesis}
 
 - **Headline results:**
   - BAG rate ratios by gear × dataset, from `sdmTMB` with INLA alongside;
@@ -2094,7 +2018,6 @@ grid: variant × outcome, with the estimate and CI.
   - Strict vs Primary;
   - the season-composition confound;
   - the LISA-vs-Gi\* comparison and its power simulation;
-  - why AKDE was dropped.
 - **Limitations section** built from @sec-caveats, every number computed at
   render time.
 - **Figures** as PNG + vector PDF, on the archived poster palette and basemap
@@ -2149,15 +2072,14 @@ write_provenance <- function(out_path, inputs, extra = list()) {
 | 1 | 0: Analysis tables, weights, bathymetry covariates, helpers, tests | — |
 | 2–3 | 1: EDA (gate: parallel trends, PROVIDER) | 0 |
 | 3–4 | 2: Global statistics, correlograms (*ρ*₀) | 0 |
-| 4–6 | 3: Local Moran's I vs Gi\* (needs the base model from 6 for the power simulation; run criteria 1–4 first and 5 later) | 2 |
-| — | 4: AKDE, done here (dropped) | — |
-| done | 5a: Ørsted infrastructure ingest and covariates (`05` step 8, 2026-10-19) | Ørsted data |
+| 4–6 | 3: Local Moran's I vs Gi\* (needs the base model from 5 for the power simulation; run criteria 1–4 first and 5 later) | 2 |
+| done | 4a: Ørsted infrastructure ingest and covariates (`05` step 8, 2026-10-19) | Ørsted data |
 | When received | Ørsted habitat ingest: coverage check, per-cell shares, refit the affected models | Ørsted habitat |
-| 6–9 | 5b: Stage × season BAG (no Ørsted data needed), then the timing BAG models | 1, 5a |
-| 8–12 | 6: `sdmTMB` / `glmmTMB` Tweedie vs hurdle, CV, diagnostics | 2, 5 |
-| 12–16 | 7: INLA-SPDE confirmatory, BYM2 sensitivity | 6 |
-| 16–18 | 8: Sensitivity grid | 3, 6 |
-| 18–20 | 9: Synthesis, FAIR release, DOI | all |
+| 6–9 | 4b: Stage × season BAG (no Ørsted data needed), then the timing BAG models | 1, 4a |
+| 8–12 | 5: `sdmTMB` / `glmmTMB` Tweedie vs hurdle, CV, diagnostics | 2, 4 |
+| 12–16 | 6: INLA-SPDE confirmatory, BYM2 sensitivity | 5 |
+| 16–18 | 7: Sensitivity grid | 3, 5 |
+| 18–20 | 8: Synthesis, FAIR release, DOI | all |
 
 The Ørsted foundation and cable data arrived in October 2026, so nothing in
 the timeline now waits on them. Later Ørsted deliveries (turbine erection,
@@ -2191,7 +2113,7 @@ first power, per-route cable dates, the remaining SRW foundations) update
       3.1-168), 2026-10-18.
 - [x] PROVIDER's charter window updated to 2020-10-01 onward; 03 and 04 re-run.
 - [x] Decide PROVIDER's June–September 2020 activity (caveat 11): charter from
-      2020-06-18, decided 2026-10-18.
+      2020-06-18, decided 2026-10-18 (D-011).
 - [x] Re-run `03` and `04` for the PROVIDER change (done) and re-measure the
       typed numbers in @sec-structure and @sec-caveats, 2026-10-18.
 - [x] Add `.renvignore` (`planning/`, `r/scratchpad/`, `.venv/`).
@@ -2215,7 +2137,6 @@ first power, per-route cable dates, the remaining SRW foundations) update
 - Benjamini, Y., & Hochberg, Y. (1995). Controlling the false discovery rate. *JRSS B*, 57(1), 289–300.
 - Brooks, M. E., et al. (2017). glmmTMB balances speed and flexibility among packages for zero-inflated generalized linear mixed modeling. *The R Journal*, 9(2), 378–400.
 - Dunn, P. K., & Smyth, G. K. (2005). Series evaluation of Tweedie exponential dispersion model densities. *Statistics and Computing*, 15, 267–280.
-- Fleming, C. H., et al. (2015). Rigorous home range estimation with movement data: a new autocorrelated kernel density estimator. *Ecology*, 96(5), 1182–1188.
 - Fuglstad, G.-A., Simpson, D., Lindgren, F., & Rue, H. (2019). Constructing priors that penalize the complexity of Gaussian random fields. *JASA*, 114(525), 445–452.
 - Getis, A., & Ord, J. K. (1992). The analysis of spatial association by use of distance statistics. *Geographical Analysis*, 24(3), 189–206.
 - Hartig, F. DHARMa: residual diagnostics for hierarchical (multi-level/mixed) regression models. R package.

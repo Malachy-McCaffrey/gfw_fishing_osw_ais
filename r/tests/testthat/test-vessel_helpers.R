@@ -84,3 +84,81 @@ test_that("classify() stops when a record matches two crosswalk rows", {
                  valid_to = as.Date(character()), gear_class = character())
   expect_error(classify(records, cw, gear), "more than one crosswalk or gear row")
 })
+
+# Fishing roster ---------------------------------------------------------------
+
+# toy records in read_gfw() layout, with the columns build_fishing_roster() reads
+roster_records <- function(MMSI, date, type, gear_type = "TRAWLERS", hours = 1,
+                           name = "BOAT", vessel_id = paste0("id", MMSI)) {
+  date <- as.Date(date)
+  tibble(MMSI, date, `Vessel Type` = type, `Gear Type` = gear_type, hours,
+         `Vessel Name` = name, `Vessel ID` = vessel_id,
+         `Development Stage` = stage_of(date))
+}
+
+no_gear <- tibble(MMSI = character(), valid_from = as.Date(character()),
+                  valid_to = as.Date(character()), gear_class = character())
+
+test_that("build_fishing_roster() flags each source and drops non-fishing MMSIs", {
+  vp <- bind_rows(
+    roster_records("1", "2018-01-01", "FISHING"),               # GFW FISHING only
+    roster_records("2", "2021-01-01", "OTHER"),                 # crosswalk fishing hull
+    roster_records("3", "2024-01-01", "PASSENGER"),             # gear correction only
+    roster_records("4", "2024-01-01", "OTHER"),                 # fishing GARFO permit group
+    roster_records("5", "2024-01-01", "OTHER"),                 # recreational permit: not fishing
+    roster_records("6", "2024-01-01", "CARGO"))                 # no source at all
+  afe <- roster_records("1", "2018-01-01", "FISHING", hours = 2.5)
+
+  cw   <- cw_row("2")
+  gear <- tibble(MMSI = "3", valid_from = as.Date(NA), valid_to = as.Date(NA),
+                 gear_class = "FIXED")
+  pg   <- tibble(MMSI = c("4", "5"), permit_group = c("commercial", "recreational only"))
+
+  r <- build_fishing_roster(vp, afe, cw, gear, pg, gfw_labels_of(vp, afe),
+                            pull_date = as.Date("2026-10-06"), pipeline = "v4",
+                            source_commit = "abc1234")
+
+  expect_equal(names(r), roster_cols)
+  expect_equal(r$MMSI, c("1", "2", "3", "4"))
+  expect_equal(r$src_gfw_fishing,     c(TRUE, FALSE, FALSE, FALSE))
+  expect_equal(r$src_cw_fishing,      c(FALSE, TRUE, FALSE, FALSE))
+  expect_equal(r$src_gear_correction, c(FALSE, FALSE, TRUE, FALSE))
+  expect_equal(r$src_garfo_permit,    c(FALSE, FALSE, FALSE, TRUE))
+  # Primary: GFW FISHING (1) and the added crosswalk hull (2); the others are
+  # on the roster but GFW does not type them FISHING and the crosswalk does not add them
+  expect_equal(r$in_primary, c(TRUE, TRUE, FALSE, FALSE))
+  expect_equal(r$gear_class[r$MMSI == "3"], "FIXED")
+  expect_equal(r$gear_source[r$MMSI == "3"], "vessel_gear")
+  expect_equal(unique(r$pipeline), "v4")
+  expect_equal(unique(r$source_commit), "abc1234")
+})
+
+test_that("build_fishing_roster() splits hours by dataset and stage, one row per MMSI", {
+  vp <- bind_rows(
+    roster_records("1", "2018-01-01", "FISHING", vessel_id = "a"),   # Stage 1
+    roster_records("1", "2021-01-01", "FISHING", vessel_id = "b"),   # Stage 2
+    roster_records("1", "2024-01-01", "FISHING", hours = 3, vessel_id = "a")) # Stage 3
+  afe <- roster_records("1", "2024-01-01", "FISHING", hours = 0.5)
+
+  r <- build_fishing_roster(vp, afe, cw_row("9")[0, ], no_gear,
+                            tibble(MMSI = character(), permit_group = character()),
+                            gfw_labels_of(vp, afe), as.Date("2026-10-06"), "v4")
+
+  expect_equal(nrow(r), 1)
+  expect_equal(c(r$vp_hours_s1, r$vp_hours_s2, r$vp_hours_s3), c(1, 1, 3))
+  expect_equal(c(r$afe_hours_s1, r$afe_hours_s2, r$afe_hours_s3), c(0, 0, 0.5))
+  expect_equal(r$vessel_ids, "a|b|id1")
+  expect_equal(c(r$first, r$last), c("2018-01-01", "2024-01-01"))
+})
+
+test_that("write_roster_once() writes a roster and refuses to replace it", {
+  vp <- roster_records("1", "2018-01-01", "FISHING")
+  r  <- build_fishing_roster(vp, vp[0, ], cw_row("9")[0, ], no_gear,
+                             tibble(MMSI = character(), permit_group = character()),
+                             gfw_labels_of(vp, vp[0, ]), as.Date("2026-10-06"), "v4")
+  path <- tempfile(fileext = ".csv")
+
+  expect_message(write_roster_once(r, path), "Wrote 1 MMSIs")
+  expect_equal(read_chr(path)$MMSI, "1")
+  expect_error(write_roster_once(r, path), "already exists")
+})

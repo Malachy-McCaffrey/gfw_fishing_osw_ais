@@ -299,3 +299,131 @@ classify <- function(df, cw, gear) {
       gear_source = if_else(is.na(gear_override), "gfw", "vessel_gear")) |>
     select(-cw_from, -cw_to, -g_from, -g_to, -gear_override)
 }
+
+# Fishing roster ----------------------------------------------------------------
+# A write-once snapshot of every MMSI that counted as fishing in one GFW
+# pipeline version (planning/gfw_pipeline_v5_plan.qmd, Section 2.7). When GFW
+# reprocesses its data and relabels vessels, the next version's run of 03
+# compares the new labels with this snapshot, so a known fishing vessel whose
+# vessel or gear type changed is sent to review instead of silently leaving the
+# Strict and Primary sets. 03 writes it once per version, with
+# write_roster_once(); it is never regenerated.
+
+roster_cols <- c(
+  "MMSI", "pipeline", "pull_date", "source_commit", "Vessel_Name",
+  # GFW's labels for the MMSI in this pull (gfw_labels_of(): most frequent)
+  "gfw_vessel_type", "gfw_gear_type",
+  # the analysis gear class the records actually got (correction or GFW gear),
+  # hours-weighted most frequent, and where it came from
+  "gear_class", "gear_source",
+  # why the MMSI is on the roster; at least one is TRUE
+  "src_gfw_fishing", "src_cw_fishing", "src_gear_correction", "src_garfo_permit",
+  "permit_group",
+  # whether any of its records is in the Primary set
+  "in_primary",
+  "vp_hours_s1", "vp_hours_s2", "vp_hours_s3",
+  "afe_hours_s1", "afe_hours_s2", "afe_hours_s3",
+  "vessel_ids", "first", "last")
+
+# GARFO permit groups that mark a vessel as fishing for the roster. The other
+# groups 03 can write ("recreational only", "unmapped codes only") do not.
+roster_permit_groups <- c("commercial", "for-hire", "commercial + for-hire",
+                          "for-hire + open-access commercial")
+
+# One row per MMSI with records in this pull that counted as fishing by any
+# source, in roster_cols order:
+#   src_gfw_fishing      any of its records is typed FISHING by GFW
+#   src_cw_fishing       the crosswalk has a fishing-hull row for it
+#   src_gear_correction  vessel_gear.csv has an accepted correction for it
+#   src_garfo_permit     a unique GARFO match puts it in a fishing permit group
+# vp and afe are read_gfw() records (already trimmed to the analysis window),
+# cw a typed crosswalk (type_crosswalk()), gear the accepted gear rows
+# (validate_gear()), permit_groups the vessel_permit_groups.csv table, and
+# gfw_labels the gfw_labels_of() table for the same pull.
+build_fishing_roster <- function(vp, afe, cw, gear, permit_groups, gfw_labels,
+                                 pull_date, pipeline, source_commit = NA_character_) {
+  # classify every record as 04 does, so in_primary and gear_class are the
+  # values the analysis used
+  recs <- bind_rows(VP  = classify(vp, cw, gear),
+                    AFE = classify(afe, cw, gear), .id = "dataset") |>
+    filter(!is.na(MMSI))
+
+  fishing_permits <- permit_groups |> filter(permit_group %in% roster_permit_groups)
+
+  # the four sources, per MMSI
+  sources <- tibble(MMSI = unique(recs$MMSI)) |>
+    mutate(src_gfw_fishing     = MMSI %in% recs$MMSI[recs$`Vessel Type` %in% "FISHING"],
+           src_cw_fishing      = MMSI %in% cw$MMSI[cw$hull_class == "fishing"],
+           src_gear_correction = MMSI %in% gear$MMSI,
+           src_garfo_permit    = MMSI %in% fishing_permits$MMSI) |>
+    filter(src_gfw_fishing | src_cw_fishing | src_gear_correction | src_garfo_permit)
+
+  # MMSIs named by the crosswalk, gear or permit files but with no records in
+  # this pull's analysis window cannot be compared with a later pull, so they
+  # are left off; say how many
+  named <- unique(c(cw$MMSI[cw$hull_class == "fishing"], gear$MMSI, fishing_permits$MMSI))
+  no_records <- setdiff(named, recs$MMSI)
+  if (length(no_records) > 0) {
+    message(length(no_records), " fishing MMSIs in references/ have no records in this ",
+            "pull's analysis window and are not on the roster")
+  }
+
+  recs <- recs |> filter(MMSI %in% sources$MMSI)
+
+  # VP and AFE hours per stage, one column per dataset x stage, 0 where none
+  hour_cols <- paste0(rep(c("vp", "afe"), each = 3), "_hours_s", 1:3)
+  hours <- recs |>
+    mutate(col = paste0(tolower(dataset), "_hours_s",
+                        str_extract(`Development Stage`, "\\d"))) |>
+    count(MMSI, col, wt = hours) |>
+    pivot_wider(names_from = col, values_from = n, values_fill = 0)
+  for (col in setdiff(hour_cols, names(hours))) hours[[col]] <- 0
+
+  # the gear class the records got, weighted by hours (ties: the first)
+  gear_now <- recs |>
+    count(MMSI, gear_class, gear_source, wt = hours) |>
+    group_by(MMSI) |>
+    slice_max(n, n = 1, with_ties = FALSE) |>
+    ungroup() |>
+    select(MMSI, gear_class, gear_source)
+
+  # most frequent AIS name, Primary membership, Vessel IDs and the date span
+  per_mmsi <- recs |>
+    group_by(MMSI) |>
+    summarise(Vessel_Name = names(which.max(table(`Vessel Name`)))[1] %||% NA_character_,
+              in_primary  = any(in_primary),
+              vessel_ids  = paste(sort(unique(na.omit(`Vessel ID`))), collapse = "|"),
+              first       = as.character(min(date)),
+              last        = as.character(max(date)),
+              .groups = "drop")
+
+  sources |>
+    left_join(per_mmsi, by = "MMSI") |>
+    left_join(select(gfw_labels, MMSI, gfw_vessel_type, gfw_gear_type), by = "MMSI") |>
+    left_join(gear_now, by = "MMSI") |>
+    left_join(select(permit_groups, MMSI, permit_group), by = "MMSI") |>
+    left_join(hours, by = "MMSI") |>
+    mutate(pipeline = pipeline,
+           pull_date = as.character(pull_date),
+           source_commit = source_commit,
+           across(all_of(hour_cols), \(x) round(x, 3))) |>
+    select(all_of(roster_cols)) |>
+    arrange(MMSI)
+}
+
+# Writes a roster to path only if no file is there yet: a roster is the record
+# of one pipeline version as it was analysed, so it is never replaced. To
+# rebuild one deliberately, delete the file (and say why in the commit).
+write_roster_once <- function(roster, path) {
+  if (file.exists(path)) {
+    stop(path, " already exists. A fishing roster is written once per pipeline ",
+         "version and never replaced; delete it first only if it must be rebuilt.",
+         call. = FALSE)
+  }
+  stopifnot("roster columns do not match roster_cols" = identical(names(roster), roster_cols),
+            "roster has a repeated MMSI" = !anyDuplicated(roster$MMSI),
+            "roster has more than one pipeline" = n_distinct(roster$pipeline) == 1)
+  write_csv(roster, path, na = "")
+  message("Wrote ", nrow(roster), " MMSIs to ", path)
+  invisible(path)
+}

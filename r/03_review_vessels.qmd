@@ -6,6 +6,12 @@ format: html
 params:
   run_gfw_api: false  # true to look up uncached candidates in the GFW identity API
   run_psix_api: false # true to look up uncached hull IDs and call signs in USCG CGMIX PSIX
+  # true to write the write-once fishing roster for this pull (end of Phase 5)
+  write_roster: false
+  # GFW pipeline version of the raw pull, recorded in the roster. The
+  # 2026-10-06 pull is v4 (gfwr requested ":latest", which was v4 until
+  # 2026-10-21). Set by hand until paths.R carries the pipeline version.
+  roster_pipeline: "v4"
   # Path overrides (see r/paths.R); leave blank to use the project paths.
   decisions: ""
   gear: ""
@@ -67,6 +73,7 @@ on the raw pull, the GARFO files, the API cache and these files:
 | `references/garfo_permit_codes.csv` | GARFO permit code meanings (input) |
 | `references/vessel_crosswalk.csv` | Generated each run from the removals, survey dates and decisions -- do not edit |
 | `references/vessel_permit_groups.csv` | Generated each run: GARFO permit group per MMSI, for 04's dual-permit check -- do not edit |
+| `references/fishing_roster_{pipeline}.csv` | Written **once** per GFW pipeline version with `-P write_roster:true`: every MMSI that counted as fishing in that pull -- never edit or regenerate |
 | `data/processed/vessel_review/vessel_review.csv` | Generated each run: hull/activity candidates, evidence and a suggested decision |
 | `data/processed/vessel_review/gear_review.csv` | Generated each run: fishing vessels whose gear needs checking, with a suggested gear class |
 
@@ -1600,6 +1607,61 @@ permit_groups <- profiles |>
 write_csv(permit_groups, paths$permit_groups, na = "")
 
 count(permit_groups, permit_group)
+```
+
+### Snapshot the fishing roster
+
+GFW reprocesses its data between pipeline versions and relabels vessels. A
+vessel counted as fishing here only because GFW typed it FISHING (most of
+them: they have no crosswalk row) would silently leave the Strict and Primary
+sets if a later version retyped it. The roster records every MMSI that counted
+as fishing in this pull, by any source (GFW type, crosswalk fishing hull, gear
+correction, fishing GARFO permit group), with its labels, gear class, Primary
+membership and hours by stage. The next version's run compares its labels with
+this file and sends the changes to review
+(`planning/gfw_pipeline_v5_plan.qmd`, Sections 2.7 and 3.6).
+
+It is written **once per pipeline version** and never replaced: render with
+`-P write_roster:true` once, then commit the file. The chunk stops if
+`references/` has uncommitted changes after this run's writes, so that the
+roster always matches a commit of the crosswalk and decisions it was built
+from.
+
+```{r}
+roster_path <- sprintf(paths$roster, qparams$roster_pipeline)
+
+if (isTRUE(qparams$write_roster)) {
+  # this run has just rewritten the crosswalk, permit groups and (if any rows
+  # were marked) the decision files; they must equal what is committed
+  ref_status <- system2("git", c("status", "--porcelain", "--", "references/"),
+                        stdout = TRUE)
+  if (length(ref_status) > 0) {
+    stop("references/ has uncommitted changes; commit them before writing the ",
+         "roster:\n  ", paste(ref_status, collapse = "\n  "), call. = FALSE)
+  }
+  head_commit <- system2("git", c("rev-parse", "--short", "HEAD"), stdout = TRUE)
+
+  roster <- build_fishing_roster(vp, afe, cw, gear, permit_groups, gfw_labels,
+                                 pull_date, pipeline = qparams$roster_pipeline,
+                                 source_commit = head_commit)
+  write_roster_once(roster, roster_path)
+} else if (file.exists(roster_path)) {
+  roster <- read_chr(roster_path)
+  message("Roster for ", qparams$roster_pipeline, " already written: ", roster_path)
+} else {
+  roster <- NULL
+  message("No roster for ", qparams$roster_pipeline,
+          " yet; render once with -P write_roster:true")
+}
+
+# what is on the roster, and why (an MMSI can have several sources)
+if (!is.null(roster)) {
+  roster |>
+    mutate(across(starts_with("src_") | any_of("in_primary"), as.logical)) |>
+    summarise(mmsi = n(),
+              across(starts_with("src_"), sum),
+              in_primary = sum(in_primary))
+}
 ```
 
 ## Phase 6: Repeatability checks

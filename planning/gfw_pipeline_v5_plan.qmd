@@ -1,0 +1,763 @@
+---
+title: "Plan: Migrating to GFW Pipeline v5"
+author: "Malachy McCaffrey"
+date: 2026-10-27
+format:
+  html:
+    toc: true
+    toc-depth: 3
+execute:
+  eval: false   # planning document: every code chunk is a sketch, not run
+---
+
+<!--
+Scratchpad planning document. Nothing here is wired into r/_quarto.yml and no
+chunk runs (eval: false above). It records (1) what changed in Global Fishing
+Watch's pipeline v5, (2) what that means for the 2026-10-06 pull and for each
+step of the r/ workflow, and (3) a proposed order of work for the next pull,
+including a v4-vs-v5 comparison of vessel presence (VP), apparent fishing
+hours (AFE), and false positives / false negatives.
+-->
+
+## TL;DR
+
+- **The 2026-10-06 pull is pipeline v4.** gfwr 3.0 hard-codes the `:latest`
+  alias for every 4Wings and identity dataset
+  (`public-global-fishing-effort:latest`, `public-global-presence:latest`,
+  `public-global-vessel-identity:latest`). `latest` pointed to v4 from
+  2026-02-26 until **2026-10-21**, when it switched to v5. Re-rendering
+  `r/01_pull_gfw.qmd` today would silently return **v5** and overwrite the v4
+  extracts that every decision in `references/` was made against.
+- **v4 is still reachable, but not for long.** The `:v4.0` datasets stay up as
+  static (no longer updated) snapshots until **April 2027**. That is the window
+  for a like-for-like v4 vs v5 comparison. The next pipeline (v6) is planned
+  for **June 2027**, so whatever is built now should handle *any* version
+  change, not just this one.
+- **Biggest risks for this project**, in order:
+  1. **Fixed-gear false negatives in AFE.** GFW names seines, fixed gear, pots
+     and traps, set gillnets, set longlines, trollers and *shallow near-shore
+     activity* as known v5 false negatives. That is the core of the
+     RI/MA-sound fleet around SFW/RWF/SRW (lobster pots, gillnets), and it
+     maps straight onto the `FIXED` gear class. Trollers are on GFW's list but
+     negligible here (1 MMSI, 5 VP hours; Section 1.2).
+  2. **Vessel-type relabelling changes the Strict set and every
+     hull-level decision's context.** ~3% of vessels moved between fishing
+     and non-fishing; `discrepancy` is gone; `insufficient_data` is new for
+     vessels with ≤500 thinned positions a year (small Class B boats in this
+     AOI are prime candidates). The pool is large here: in v4, OTHER and
+     PASSENGER hold 62% of VP hours and 11,070 MMSIs (Section 1.2).
+  3. **Specific gear labels collapse to generic `FISHING`, mainly hitting
+     fixed gear.** Predictions under a 0.35 confidence threshold fall back to
+     the parent class (`FISHING` +42% globally, `SET_GILLNETS` −89%). Locally
+     this adds less than the global figures suggest. In v4, generic `FISHING`
+     and `INCONCLUSIVE` already make 51% of FISHING VP hours and 62% of AFE
+     hours `UNRESOLVED`, and `vessel_gear.csv` corrections already cover
+     them. The new exposure is the hulls GFW still labels as specific fixed
+     gear: about 10% of VP and 7% of AFE hours (Section 1.2). Any of them
+     without a `vessel_gear.csv` row would drop from `FIXED` to
+     `UNRESOLVED`, on top of the fixed-gear AFE losses in risk 1.
+  4. **Differential change across stages or distance bands.** The model was
+     re-run over the full history, so a *uniform* change would cancel out of
+     the Before–After–Gradient contrasts. A change that differs by stage
+     (e.g. Stage 3 charter/guard vessels idling near turbines, which v5's
+     slow-transit cleanup should strip out) or by distance from the leases
+     would not. Testing this is the main point of the comparison.
+- **Things that work in our favour:** `vesselId` is unchanged between v4 and
+  v5, so records can be joined one-to-one across versions; VP hours do not
+  depend on the fishing model; the new presence `speed` field adds a
+  behavioural check we did not have.
+- **Recommendation:** make the pipeline version a first-class parameter of the
+  repo (paths, pull metadata, caches), pull v4.0 and v5.0 *pinned* side by
+  side, run a dedicated comparison notebook, then adopt **v5 as the primary
+  analysis** with **v4 as a sensitivity**, unless the comparison shows the
+  fixed-gear AFE losses are differential by stage or distance band. In that
+  case, lean on VP for fixed gear and report AFE for fixed gear as
+  v4-sensitive.
+
+---
+
+## 1. What changed in pipeline v5
+
+Released 2026-10-21. All history (2012 to present) was reprocessed. Sources
+are listed at the end of the document.
+
+### 1.1 Apparent fishing model (AFE / 4Wings `public-global-fishing-effort`)
+
+| Change | v4 | v5 | Expected effect here |
+|---|---|---|---|
+| Architecture | Convolutional NN | Transformer, larger expert-labelled training set (>1,000 reviewed examples) | Different decision boundary; not just a recalibration |
+| Prediction unit | Per vessel | **Per AIS segment** | A vessel's fishing hours can change on days its label did not |
+| Thinning | 1 position / 5 min | **1 position / 10 min** | Short fishing bouts are harder to detect; fewer short events (~52% of 20–24 min events removed globally) |
+| Inheritance | n/a | Intermediate positions inherit a prediction only if two thinned positions < 12 h apart agree | Patchy AIS gives fewer fishing hours between gaps |
+| Minimum positions | Required | **Removed** | Positions that were null can now be classified: more AFE in poor-reception areas |
+| Port / transit | Frequent false positives | Largely removed | Fewer AFE hours near harbours and on slow transits, including slow guard/charter patrols |
+| Known false negatives | — | Seines, fixed gear, pots and traps, set gillnets, set longlines, trollers, shallow near-shore activity | **Under-counts the dominant local fixed-gear fleet** |
+| Squid jiggers | Night-loitering heuristic | Same heuristic | Not relevant in this AOI |
+| Terminology | "Fishing effort" | "Apparent fishing activity"; dataset ID keeps `effort` until v6 | Update methods text; dataset ID unchanged |
+
+Global AIS totals: −3.55% fishing hours for vessels classed as fishing in both
+versions; −7.1% for 2025, −6.7% for 2026 to date. GFW states this is mostly
+removed false positives, not less fishing. No precision/recall numbers are
+published yet.
+
+### 1.2 Vessel classification and identity (`public-global-vessel-identity`, and the `Vessel Type` / `Gear Type` columns in 4Wings output)
+
+- The neural network is now paired with a **random-forest secondary
+  classifier** that also uses static AIS fields and self-reported type.
+- **Registry values no longer overwrite model output.** In v4, GFW's label was
+  partly registry-derived. In v5 it is model-derived. Registry gear (which
+  `03_review_vessels.qmd` uses as evidence) becomes *more* independent of the
+  label it is checking.
+- **0.35 confidence fallback** to the parent class. `FISHING` +42%; specific
+  gears shrink (`OTHER_PURSE_SEINES` −99.4%, `SET_GILLNETS` −89%). The raw
+  finer prediction is still available as `atomicClassSc` / `atomicClassScore`
+  in the identity API.
+- **`insufficient_data`** is returned for vessels with ≤500 positions a year
+  after 5-minute thinning.
+- **`discrepancy`** is removed as a vessel type.
+- ~3% of vessels flipped fishing ↔ non-fishing; ~65% of all label changes are
+  `OTHER` → a specific class.
+- Gear/buoy detection improved substantially (GFW cites 99.2% improvement on
+  buoys and gear). That matters for our `gear_marker` hull class.
+- New identity fields in `combinedSourcesInfo`, all from
+  `SECONDARY_CLASSIFIER_MODEL`: `bestLengthM`, `bestTonnageGt`,
+  `bestEnginePowerKw`, `maxSpeedKn`, `vesselClassSc`, `atomicClassSc`,
+  `atomicClassScore`.
+- The `COMBINATION_OF_REGISTRY_AND_AIS_INFERRED_NN_INFO` source value is
+  gone. `prodGeartypeSource` is always `null`.
+- **`vesselId` is unchanged between v4 and v5.** Counts are still per MMSI.
+
+#### Baseline: GFW labels in the 2026-10-06 (v4) pull
+
+These figures cover the whole raw pull (to 2026-09-30, not trimmed to the
+analysis window), with GFW's own labels before the crosswalk or gear
+corrections. They come from a read-only `data.table` summary of
+`data/raw/gfw/gfw_{vp,afe}_id.csv` (run 2026-10-28). Run the same summary
+on the v5 pull for the first side-by-side.
+
+| | VP | AFE |
+|---|---|---|
+| Rows | 446,646 | 68,185 |
+| MMSIs | 13,983 | 445 |
+| Vessel IDs | 15,583 | 531 |
+| Hours | 728,085 | 100,662 |
+
+Vessel Type, % of VP hours (MMSIs): OTHER 56.6 (3,184), FISHING 24.1
+(1,301), CARGO 6.8 (1,509), SEISMIC_VESSEL 6.4 (57), PASSENGER 5.9 (7,886);
+CARRIER, GEAR, BUNKER and missing 0.1 (47). Vessels typed FISHING account
+for 99.6% of AFE hours (432 of 445 MMSIs). That fits GFW computing AFE only
+for vessels it treats as fishing.
+
+Gear Type within `Vessel Type == FISHING`, % of hours:
+
+| Gear Type | VP % (MMSIs) | AFE % (MMSIs) | Analysis class |
+|---|---|---|---|
+| FISHING (generic) | 45.9 (409) | 54.6 (129) | UNRESOLVED |
+| TRAWLERS | 32.9 (435) | 27.4 (182) | MOBILE |
+| INCONCLUSIVE | 5.1 (80) | 7.4 (13) | UNRESOLVED |
+| POLE_AND_LINE | 4.5 (224) | 1.9 (53) | POLE_AND_LINE |
+| FIXED_GEAR, SET_GILLNETS, POTS_AND_TRAPS, SET_LONGLINES | 9.9 (102) | 7.1 (43) | FIXED |
+| DREDGE_FISHING, purse seines, DRIFTING_LONGLINES, TROLLERS | 1.3 (47) | 1.4 (11) | MOBILE |
+| Missing / GEAR | 0.3 (11) | 0.1 (2) | UNRESOLVED |
+
+MMSI counts are summed across gear rows, so an MMSI with more than one gear
+label is counted more than once.
+
+What this means for the v5 gear changes:
+
+- **GFW gear was already mostly unresolved in v4.** Generic `FISHING` and
+  `INCONCLUSIVE` together carry 51% of FISHING VP hours and 62% of AFE hours,
+  so Primary's gear classes already rest mainly on
+  `references/vessel_gear.csv` (about 690 corrections), not on GFW gear. The
+  v5 fallback to generic `FISHING` adds less new uncertainty here than the
+  global figure (+42% `FISHING`) suggests.
+- **The exposure is concentrated in the specific fixed-gear labels:** about
+  7% of AFE hours (43 MMSIs) and 10% of VP hours (102 MMSIs). These vessels
+  are both at risk of collapsing to generic `FISHING` and named in GFW's v5
+  false-negative list. Any of them without a `vessel_gear.csv` row would drop
+  from `FIXED` to `UNRESOLVED`.
+- **`INCONCLUSIVE` is a large single label:** 7.4% of AFE hours from only 13
+  MMSIs. If v5 removes or renames it, a few vessels move a lot of hours.
+- **Trollers are negligible locally** (1 MMSI, 5 VP hours, no AFE), so GFW's
+  troller false negatives can be set aside.
+- **The relabelling risk sits in OTHER and PASSENGER.** Together they hold
+  62% of VP hours and 11,070 MMSIs. v5's ~3% fishing/non-fishing flips and
+  its `OTHER` → specific-class moves (65% of global changes) would mostly
+  land here, moving hulls into or out of the Strict set.
+
+### 1.3 Spatial reference data ("aligned spatial measures")
+
+- Distance from shore, distance from port and bathymetry now share **one
+  grid**. Bathymetry moves to ETOPO 2022.
+- 5,366 anchorages added (4,068 in Brazil), some removed; AIS and VMS share
+  one anchorage list.
+- This feeds GFW-side filters (`distance_from_port_km` in 4Wings, the 20 nm
+  loitering filter, port visits, encounters). It does **not** change the
+  0.01° 4Wings output lattice. Our own covariates (lease distance, NCEI CRM
+  bathymetry in `05_prepare_analysis.qmd`) are independent of it.
+- FAO areas, GFCM FRAs and ProtectedSeas MPAs were refreshed. EEZ,
+  territorial-sea and high-seas layers are unchanged. None of these are used
+  here.
+
+### 1.4 Presence (`public-global-presence`)
+
+- Presence hours do not depend on the fishing model, so VP hours should be
+  close to unchanged (thinning and segmenting changes could shift a few
+  cell-hours).
+- **`speed` is now returned** in the response. With hourly resolution grouped
+  by vessel it is per-position; otherwise it is an average. Our daily,
+  `VESSEL_ID`-grouped pull would get a **daily mean speed per vessel × cell**.
+- `Vessel Type` / `Gear Type` on VP records **will** change, because they come
+  from the new classifier.
+
+### 1.5 Timeline
+
+| Date | Event |
+|---|---|
+| 2026-02-26 | Pipeline v4 released; `latest` → v4 |
+| **2026-10-06** | **Our current raw pull (v4, via `:latest`)** |
+| 2026-10-21 | Pipeline v5 released; `latest` → v5; v4 frozen as `:v4.0`; `:v3.0` / `:v3.1` deprecated |
+| **April 2027** | `:v4.0` (identity explicitly; 4Wings v4 static) no longer guaranteed |
+| June 2027 | Pipeline v6 planned (dataset ID drops `effort`) |
+
+---
+
+## 2. What this means for the current data and each workflow step
+
+### 2.1 `r/01_pull_gfw.qmd` and `data/raw/gfw/`
+
+- **Silent version switch.** Neither gfwr nor `pull_info.csv` records the
+  dataset version. Two pulls with identical code now return different
+  pipelines.
+- `read_gfw()` checks for exactly one hours column. The new `speed` column on
+  VP is an *extra* column and should pass, but confirm the column name and
+  that it does not break `write_csv` → `read_gfw` round-trips or tests.
+- New label values (`INSUFFICIENT_DATA`; possibly no more `INCONCLUSIVE`, or
+  fewer) will reach `count(Vessel Type)` and the gear map.
+- The 2026-10-06 extracts are the only copy of the v4 data at the
+  daily × Vessel ID × cell level as it was then. **Do not overwrite them.**
+
+### 2.2 `r/02_build_grid.qmd`
+
+The grid is built from the cells present in the whole pull. v5 could add cells
+(removed minimum-position rule in poor-reception areas) or drop cells
+(near-shore port false positives removed). Build the grid from the **union of
+v4 and v5 cells** so both versions sit on one lattice and cell IDs are
+comparable. Changing the grid changes the spatial weights and every downstream
+cache key, so decide this once.
+
+### 2.3 `r/03_review_vessels.qmd` (decisions, evidence, review sheets)
+
+| Area | Impact | Action |
+|---|---|---|
+| `vessel_decisions.csv`, `vessel_gear.csv` | Decisions are about the **hull** and its **activity windows**, which are version-independent truths. They stay valid. The recorded `gfw_vessel_type` / `gfw_gear_type` / `pull_date` columns describe v4. | Keep as is. Add a `gfw_pipeline` column (backfill `v4`) so later drift checks know which label a decision was made against. |
+| Phase 6 label-drift check | Will flag many rows: the ~3% type flips plus the collapse of specific gear to `FISHING`. In v4, 409 FISHING-typed MMSIs already carry generic `FISHING` and 80 carry `INCONCLUSIVE`, so the gear-only drift falls mainly on the remaining specific-gear hulls (most at risk: the 102 fixed-gear MMSI-labels). | Expected. Split the drift output into *type* drift (needs review) and *gear-only* drift to generic `FISHING` (usually no action if `vessel_gear.csv` already covers the MMSI). |
+| Screen: missed fishing (list 1) | v5 should move some `OTHER` hulls to specific classes, and some true fishing hulls to `insufficient_data`. The pool is large: in v4, OTHER and PASSENGER hold 11,070 MMSIs and 62% of VP hours. | Treat `INSUFFICIENT_DATA` like `OTHER` in the missed-fishing screen. Report the screen's candidate count by v4 → v5 type transition, so new candidates created by relabelling can be told apart from ones v4 already had. |
+| Screen: "foreign flag with `INCONCLUSIVE` gear" | `INCONCLUSIVE` may disappear or shrink. In v4 it is 5.1% of FISHING VP hours (80 MMSIs) and 7.4% of AFE hours (13 MMSIs). | Generalise the rule to "foreign flag with unresolved gear". List where the 13 AFE-bearing `INCONCLUSIVE` MMSIs land in v5 (type and gear) as a named check. |
+| Gear review sheet | Driven by `gfw_class == "UNRESOLVED"`. In v4, generic `FISHING` + `INCONCLUSIVE` already make 51% of FISHING VP hours and 62% of AFE hours `UNRESOLVED` before corrections, and about 690 `vessel_gear.csv` rows cover them. v5 adds mainly the specific-gear hulls that collapse to `FISHING`: up to 102 fixed-gear MMSI-labels (9.9% VP, 7.1% AFE), plus trawler and pole-and-line hulls whose prediction falls below 0.35. | Before reviewing, auto-resolve from existing evidence: accepted `vessel_gear.csv` rows, a single GARFO permit gear hint (`vessel_permit_groups.csv`), then v5 `atomicClassSc` above a stated score. Only the remainder goes to the sheet. Count first how many newly `UNRESOLVED` MMSIs lack a `vessel_gear.csv` row: that number is the real review load. |
+| Identity cache (`data/raw/vessel_evidence/`) | The `queried` log already records the dataset, but `to_query` skips any ID ever queried, so no v5 identity would ever be fetched for a cached ID. v5 adds fields the parser ignores. | Make the cache version-aware (filter `to_query` on the dataset version, or a `v5/` subfolder), and extend `parse_identity()` with `vesselClassSc`, `atomicClassSc`, `atomicClassScore`, `bestLengthM`, `maxSpeedKn`. `bestLengthM` adds an independent length check next to GARFO feet and PSIX. |
+| Methods text | Says GFW's label is derived from registry records. True in v4, not in v5. | Reword in 03's Phase 3 intro. |
+| Known v4 fishing vessels | 1,206 of 1,301 v4 FISHING MMSIs (25% of AFE hours) have no crosswalk row. A v5 retype would drop them from Strict and Primary without review. | v4 fishing roster, roster check and 04 gate: Section 2.7; change list in Section 3.6. |
+
+### 2.4 `r/04_classify_aggregate.qmd`
+
+- **Strict** (GFW `Vessel Type == FISHING`) is defined by GFW's labels, so it
+  will change the most. **Primary** should change less: that is its purpose,
+  and how much it moves is a direct measure of how robust the crosswalk is.
+- The **added-vessel AFE gap** (hulls added in Primary have VP but almost no
+  AFE) changes in both directions. Vessels GFW newly treats as fishing gain
+  AFE; others lose it. Re-estimate the AFE/VP imputation ratio and report both
+  versions.
+- `gear_class` precedence (`vessel_gear.csv` correction, then GFW gear) still
+  works, but more records fall through to `UNRESOLVED`. Track the `UNRESOLVED`
+  share of Primary AFE and VP by version.
+
+### 2.5 `r/05_prepare_analysis.qmd` onward (05–08, 10)
+
+- Covariates (lease distance, CRM bathymetry, infrastructure) are unaffected.
+- Every cell table, derived field (`rate`, `density`, `rate_fleet`, and so on)
+  and the provenance `.json` sidecars change. Add the pipeline version to the
+  sidecars.
+- `fit_cached()` keys on its inputs, so new data means new cache entries and a
+  **full refit of 10** (hours). Keep v4 and v5 model caches apart so they do
+  not overwrite each other.
+- `06`–`08`: re-render figures and tables per version. (Per standing
+  preference, rebuild figure PNGs only; never re-render the webinar `.pptx`.)
+- The deferred effort decomposition (n_MMSI surface, fixed-cohort check, fleet
+  covariate) gains a dimension: the v4/v5 difference is itself a "vessels in"
+  vs "hours per vessel" decomposition, so do them together.
+
+### 2.6 Interpretation
+
+- **VP becomes the more robust response.** Its hours are model-free. Only the
+  labels used to pick vessels change, and Primary's crosswalk already
+  corrects those.
+- **AFE for `FIXED` gear is at risk of a systematic undercount in v5**,
+  layered on the existing undercount for added hulls. If the comparison shows
+  it, report fixed-gear AFE results with v4 alongside, or as VP-only.
+- **Charter / guard / survey false positives.** v5's removal of slow-transit
+  and port false positives may already strip much of the AFE that the
+  crosswalk's activity windows remove in v4. That is good news (independent
+  confirmation), and it means the *Strict − Primary* gap in Stage 3 should
+  narrow. Check it explicitly, because it bears on whether Stage 3 changes
+  are construction-related activity or real fishing change.
+
+### 2.7 Protecting known v4 fishing vessels
+
+**The question:** if a vessel counted as fishing in v4 gets a different
+vessel type or gear type in v5, will it reach review, or can it drop out of
+the analysis unseen?
+
+**What is already protected.** These figures are from the 2026-10-06 pull
+and the `references/` files as of 2026-10-28.
+
+- **194 crosswalk fishing hulls.** `classify()` matches them by MMSI, so they
+  stay in Primary whatever v5 types them. 149 of them were already non-FISHING
+  in v4 and are in Primary only through the crosswalk.
+- **649 MMSIs with accepted gear corrections.** `vessel_gear.csv` overrides
+  GFW's gear, so a v5 gear change does not reach them.
+- MMSIs and Vessel IDs are stable between v4 and v5, so these matches hold.
+
+**The gap.**
+
+- **1,206 of the 1,301 MMSIs typed FISHING in v4 have no crosswalk row.**
+  They are in Strict and Primary on GFW's label alone. 383 of them have AFE,
+  about **25% of all AFE hours**. If v5 retypes one as OTHER, PASSENGER or
+  `insufficient_data`, it leaves both sets with no warning:
+  - **Gear review sheet:** it only considers MMSIs typed FISHING or
+    crosswalk fishing hulls, so they fall off it.
+  - **Phase 6 label-drift check:** it only checks vessels with a decision.
+  - **Missed-fishing screen (list 1):** it might catch them, but only if
+    they pass its flag and GARFO thresholds.
+- **746 of those also have no gear correction** (about 20% of AFE hours).
+  If their v5 gear becomes unresolved, the gear review catches them. A change
+  from one specific class to another (e.g. `TRAWLERS` → `POTS_AND_TRAPS`)
+  passes silently unless a GARFO permit disagrees.
+
+**Three actions:**
+
+1. **Snapshot a v4 fishing roster now**, while the v4 extracts are in place
+   and before any v5 work. `references/fishing_roster_v4.csv` is written once,
+   tracked in git and never regenerated. It has one row per MMSI that counted
+   as fishing in v4 by any source: GFW `FISHING` type, crosswalk fishing hull,
+   accepted gear correction, or GARFO permit group. Each row records:
+   - the v4 GFW type and gear, the v4 analysis gear class and its source;
+   - whether the MMSI was in v4 Primary, and its VP and AFE hours by stage;
+   - its Vessel IDs, which source flagged it, and the pull date.
+2. **Add a roster check to 03 for the v5 run.** Every roster MMSI whose
+   vessel type, effective gear class or presence changed goes to review:
+   - **Type changes** go on a new list on the vessel review sheet,
+     `5_v4_label_change`, with both labels, hours and the existing evidence.
+     Accepting a row writes a decision, the decision feeds the crosswalk,
+     and the vessel is protected from then on. Rejecting it records that
+     v5's label was checked and stands.
+   - **Gear-class changes** go on the gear review sheet, which also starts
+     considering every roster MMSI, not only those typed FISHING.
+   - **Missing vessels** (roster MMSIs with no v5 records in the window) are
+     listed and their hours reported.
+   - The Phase 6 label-drift check is extended to the whole roster.
+3. **Add a gate to 04.** Every roster MMSI that was in v4 Primary and has v5
+   records must be accounted for in one of three ways:
+   - it is in v5 Primary;
+   - it has a decision made against v5 (`gfw_pipeline == "v5"`);
+   - it has a deliberate v4 non-fishing or gear-marker crosswalk row.
+
+   Otherwise the render stops and names the MMSIs and their hours, in the same
+   way as the existing crosswalk check. A render parameter downgrades the stop
+   to a warning for interim renders while review is still under way; the
+   final render must pass with it off.
+
+**Rejected alternative:** bulk-marking every v4 FISHING vessel as a fishing
+hull in the crosswalk. It is quick, but it locks in v4's false positives and
+discards v5's corrections. Reviewing only the vessels that changed keeps the
+work proportional: at GFW's global ~3% type-change rate, a few dozen
+vessels, though the real number is only known once v5 is pulled.
+
+The roster is generic: at v6, the same function writes
+`fishing_roster_v5.csv` and the same check and gate run against it.
+
+---
+
+## 3. Proposed repo structure changes
+
+Per project rules, `data/` is never edited by Claude. Steps marked
+**(you)** are yours to run. Nothing below needs a new package: `httr2`,
+`rjson` and `digest` are already in `renv.lock`.
+
+### 3.1 Make the pipeline version a parameter
+
+`r/paths.R`: add one `pipeline` entry (default `"v5"` once adopted) and build
+the version-specific roots from it. Every qmd already takes path overrides
+(`-P`), so a v4 render is `-P pipeline:v4`.
+
+```r
+# sketch: version-specific roots; references/ stays version-independent
+gfw_pipeline <- "v5"                     # "v4" for the frozen 2026-10-06 pull
+
+gfw_paths <- list(
+  pipeline      = gfw_pipeline,
+  raw_gfw       = file.path("data/raw/gfw", gfw_pipeline),
+  raw_vp        = file.path("data/raw/gfw", gfw_pipeline, "gfw_vp_id.csv"),
+  raw_afe       = file.path("data/raw/gfw", gfw_pipeline, "gfw_afe_id.csv"),
+  pull_info     = file.path("data/raw/gfw", gfw_pipeline, "pull_info.csv"),
+  interim_gfw   = file.path("data/interim/gfw", gfw_pipeline),
+  processed_gfw = file.path("data/processed/gfw", gfw_pipeline),
+  analysis      = file.path("data/processed/analysis", gfw_pipeline),
+  models        = file.path("data/processed/models", gfw_pipeline),
+  evidence      = file.path("data/raw/vessel_evidence", gfw_pipeline),
+  explore       = file.path("reports/explore", gfw_pipeline),
+  spatial       = file.path("reports/spatial", gfw_pipeline),
+  bag           = file.path("reports/bag", gfw_pipeline),
+  compare       = "reports/pipeline_compare",   # v4 vs v5 outputs
+  # ... unchanged entries (aoi, leases, references/, infra, basemap ...)
+)
+```
+
+`gfw_paths_with()` currently overrides individual entries. A `pipeline`
+override has to **rebuild** the derived entries, so `gfw_paths` becomes a
+function of `pipeline` (e.g. `make_gfw_paths(pipeline)`), with
+`gfw_paths <- make_gfw_paths("v5")` kept for existing callers. Test it in
+`test-gfw_helpers.R` or a new `test-paths.R`.
+
+**(you)** Move the current extracts into the v4 folders: `data/raw/gfw/*.csv`
+→ `data/raw/gfw/v4/`, and the same for `interim/gfw`, `processed/gfw`,
+`processed/analysis`, `processed/models`, and `raw/vessel_evidence` (except
+`registries/`, which is version-independent and stays where it is). Do this
+in one commit together with the `paths.R` change, so `quarto render r/` with
+`-P pipeline:v4` reproduces the current results exactly.
+
+### 3.2 Pin the dataset version in the pull
+
+gfwr has no version argument, so add a thin wrapper to `r/gfw_helpers.R`. It
+builds the same request as `gfwr:::gfw_4wings()` but with an explicit
+`datasets[0]`. It uses gfwr's own exported/internal pieces where possible, so
+the output format matches what `read_gfw()` expects.
+
+```r
+# sketch: 4Wings report pinned to a dataset version, e.g.
+#   gfw_4wings_pinned("public-global-presence:v5.0", ...)
+# Mirrors gfwr:::gfw_4wings() (gfwr 3.0), which hard-codes ":latest".
+gfw_4wings_pinned <- function(dataset, start_date, end_date, region,
+                              spatial_resolution = "HIGH",
+                              temporal_resolution = "DAILY",
+                              group_by = "VESSEL_ID",
+                              key = Sys.getenv("GFW_TOKEN")) {
+  req <- httr2::request("https://gateway.api.globalfishingwatch.org/v3/") |>
+    httr2::req_url_path_append("4wings/report") |>
+    httr2::req_url_query(`datasets[0]` = dataset,
+                         `spatial-resolution` = spatial_resolution,
+                         `temporal-resolution` = temporal_resolution,
+                         `group-by` = group_by,
+                         `date-range` = paste(start_date, end_date, sep = ","),
+                         format = "CSV") |>
+    httr2::req_headers(Authorization = paste("Bearer", key),
+                       `Content-Type` = "application/json") |>
+    httr2::req_body_raw(gfwr:::sf_to_geojson(region, endpoint = "raster"))
+  # response is a zip holding one CSV, as in gfwr
+  tmp <- tempfile(fileext = ".zip")
+  writeBin(httr2::resp_body_raw(httr2::req_perform(req)), tmp)
+  csv <- grep("\\.csv$", utils::unzip(tmp, list = TRUE)$Name, value = TRUE)
+  readr::read_csv(unz(tmp, csv), show_col_types = FALSE,
+                  col_types = readr::cols(.default = readr::col_character()))
+}
+```
+
+Verify the path (`4wings/report`) against
+`print_request = TRUE` output from gfwr before relying on it. Read every column
+as character from the start (MMSI safety). For the identity API, pass
+`datasets[0]=public-global-vessel-identity:v5.0` the same way, or accept
+`latest` and record `dataset` from the response (the parser already captures
+it).
+
+`01_pull_gfw.qmd`: add a `pipeline` parameter and dataset IDs, pull through
+the wrapper, write to the version folder, and extend `pull_info.csv`:
+
+| New column | Example |
+|---|---|
+| `pipeline` | `v5` |
+| `vp_dataset` / `afe_dataset` | `public-global-presence:v5.0` |
+| `gfwr_version` | `3.0` |
+| `api_base` | `gateway.api.globalfishingwatch.org/v3` |
+
+Backfill the v4 `pull_info.csv` **(you)** with `pipeline = v4`,
+`*_dataset = …:latest (resolved to v4)`.
+
+### 3.3 Re-pull v4.0 pinned (reproducibility check)
+
+Before April 2027, pull `:v4.0` with the same query into
+`data/raw/gfw/v4_repull/`. Between 2026-10-06 and 2026-10-21 v4 was still
+updating daily, so small differences near the end of the window are expected.
+A clean match over 2016–2026-08 confirms the frozen v4.0 equals the data
+already analysed. It also gives a pinned, citable source for the v4
+sensitivity.
+
+### 3.4 New comparison notebook
+
+`r/01a_compare_pipelines.qmd`. Like 01, keep it **out of** the
+`_quarto.yml` render list. It reads `v4/` and `v5/` raw and processed outputs
+and writes to `reports/pipeline_compare/`. Its comparison helpers go in a
+small `r/compare_helpers.R` with a matching `tests/testthat` file. Content
+is in Section 4.
+
+### 3.5 References and docs
+
+- `references/vessel_decisions.csv`, `vessel_gear.csv`: add `gfw_pipeline`
+  (backfill `v4`). Update `vessel_helpers.R` validation and
+  `test-references.R`.
+- `r/gfw_helpers.R` `gear_class_map` / `fishing_gear_codes`: add any new v5
+  gear codes after seeing the real label set (Section 4.2); treat
+  `INSUFFICIENT_DATA` as non-fishing in Strict and as unresolved for the
+  screens.
+- `references/data_dictionary.md`: version-specific paths, new `speed`
+  column, new label values, pipeline field in `pull_info.csv`, and the
+  "apparent fishing activity" wording.
+- `planning/gfw_analysis_plan.qmd`: add a "Data version" methods paragraph and
+  a v4-sensitivity row in the sensitivity table.
+- `CITATION.cff` / README: cite the pipeline version and dataset IDs.
+
+### 3.6 Change list: v4 fishing roster (awaiting approval)
+
+This is the file-by-file change list for the three actions in Section 2.7.
+Nothing here has been implemented. Part A can be done now. Parts B and C
+depend on the pipeline parameter (Section 3.1) and the `gfw_pipeline`
+column in the decision files (Section 3.5), so they come after those.
+
+**Before Part A:** check that `references/` has no uncommitted changes
+(`git status references/`). As of 2026-10-28 it is clean; the crosswalk and
+decisions were last committed in `4f1263c`. The roster then matches a
+commit, and its provenance can cite that commit.
+
+#### Part A: snapshot the roster (now)
+
+**Status (2026-10-28): code implemented and tested; roster not yet
+written.** Three departures from the table below:
+
+- The 03 chunk sits at the end of Phase 5, not in Phase 1, so it uses this
+  run's GARFO permit groups.
+- The version comes from a second parameter, `roster_pipeline` (default
+  `"v4"`), until `paths.R` carries the pipeline (Section 3.1).
+- The chunk refuses to write while `references/` has uncommitted changes, and
+  records the commit in a `source_commit` column.
+
+A dry run on the v4 pull, built in memory only, gave 1,554 roster MMSIs:
+1,294 GFW FISHING, 192 crosswalk fishing hulls, 646 with gear corrections,
+713 with fishing GARFO permits, and 1,378 in Primary. 741 of the Primary ones
+have no crosswalk or gear row. These counts are a little below the
+whole-pull figures in Section 2.7 because the roster uses only
+analysis-window records.
+
+| File | Change |
+|---|---|
+| `r/paths.R` | New entry `roster = "references/fishing_roster_%s.csv"`, filled in with the pipeline the roster describes (`sprintf(paths$roster, "v4")`). |
+| `r/vessel_helpers.R` | New `roster_cols` constant and `build_fishing_roster(vp, afe, cw, gear, permit_groups, gfw_labels, pull_date, pipeline)`. It runs `classify()` on the records and returns one row per MMSI that is GFW FISHING, a crosswalk fishing hull, has an accepted gear correction, or has a GARFO permit group. Columns: `MMSI`, `pipeline`, `pull_date`, `Vessel_Name`, `gfw_vessel_type`, `gfw_gear_type`, `gear_class`, `gear_source`, `src_gfw_fishing`, `src_cw_fishing`, `src_gear_correction`, `src_garfo_permit`, `in_primary`, `vp_hours_s1..s3`, `afe_hours_s1..s3`, `vessel_ids` (joined with `\|`), `first`, `last`. New `write_roster_once(roster, path)`, which stops if the file already exists, so the snapshot cannot be overwritten. |
+| `r/03_review_vessels.qmd` | New Phase 1 chunk, "Snapshot the fishing roster". It runs only when the new parameter `write_roster` is `true` (default `false`), builds the roster from the records already read in this run, and calls `write_roster_once()`. One render with `-P write_roster:true` writes `references/fishing_roster_v4.csv`. |
+| `r/tests/testthat/test-vessel_helpers.R` | Tests for `build_fishing_roster()` on a toy pull: each source sets its flag; an MMSI in two sources is one row; `in_primary` follows `classify()`; hours split by stage. A test that `write_roster_once()` refuses to overwrite. |
+| `r/tests/testthat/test-references.R` | Schema test for every `references/fishing_roster_*.csv`: `roster_cols` present, MMSI unique per file, flags `TRUE`/`FALSE`, at least one source flag per row, `pipeline` matching the file name. MMSIs are checked as text, not as 9 digits, because malformed MMSIs are legitimate rows. |
+| `references/data_dictionary.md` | New `references/fishing_roster_{pipeline}.csv` entry: purpose, write-once rule, columns. |
+| `references/fishing_roster_v4.csv` | Generated by the render above (you run it). Commit it. |
+
+#### Part B: roster check in 03 (before the v5 review session)
+
+| File | Change |
+|---|---|
+| `r/vessel_helpers.R` | New `roster_changes(roster, gfw_labels, gear_now)`. It compares each roster row with the current pull and returns `MMSI`, `change` (`type`, `gear_class`, `missing`), the old and new labels, and v4 hours. Changes already covered by a crosswalk fishing hull (type) or a gear correction (gear) are marked `protected` and kept for the record. |
+| `r/03_review_vessels.qmd`, Phase 1 setup | Reads the roster of the previous pipeline (`fishing_roster_v4.csv` on a v5 run). It is skipped, with a message, when the roster's pipeline equals the current one. |
+| `r/03_review_vessels.qmd`, "Candidate lists" | New `cand_roster` list, `5_v4_label_change`: unprotected `type` changes among `in_primary` roster MMSIs. An MMSI on list 5 is removed from list 1, so it appears once. List 5 is added to the prose list of candidate lists. |
+| `r/03_review_vessels.qmd`, "Build the review sheet" | List 5 skips the has-evidence filter that list 1 uses (every row is reviewed). It suggests `hull_class = "fishing"` and `activity_excluded = FALSE`. `Identified_By` is `v4_roster_check`. `Notes` gives the v4 → v5 labels and v4 hours. Ordered by AFE hours. |
+| `r/03_review_vessels.qmd`, "Gear review candidates" | `fishing_mmsi` also includes `in_primary` roster MMSIs. A new reason, `gear class changed since v4`, covers unprotected `gear_class` changes. |
+| `r/03_review_vessels.qmd`, new "Roster vessels missing from this pull" | A table of `missing` roster MMSIs with their v4 hours. Report only; nothing to decide. |
+| `r/03_review_vessels.qmd`, Phase 6 | The label-drift check also covers every roster row, not only decided vessels, split into type drift and gear-only drift. |
+| `r/03_review_vessels.qmd`, "How to use this workflow" | Adds the roster to the file table, and list 5 to the review steps. |
+| `r/tests/testthat/test-vessel_helpers.R` | Tests for `roster_changes()`: type change, gear-class change, missing, and protected cases. |
+
+#### Part C: gate in 04 (before the v5 render of 04)
+
+| File | Change |
+|---|---|
+| `r/vessel_helpers.R` | New `unaccounted_roster(roster, cls, decisions, cw, pipeline)`. It returns the `in_primary` roster MMSIs that have records in `cls` and are not in current Primary, have no decision with `gfw_pipeline == pipeline`, and have no non-fishing or gear-marker crosswalk row. |
+| `r/04_classify_aggregate.qmd` | After "Classify every record", a new chunk "Known fishing vessels". It reads the previous pipeline's roster (read only; 04 still writes nothing to `references/`), calls `unaccounted_roster()`, and stops with the MMSIs and their VP and AFE hours if any remain. A new parameter `allow_unreviewed_roster` (default `false`) turns the stop into a warning for interim renders. A summary table shows roster hours by outcome: still in Primary, decided against v5, deliberately excluded in v4, missing. |
+| `r/tests/testthat/test-vessel_helpers.R` | Tests for `unaccounted_roster()`: each of the three ways of being accounted for, plus one MMSI that should be returned. |
+| `references/data_dictionary.md`, `planning/gfw_analysis_plan.qmd` | Describe the gate. Report the roster outcome table in the methods, as a measure of how much of the v4 fishing fleet v5 changed. |
+
+**Not changed:** `classify()`, `build_crosswalk()`, the Strict and Primary
+definitions, `vessel_decisions.csv` and `vessel_gear.csv` (beyond the
+`gfw_pipeline` column already in Section 3.5), and anything in `data/`. No new
+packages.
+
+---
+
+## 4. Comparison design: v4 vs v5
+
+Two kinds of difference need keeping apart:
+
+- **Label effect.** The same record's `Vessel Type` / `Gear Type` changed, so
+  it moves in or out of Strict, or between gear classes.
+- **Model effect.** The same Vessel ID on the same day in the same cell has
+  different AFE hours. This is AFE only; VP hours should be stable.
+
+Because `vesselId` is stable, the record key **`Vessel ID × cell_id × date`**
+joins the two versions exactly.
+
+### 4.1 Reconciliation (does the data line up?)
+
+```r
+# sketch: full outer join of the two versions at record level
+key <- c("Vessel ID", "cell_id", "date")
+vp_cmp <- full_join(
+  read_gfw(v4$raw_vp) |> select(all_of(key), MMSI, type4 = `Vessel Type`,
+                                gear4 = `Gear Type`, h4 = hours),
+  read_gfw(v5$raw_vp) |> select(all_of(key), MMSI, type5 = `Vessel Type`,
+                                gear5 = `Gear Type`, h5 = hours, speed),
+  by = key, suffix = c("_4", "_5")) |>
+  mutate(status = case_when(is.na(h4) ~ "v5 only",
+                            is.na(h5) ~ "v4 only",
+                            h4 == h5  ~ "same",
+                            TRUE      ~ "changed"))
+```
+
+Report for **VP** and **AFE**, overall and by stage:
+
+- rows, MMSIs and Vessel IDs per version; rows in both / v4 only / v5 only;
+- total hours per version and the % change (compare with GFW's −3.55% / −7.1%
+  global AIS figures);
+- MMSI-level agreement, since MMSI is the counting unit (`n_distinct(MMSI)` by
+  version and stage).
+
+VP is expected to agree almost exactly. Any VP "v4 only" / "v5 only" mass
+needs explaining before AFE results are trusted.
+
+### 4.2 Label transitions (hull-level)
+
+- An **MMSI-level transition matrix** `type4 → type5`, weighted by VP hours
+  and by AFE hours. Highlight `FISHING ↔ non-FISHING`,
+  `→ INSUFFICIENT_DATA`, and `OTHER → specific`.
+- A **gear transition matrix** `gear4 → gear5` on GFW codes and on analysis
+  classes (`gear_class_of()`), weighted by hours. Expect mass moving from
+  `FIXED` / `MOBILE` → `UNRESOLVED`.
+- The full v5 label set, so `gear_class_map` can be updated.
+- **Strict set change**: VP and AFE hours entering and leaving Strict, by stage
+  and gear.
+
+### 4.3 False positives and false negatives
+
+Without independent truth, "v4 fishing, v5 not" is only *disagreement*. Score
+both versions against the **truth the repo already holds**, so each version
+gets FP/FN rates on the same yardstick.
+
+**Hull level** (is this MMSI a fishing vessel?). Reference = crosswalk
+`hull_class` from accepted decisions (plus GARFO permit match and PSIX where
+available):
+
+| | Truth: fishing hull | Truth: non-fishing / gear marker |
+|---|---|---|
+| GFW `FISHING` | TP | **FP** (e.g. CYGNUS, BALTIC) |
+| GFW not `FISHING` | **FN** (list-1 "missed fishing" accepts) | TN |
+
+Compute counts and VP/AFE-hour-weighted rates per version and stage. The
+reference set was assembled by reviewing **v4** candidates, so it is
+enriched for v4 errors and biased in v5's favour. State that, and for a
+fairer comparison add a small **v5-triggered review**: run 03's screens on
+v5 and review a random sample of the new candidates.
+
+**Activity level** (is this fishing hull fishing right now?). Known
+non-fishing activity by fishing hulls:
+
+- Ørsted **survey trips** (`orsted_fv_survey_dates_*.csv`) and **charter /
+  guard windows** (`vessel_removals.csv`, activity-excluded decisions). AFE
+  hours inside these windows are **activity FPs**. Compare total and per-vessel
+  FP hours v4 vs v5. This is the most direct test of v5's slow-transit fix,
+  and it bears straight on Stage 3.
+- **Speed check** (v5 VP `speed`): AFE hours on vessel-days with mean speed
+  in transit range (e.g. > 6–7 kn for trawlers, gear-specific) are FP
+  candidates. Only v5 has speed, but the v4 hours can be joined onto it by
+  record key.
+- **Port / near-shore**: AFE hours in cells within a few km of shore or
+  harbours (if the AOI reaches them). Expect v5 to drop these.
+
+**Fishing FNs.** AFE hours that v4 gave and v5 removed for
+**GARFO-confirmed fixed-gear hulls** (`vessel_permit_groups.csv`,
+`vessel_gear.csv` = `FIXED`) on days with no survey or charter window. These
+are candidate **v5 FNs**, matching GFW's own FN list. Summarise by gear class,
+month (lobster/gillnet seasonality), depth and distance band.
+
+**AFE-to-VP ratio.** Per MMSI × stage, AFE/VP in each version. A fixed-gear
+hull whose ratio falls to ~0 in v5 is a strong FN signal. A charter vessel
+whose ratio falls is an FP fix.
+
+### 4.4 Does the change bias the analysis? (the key question)
+
+For VP and AFE, Strict and Primary, and each gear class:
+
+1. Ratio `v5 / v4` hours by **stage**. Is it the same in Stages 1, 2 and 3?
+2. Ratio by **distance band** (the BAG bands from `10_bag.qmd`) × stage. Is
+   the v5/v4 change itself a gradient around the leases? (A
+   difference-in-differences of the versions.)
+3. Ratio by month-of-year. Seasonal fixed-gear FNs would distort season
+   standardisation.
+4. Spatial map of `h5 − h4` by cell for AFE, with Global Moran's I on the
+   difference (07's machinery). Clustered differences near the leases are the
+   red flag.
+5. Re-run the **descriptive BAG (10, step 1)** on both versions and compare
+   the stage × band contrasts and their bootstrap intervals. This is cheap,
+   needs no model refit, and decides how much to worry.
+
+Decision rule (proposed): if the v5/v4 ratio is stable across stages and
+distance bands within the bootstrap noise of step 5, adopt v5 as primary and
+report v4 as a sensitivity. If it is not, report the affected dataset × gear
+(likely AFE × FIXED) from both versions and lead with VP for that gear.
+
+### 4.5 Outputs (`reports/pipeline_compare/`)
+
+- `tables/reconcile_{vp,afe}.csv`, `label_transitions.csv`,
+  `gear_transitions.csv`, `fp_fn_hull.csv`, `fp_activity.csv`,
+  `fn_fixed_gear.csv`, `ratio_stage_band.csv`
+- `figures/` diff maps, stage × band ratio plot, transition heatmaps
+- a short `.md` summary for the methods appendix
+
+---
+
+## 5. Order of work
+
+| # | Step | Who | Renders / pulls |
+|---|---|---|---|
+| 1 | Freeze v4: commit the current state; tag it (e.g. `data-v4-2026-10-06`) | you | — |
+| 1b | Snapshot the v4 fishing roster (Section 3.6, Part A); commit `references/fishing_roster_v4.csv` | Claude (code) + you (render) | `quarto render r/03_review_vessels.qmd -P write_roster:true` |
+| 2 | Add the version parameter to `paths.R` (+ tests) and move existing data into `v4/` folders | Claude (code) + you (data move) | `quarto render r/ -P pipeline:v4` must reproduce current outputs |
+| 3 | Add `gfw_4wings_pinned()` and the `pull_info` columns; parameterise `01` | Claude | — |
+| 4 | Pull `:v5.0` → `data/raw/gfw/v5/`; pull `:v4.0` → `v4_repull/` | you (API token) | `quarto render r/01_pull_gfw.qmd -P pipeline:v5` |
+| 5 | Version-aware identity cache, extended `parse_identity()`, 03 screen tweaks, roster check (Section 3.6, Part B) | Claude | — |
+| 6 | Render `01a_compare_pipelines.qmd`, sections 4.1–4.2 (raw only) | Claude | update `gear_class_map` from the real label set |
+| 7 | Run 03 on v5 with APIs on; auto-resolve gear; review list 5 (v4 label changes), the gear residual and the v5-triggered sample | you | review session |
+| 8 | Add the 04 roster gate (Section 3.6, Part C); render 02 (union grid) → 04 → 05 for both versions. The v5 render of 04 must pass the gate. | both | — |
+| 9 | Comparison sections 4.3–4.4 (FP/FN, bias checks, descriptive BAG on both) | Claude | — |
+| 10 | Decide the primary version from the decision rule; refit 10 on v5 (and v4 if needed) | you decide | long refit |
+| 11 | Docs: data dictionary, analysis plan, CITATION/README | Claude | — |
+
+Steps 1–4 are time-sensitive. `:v4.0` must still be reachable for step 4's
+re-pull, so finish them well before April 2027.
+
+## 6. Open questions for you
+
+1. **Grid:** rebuild the 0.01° grid from the union of v4 and v5 cells (my
+   recommendation), or keep the current grid and drop v5-only cells?
+2. **Moving v4 data:** move the current files into `v4/` folders, or leave
+   them in place as the implicit v4 and put only new pulls in versioned
+   folders (less churn, less symmetric)?
+3. **Pull end date:** keep `query_end = 2026-10-01` for an exact like-for-like
+   comparison, or extend now? I suggest identical windows for the comparison,
+   and extend only when new Ørsted survey dates move `analysis_end`.
+4. **v5-triggered review budget:** how many new v5 candidates are you willing
+   to hand-check (MarineTraffic + PSIX) to make the FP/FN comparison fair?
+5. **`atomicClassSc` threshold** for auto-resolving gear: use GFW's 0.35, or
+   something stricter (e.g. 0.6) since it would replace a manual decision?
+
+## Sources
+
+- [GFW press release: major data upgrade (2026-10-21)](https://globalfishingwatch.org/press-release/global-fishing-watch-launches-major-data-upgrade-for-clearer-picture-of-global-fishing-activity/)
+- [Platform update: Version 5 data pipeline release](https://globalfishingwatch.org/platform-update/version-5-data-pipeline-release/)
+- [API release notes: Pipeline v5](https://globalfishingwatch.org/our-apis/documentation/docs/release-notes/pipeline-v5)
+- [API release notes (all)](https://globalfishingwatch.org/our-apis/documentation/docs/release-notes)
+- [Apparent fishing effort (AIS) documentation](https://globalfishingwatch.org/data-documentation/apparent-fishing-effort-ais/)
+- [gfwr NEWS](https://globalfishingwatch.r-universe.dev/gfwr/NEWS) (3.0 has no dataset-version argument)
+- gfwr 3.0 source in `renv/library`: `gfwr:::gfw_endpoint()` hard-codes the
+  `:latest` dataset IDs

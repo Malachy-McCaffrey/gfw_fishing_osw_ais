@@ -132,3 +132,24 @@ test_that("infra_cable_windows.csv is valid", {
   expect_true(all(as.Date(cw$lay_start[both]) <= as.Date(cw$lay_end[both])))
   expect_false(anyNA(cw$source))
 })
+
+test_that("every fishing_roster_*.csv is valid", {
+  files <- Sys.glob(sprintf(root_paths$roster, "*"))
+  skip_if(length(files) == 0, "no fishing roster written yet")
+  for (f in files) {
+    r <- read_chr(f)
+    expect_equal(names(r), roster_cols, info = f)
+    # MMSIs are checked as text, not as 9 digits: malformed MMSIs are real rows
+    expect_false(anyNA(r$MMSI), info = f)
+    expect_false(anyDuplicated(r$MMSI) > 0, info = f)
+    flags <- c("src_gfw_fishing", "src_cw_fishing", "src_gear_correction",
+               "src_garfo_permit", "in_primary")
+    expect_true(all(unlist(r[flags]) %in% c("TRUE", "FALSE")), info = f)
+    # every row is on the roster for at least one reason
+    src <- r |> select(starts_with("src_")) |> mutate(across(everything(), as.logical))
+    expect_true(all(rowSums(src) >= 1), info = f)
+    # one pipeline per file, matching its name
+    expect_equal(unique(r$pipeline), str_match(basename(f), "fishing_roster_(.+)\\.csv")[, 2],
+                 info = f)
+  }
+})

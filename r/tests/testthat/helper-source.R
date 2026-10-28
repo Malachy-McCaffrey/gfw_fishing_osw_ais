@@ -14,8 +14,10 @@ source(file.path(root, "r/infra_helpers.R"))
 source(file.path(root, "r/spatial_helpers.R"))
 source(file.path(root, "r/bag_helpers.R"))
 
-# project paths made absolute, for the reference-file tests
+# project paths made absolute, for the reference-file tests; `pipeline` is a
+# version name, not a path, so it is kept as it is
 root_paths <- lapply(gfw_paths, \(p) file.path(root, p))
+root_paths$pipeline <- gfw_paths$pipeline
 
 # a raw-pull-shaped CSV, written to a temporary file; returns its path
 write_raw <- function(..., hours_col = "Vessel Presence Hours") {

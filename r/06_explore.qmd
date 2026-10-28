@@ -9,6 +9,8 @@ format:
     fig-width: 10
     fig-height: 6
 params:
+  # GFW pipeline version to render against (r/paths.R); blank = the default
+  pipeline: ""
   # Path overrides (see r/paths.R); leave blank to use the project paths.
   analysis: ""
   processed_gfw: ""
@@ -45,8 +47,8 @@ records, and the vessel crosswalk.
 | 9 | Temporal completeness: which model time steps the data support |
 | 10 | Construction exposure and event time: how many cells each project's foundations and cable works reach, and effort by band around each project's first foundation |
 
-Figures and tables go to `reports/explore/` (gitignored: derived GFW
-products), listed with their hashes in `reports/explore/manifest.csv` and its
+Figures and tables go to `reports/explore/{pipeline}/` (gitignored: derived GFW
+products), listed with their hashes in `reports/explore/{pipeline}/manifest.csv` and its
 provenance sidecar. **The gate** at the end gathers the three decisions this
 phase feeds: the transform per dataset × gear (step 3), hulls to send back to
 `03` (step 5), and whether the BAG needs a pre-trend term (step 7).

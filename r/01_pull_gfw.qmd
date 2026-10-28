@@ -3,6 +3,11 @@ title: "MM GFW VP & AFE Data Pull"
 author: "Malachy McCaffrey"
 date: today
 format: html
+params:
+  # GFW pipeline version the pull is filed under (r/paths.R), e.g. v5. Required:
+  # gfwr requests ":latest", so the version cannot be read from the request
+  # (see planning/gfw_pipeline_v5_plan.qmd).
+  pipeline: ""
 ---
 
 ```{r setup, include=FALSE}
@@ -21,14 +26,15 @@ GFW 4Wings API for the Ørsted projects AOI, 2016 onward, and write the raw
 extracts to `data/raw/gfw/`. Nothing is filtered here: vessel classification
 is done by `03_review_vessels.qmd` and `04_classify_aggregate.qmd`.
 
-**Rendering this file overwrites the raw extracts** that every later step and
-every decision in `references/` was made against. GFW reprocesses its data
-and relabels vessels between pulls, so a new pull will not reproduce the
-2026-10-06 one. That is why this file is left out of the project render list
-in `r/_quarto.yml`. Render it on its own, and only when a new pull is intended:
+GFW reprocesses its data and relabels vessels between pipeline versions, so a
+new pull will not reproduce the 2026-10-06 one (pipeline v4). Each pull is
+filed under its version, `data/raw/gfw/<pipeline>/`, and this file **refuses
+to overwrite** extracts already in that folder. It is left out of the project
+render list in `r/_quarto.yml`. Render it on its own, only when a new pull is
+intended, and name the version:
 
 ```sh
-quarto render r/01_pull_gfw.qmd
+quarto render r/01_pull_gfw.qmd -P pipeline:v5
 ```
 
 ## Libraries
@@ -41,7 +47,21 @@ library(sf)
 # shared paths
 source("r/paths.R")
 
-paths <- gfw_paths
+# The version must be named: gfwr always requests ":latest", so a default
+# would file a pull under whatever version this repo last analysed, not the
+# one GFW served. Run chunk by chunk, set `params <- list(pipeline = "v5")`.
+stopifnot("set the GFW pipeline version: quarto render r/01_pull_gfw.qmd -P pipeline:v5" =
+            exists("params") && !identical(params$pipeline, "") && !is.null(params$pipeline))
+paths <- gfw_paths_with(params)
+message("Filing this pull under pipeline ", paths$pipeline, ": ", paths$raw_gfw)
+
+# never replace a pull: every later step and decision was made against it
+existing <- Filter(file.exists, c(paths$raw_vp, paths$raw_afe, paths$pull_info))
+if (length(existing) > 0) {
+  stop("A pull is already filed under ", paths$pipeline, ": ",
+       paste(existing, collapse = ", "),
+       ". Use a new pipeline folder name, or move these files first.", call. = FALSE)
+}
 ```
 
 ## Query window and spatial extent
@@ -130,6 +150,7 @@ write_csv(gfw_afe_id, paths$raw_afe)
 
 # record when this pull was made; 03 and 04 read pull_date from it
 write_csv(tibble(pull_date   = Sys.Date(),
+                 pipeline    = paths$pipeline, # the version folder it is filed under
                  query_start = query_start,
                  query_end   = query_end,
                  vp_rows     = nrow(gfw_vp_id),

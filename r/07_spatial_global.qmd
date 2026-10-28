@@ -9,6 +9,8 @@ format:
     fig-width: 10
     fig-height: 6
 params:
+  # GFW pipeline version to render against (r/paths.R); blank = the default
+  pipeline: ""
   # Path overrides (see r/paths.R); leave blank to use the project paths.
   analysis: ""
   spatial: ""
@@ -71,8 +73,8 @@ is multiplied by a constant (caveat 8).
 binary queen without self for General G, as Getis & Ord (1992) define it.
 The self-inclusive weights are kept for Gi\* in Phase 3.
 
-Tables and figures go to `reports/spatial/` (gitignored: derived GFW
-products), listed with their hashes in `reports/spatial/manifest_07.csv`
+Tables and figures go to `reports/spatial/{pipeline}/` (gitignored: derived GFW
+products), listed with their hashes in `reports/spatial/{pipeline}/manifest_07.csv`
 and its provenance sidecar. *ρ*₀ is also written to
 `tables/global_rho0.csv`, with its own sidecar, for Phase 7 to read.
 

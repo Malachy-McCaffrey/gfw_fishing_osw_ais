@@ -4,6 +4,8 @@ author: "Malachy McCaffrey"
 date: today
 format: html
 params:
+  # GFW pipeline version to render against (r/paths.R); blank = the default
+  pipeline: ""
   # Path overrides (see r/paths.R); leave blank to use the project paths.
   interim_gfw: ""
   processed_gfw: ""
@@ -46,7 +48,7 @@ reconciles exactly with 04. Records are read only for what the cell tables do
 not carry: vessel counts over strata 04 did not build, and the fleet size
 behind `rate_fleet`.
 
-| Output (`data/processed/analysis/`) | One row per |
+| Output (`data/processed/analysis/{pipeline}/`) | One row per |
 |---|---|
 | `{vp,afe}_stage_gear.csv` | cell × stage × gear |
 | `{vp,afe}_stage_season_gear.csv` | cell × stage × season × gear |

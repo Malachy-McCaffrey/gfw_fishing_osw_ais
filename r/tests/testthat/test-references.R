@@ -25,6 +25,15 @@ test_that("vessel_decisions.csv is valid", {
   expect_length(overlapping_mmsi(acc$MMSI, as.Date(acc$valid_from), as.Date(acc$valid_to)), 0)
 })
 
+test_that("every decision and gear row records its GFW pipeline version", {
+  for (f in c(root_paths$decisions, root_paths$gear)) {
+    d <- read_chr(f)
+    expect_true("gfw_pipeline" %in% names(d), info = f)
+    expect_false(anyNA(d$gfw_pipeline), info = f)
+    expect_true(all(grepl("^[A-Za-z0-9][A-Za-z0-9_.-]*$", d$gfw_pipeline)), info = f)
+  }
+})
+
 test_that("vessel_gear.csv is valid", {
   g <- read_chr(root_paths$gear)
   expect_true(all(gear_cols %in% names(g)))

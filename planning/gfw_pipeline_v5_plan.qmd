@@ -386,6 +386,22 @@ Per project rules, `data/` is never edited by Claude. Steps marked
 
 ### 3.1 Make the pipeline version a parameter
 
+**Status (2026-10-28): implemented and tested; data move pending (you).**
+Implemented as `make_gfw_paths(pipeline)` and `gfw_pipeline_default <- "v4"`
+in `r/paths.R`, with a `pipeline` parameter in every qmd (01–10). The design
+below was extended in four ways:
+
+- The review sheets, the grid and the two generated `references/` files
+  (`vessel_crosswalk_v4.csv`, `vessel_permit_groups_v4.csv`, renamed) are
+  versioned too. All of them depend on the pull.
+- The PSIX cache got its own shared entry (`paths$psix`), so moving the GFW
+  identity cache does not discard USCG lookups.
+- 01 requires `-P pipeline:<version>` and refuses to overwrite an existing
+  pull.
+- `pull_info.csv` gains a `pipeline` column.
+
+Tests are in `r/tests/testthat/test-paths.R`.
+
 `r/paths.R`: add one `pipeline` entry (default `"v5"` once adopted) and build
 the version-specific roots from it. Every qmd already takes path overrides
 (`-P`), so a v4 render is `-P pipeline:v4`.
@@ -501,6 +517,14 @@ is in Section 4.
 
 ### 3.5 References and docs
 
+**Status (2026-10-28):** the `gfw_pipeline` column is done. It is backfilled
+as `v4` in the decisions, gear and v4 crosswalk files (checked: every other
+value is unchanged). It is validated in `vessel_helpers.R`, written to both
+review sheets, filled in when 03 collects a sheet that predates it, and
+tested in `test-references.R`. The data dictionary has a *GFW pipeline
+versions* section; README and the qmd prose use `{pipeline}/` paths. Still
+open: the gear-map, analysis-plan and CITATION items below.
+
 - `references/vessel_decisions.csv`, `vessel_gear.csv`: add `gfw_pipeline`
   (backfill `v4`). Update `vessel_helpers.R` validation and
   `test-references.R`.
@@ -529,8 +553,11 @@ commit, and its provenance can cite that commit.
 
 #### Part A: snapshot the roster (now)
 
-**Status (2026-10-28): code implemented and tested; roster not yet
-written.** Three departures from the table below:
+**Status (2026-10-28): done.** `references/fishing_roster_v4.csv` (1,554
+MMSIs, source commit `69d3e22`) is committed. It was written on the old
+layout, before Sections 3.1 and 3.5. The `roster_pipeline` parameter
+mentioned below has since been replaced by `pipeline`. Three departures from
+the table below:
 
 - The 03 chunk sits at the end of Phase 5, not in Phase 1, so it uses this
   run's GARFO permit groups.

@@ -9,6 +9,8 @@ format:
     fig-width: 10
     fig-height: 6
 params:
+  # GFW pipeline version to render against (r/paths.R); blank = the default
+  pipeline: ""
   # Path overrides (see r/paths.R); leave blank to use the project paths.
   analysis: ""
   spatial: ""
@@ -91,7 +93,7 @@ are seen, then adopt one as the primary hotspot method.
   zero share, the positive distribution and the spatial scale, but none of
   the real geography. It is re-run with Phase 6 model simulations later.
 
-Every permutation run is cached in `reports/spatial/cache/` under a hash of
+Every permutation run is cached in `reports/spatial/{pipeline}/cache/` under a hash of
 its inputs (`cached()`), so a re-render recomputes only what changed. The
 first render takes about 2.5 hours, serially.
 

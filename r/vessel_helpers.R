@@ -15,15 +15,19 @@ survey_dates_through <- as.Date("2026-08-31")
 
 # File layouts --------------------------------------------------------------
 
+# gfw_vessel_type, gfw_gear_type, pull_date and gfw_pipeline record the pull a
+# row was made against: GFW's labels then, the pull date, and the GFW pipeline
+# version (e.g. v4). A decision about a hull stays valid across versions; the
+# version says which labels it was checked against.
 cw_cols <- c("MMSI", "valid_from", "valid_to", "Vessel_Name", "hull_class",
              "activity_excluded", "Operation", "Identified_By",
              "evidence_ref", "gfw_vessel_type", "gfw_gear_type",
-             "pull_date", "Notes")
+             "pull_date", "gfw_pipeline", "Notes")
 decision_cols <- c("decision", "decided_on", cw_cols)
 
 gear_cols <- c("decision", "decided_on", "MMSI", "valid_from", "valid_to",
                "Vessel_Name", "gear_class", "basis", "evidence_ref",
-               "gfw_gear_type", "pull_date", "Notes")
+               "gfw_gear_type", "pull_date", "gfw_pipeline", "Notes")
 
 hull_classes   <- c("fishing", "non_fishing", "gear_marker", "unknown")
 gear_classes   <- c("MOBILE", "FIXED", "POLE_AND_LINE", "UNRESOLVED")
@@ -96,6 +100,10 @@ validate_crosswalk <- function(cw, gfw_labels = NULL, source = "the crosswalk in
   problems <- c(
     if (any(!cw$hull_class %in% hull_classes))
       "unknown hull_class",
+    # checked when the column is there (it always is in the tracked files;
+    # minimal test crosswalks leave it out)
+    if ("gfw_pipeline" %in% names(cw) && anyNA(cw$gfw_pipeline))
+      "gfw_pipeline is blank (the GFW pipeline version the row was made against)",
     if (anyNA(cw$activity_excluded))
       "activity_excluded must be TRUE or FALSE",
     if (length(bad_mmsi) > 0)
@@ -114,7 +122,7 @@ validate_crosswalk <- function(cw, gfw_labels = NULL, source = "the crosswalk in
   invisible(cw)
 }
 
-# Types a crosswalk read as character (vessel_crosswalk.csv, or build_crosswalk()
+# Types a crosswalk read as character (vessel_crosswalk_{pipeline}.csv, or build_crosswalk()
 # output) and validates it
 type_crosswalk <- function(cw_chr, gfw_labels = NULL, source = "the crosswalk inputs") {
   cw_chr |>
@@ -137,6 +145,8 @@ validate_gear <- function(gear_inputs, source = "the gear file") {
       "decision must be accept or reject",
     if (any(!gear$gear_class %in% gear_classes))
       "gear_class must be MOBILE, FIXED, POLE_AND_LINE or UNRESOLVED",
+    if ("gfw_pipeline" %in% names(gear_inputs) && anyNA(gear_inputs$gfw_pipeline))
+      "gfw_pipeline is blank (the GFW pipeline version the row was made against)",
     if (any(gear$valid_from > gear$valid_to, na.rm = TRUE))
       "valid_from after valid_to",
     if (length(overlaps) > 0)
@@ -235,7 +245,8 @@ build_crosswalk <- function(paths, decisions, gfw_labels, pull_date) {
   survey_rows <- survey_windows |>
     mutate(hull_class = "fishing", activity_excluded = "TRUE", Operation = "Survey",
            Identified_By = "orsted_survey_dates",
-           pull_date = as.character(.env$pull_date)) |>
+           pull_date = as.character(.env$pull_date),
+           gfw_pipeline = paths$pipeline) |>
     left_join(gfw_labels, by = "MMSI")
 
   removal_rows <- removal_list |>
@@ -247,8 +258,10 @@ build_crosswalk <- function(paths, decisions, gfw_labels, pull_date) {
               activity_excluded = if_else(Scope == "stages_2_3", "TRUE", "FALSE"),
               Operation, Identified_By,
               evidence_ref = NA_character_,
-              # the pull the crosswalk was built against (pull_info.csv)
+              # the pull the crosswalk was built against (pull_info.csv) and
+              # its GFW pipeline version
               pull_date = as.character(.env$pull_date),
+              gfw_pipeline = paths$pipeline,
               Notes) |>
     # GFW's labels for these vessels in that pull
     left_join(gfw_labels, by = "MMSI")
@@ -338,7 +351,7 @@ roster_permit_groups <- c("commercial", "for-hire", "commercial + for-hire",
 #   src_garfo_permit     a unique GARFO match puts it in a fishing permit group
 # vp and afe are read_gfw() records (already trimmed to the analysis window),
 # cw a typed crosswalk (type_crosswalk()), gear the accepted gear rows
-# (validate_gear()), permit_groups the vessel_permit_groups.csv table, and
+# (validate_gear()), permit_groups the vessel_permit_groups_{pipeline}.csv table, and
 # gfw_labels the gfw_labels_of() table for the same pull.
 build_fishing_roster <- function(vp, afe, cw, gear, permit_groups, gfw_labels,
                                  pull_date, pipeline, source_commit = NA_character_) {

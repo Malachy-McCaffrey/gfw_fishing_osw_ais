@@ -15,7 +15,7 @@ Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order,
 | 00 | `00_setup.R` | Restores the R environment and stores the GFW token. Run once per machine. | — |
 | 01 | `01_pull_gfw.qmd` | Pulls daily 0.01° vessel presence (VP) and apparent fishing effort (AFE) for the AOI from the GFW 4Wings API, one calendar year per request, and writes the raw extracts and `pull_info.csv`. Not in the default render: it overwrites the raw data. | GFW token |
 | 02 | `02_build_grid.qmd` | Rebuilds GFW's 0.01° grid from the lower-left cell corners, reprojects it to UTM 19N, flags cells against the AOI, builds queen-contiguity neighbours, and writes raw-data (all vessel types) cell tables. | Raw pull |
-| 03 | `03_review_vessels.qmd` | The analyst's vessel review. Screens for misclassified vessels, gathers evidence (GARFO permits, GFW identity API, USCG PSIX), writes review sheets, and turns decisions into `references/vessel_crosswalk.csv` and `references/vessel_permit_groups.csv`. The only step that writes to `references/`. | Raw pull, GARFO permit lists, API caches |
+| 03 | `03_review_vessels.qmd` | The analyst's vessel review. Screens for misclassified vessels, gathers evidence (GARFO permits, GFW identity API, USCG PSIX), writes review sheets, and turns decisions into `references/vessel_crosswalk_{pipeline}.csv` and `references/vessel_permit_groups_{pipeline}.csv`. The only step that writes to `references/`. | Raw pull, GARFO permit lists, API caches |
 | 04 | `04_classify_aggregate.qmd` | Applies the crosswalk and gear corrections to every record, builds the **Strict** (GFW's `FISHING` label) and **Primary** (verified) analysis sets, and writes the classified records and zero-filled cell × stage / cell × month tables, with and without gear class. Stops if the crosswalk is out of date. | Raw pull, grid, `references/` |
 
 Shared code, sourced by every qmd: `paths.R` (every path; each can be overridden with a Quarto parameter), `gfw_helpers.R` (development stages, analysis window, `read_gfw()`, gear classes) and `vessel_helpers.R` (crosswalk build and validation, `classify()`).
@@ -50,7 +50,7 @@ The pull runs to 2026-09-30, but the window ends on 2026-08-31, the last day Ør
 - the GARFO permit lists and the GFW identity / USCG PSIX lookup caches (`data/raw/vessel_evidence/`), which only 03 reads;
 - everything the qmds generate from them.
 
-GFW reprocesses its data and relabels vessels between pulls, so a new pull will not reproduce the 2026-10-06 pull the decisions in `references/` were made against. To reproduce the analysis tables exactly, use a copy of that pull: put it in `data/raw/gfw/`, then render 02 and 04. That needs neither the GARFO files nor a token.
+GFW reprocesses its data and relabels vessels between pulls, so a new pull will not reproduce the 2026-10-06 pull the decisions in `references/` were made against. That pull is GFW pipeline **v4**. Everything made from a pull is filed under its pipeline version (`data/raw/gfw/v4/`, `references/vessel_crosswalk_v4.csv`, and so on), and every qmd takes `-P pipeline:<version>` (default `v4`, set in `r/paths.R`); see *GFW pipeline versions* in `references/data_dictionary.md`. To reproduce the analysis tables exactly, use a copy of that pull: put it in `data/raw/gfw/v4/`, then render 02 and 04. That needs neither the GARFO files nor a token.
 
 ## Requirements
 

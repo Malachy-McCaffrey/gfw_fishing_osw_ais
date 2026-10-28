@@ -9,6 +9,8 @@ format:
     fig-width: 10
     fig-height: 6
 params:
+  # GFW pipeline version to render against (r/paths.R); blank = the default
+  pipeline: ""
   # Path overrides (see r/paths.R); leave blank to use the project paths.
   analysis: ""
   processed_gfw: ""
@@ -529,7 +531,7 @@ datasets are reused across effect sizes, so the curves differ only by the
 effect.
 
 The refits run as `r qparams$workers` separate R processes (`callr`), each
-writing one small result file per refit to `reports/bag/cache/`, so an
+writing one small result file per refit to `reports/bag/{pipeline}/cache/`, so an
 interrupted render resumes where it stopped.
 
 ```{r}

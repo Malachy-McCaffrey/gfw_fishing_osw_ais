@@ -7,6 +7,26 @@ listed under [Archived Python outputs](#archived-python-outputs).
 
 ---
 
+## GFW pipeline versions
+
+GFW reprocesses its whole history at each pipeline release (v4 2026-02-26,
+v5 2026-10-21) and relabels vessels, so everything made from one pull belongs
+to one version. In the paths below, `{pipeline}` is that version, e.g. `v4`.
+A render picks it with `-P pipeline:v5`; the default is
+`gfw_pipeline_default` in `r/paths.R` (`v4`, the version of the 2026-10-06
+pull). `r/01_pull_gfw.qmd` requires the version to be named and will not
+overwrite a pull already filed under it.
+
+| Per version (`{pipeline}`) | Shared by every version |
+|---|---|
+| Raw pull and `pull_info.csv`; interim, processed and analysis tables; review sheets; the GFW identity cache; the grid; the model cache; reports; the generated `vessel_crosswalk_{pipeline}.csv` and `vessel_permit_groups_{pipeline}.csv` (they carry the pull's GFW labels) | Hand-made inputs (`vessel_decisions.csv`, `vessel_gear.csv`, removals, survey dates); the GARFO lists; the PSIX cache; the AOI, leases, bathymetry and infrastructure layers; the write-once rosters (`fishing_roster_{pipeline}.csv`, named by version) |
+
+Decisions and gear corrections are about hulls, so they stay valid across
+versions. Each row's `gfw_pipeline` records the version whose labels it was
+checked against. See `planning/gfw_pipeline_v5_plan.qmd`, Section 3.1.
+
+---
+
 ## Development stages and the analysis window
 
 | Stage | Window | Months | Rationale |
@@ -32,7 +52,7 @@ still built from the whole pull.
 
 ## Raw data
 
-### `data/raw/gfw/gfw_{vp,afe}_id.csv`
+### `data/raw/gfw/{pipeline}/gfw_{vp,afe}_id.csv`
 
 Unfiltered 4Wings API output from `r/01_pull_gfw.qmd`, 16 columns. One row =
 one Vessel ID × one 0.01° cell × one day.
@@ -54,23 +74,26 @@ one Vessel ID × one 0.01° cell × one day.
 | `Vessel Presence Hours` | int, 1–24 | *VP file only.* Count of hours with ≥1 AIS position. **Not** an integrated duration. |
 | `Apparent Fishing Hours` | float | *AFE file only.* Hours classified as fishing by GFW's behavioural model. GFW computes it only for vessels it treats as fishing. |
 
-### `data/raw/gfw/pull_info.csv`
+### `data/raw/gfw/{pipeline}/pull_info.csv`
 
 Written by the pull alongside the raw files: `pull_date` (the day the pull
-ran), `query_start` / `query_end` (the date range requested, end excluded) and
+ran), `pipeline` (the version folder it is filed under; pulls from 2026-10-28
+on), `query_start` / `query_end` (the date range requested, end excluded) and
 `vp_rows` / `afe_rows`. 03 and 04 read `pull_date` from it and record it in
 the crosswalk; for pulls made before the file existed they fall back to the
 raw VP file's modification date, with a warning.
 
 ### `data/raw/vessel_evidence/`
 
-Read only by `03_review_vessels.qmd`.
+Read only by `03_review_vessels.qmd`. The GFW identity cache is per version
+(GFW reclassifies vessels between pipelines); the GARFO lists and the PSIX
+cache are not GFW data, so they are shared.
 
 | File | Contents |
 |---|---|
 | `registries/garfo_permits_YYYY.csv`, `registries/garfo_tuna_permits_2026.csv` | NOAA GARFO permit lists, one per permit year plus the HMS/tuna file. Only vessel fields are read; owner names, telephone numbers and addresses are never loaded. |
-| `gfw_identity_queried.csv` | GFW identity API log: every Vessel ID queried, with the date, status and GFW dataset version, so each ID is requested once |
-| `gfw_identity_registry.csv`, `gfw_identity_combined.csv` | Parsed registry and combined-source records from those queries |
+| `{pipeline}/gfw_identity_queried.csv` | GFW identity API log: every Vessel ID queried, with the date, status and GFW dataset version, so each ID is requested once per version |
+| `{pipeline}/gfw_identity_registry.csv`, `{pipeline}/gfw_identity_combined.csv` | Parsed registry and combined-source records from those queries |
 | `psix_lookups.csv` | USCG CGMIX PSIX lookups by call sign and official number, with the date and status |
 
 ---
@@ -111,7 +134,7 @@ registry attribute, so this is a lookup, not an inference. Corrections from
 | `data/sf/owf/sfw/SFW.shp`, `rwf/RWF.shp`, `srw/SRW.shp` | EPSG:3857 | Ørsted lease areas. **Reproject before use.** A cell is `in_lease` (03) when its centroid falls inside one. |
 | `data/sf/owf/vw1/{VW1,VW1_Buffer}.shp`, `srw/SRW_Buffer.shp`, `SNE_OWFs.shp` | EPSG:3857 | **Not used.** Vineyard Wind is not an Ørsted project and lies outside the AOI; `*_Buffer` are AOI-construction intermediates. |
 | `data/sf/owf/{sfw,rwf,srw}/turbines/` | GeoJSON EPSG:4326 | Ørsted, as supplied (read only). Mariner layout GeoJSONs (positions, cable routes, lease; SRW preliminary), RWF and SRW foundation-installation CSVs (one row per installation day; encoding detected, Latin-1 or UTF-8), and the SFW PSO monitoring report (installation dates in Table 3). Built into `data/sf/infra/infrastructure.gpkg` by 05 |
-| `data/sf/fishnet/gfw_grid_utm19n.gpkg` | EPSG:32619 | The analysis grid, written by `02_build_grid.qmd`. One polygon per 0.01° cell present in the raw VP pull (3,376 cells), built from the lower-left corner and reprojected, so each cell is a parallelogram of about 840 m E–W by 1,110 m N–S. |
+| `data/sf/fishnet/{pipeline}/gfw_grid_utm19n.gpkg` | EPSG:32619 | The analysis grid, written by `02_build_grid.qmd`. One polygon per 0.01° cell present in the raw VP pull (3,376 cells), built from the lower-left corner and reprojected, so each cell is a parallelogram of about 840 m E–W by 1,110 m N–S. |
 
 Grid fields:
 
@@ -196,6 +219,7 @@ touching its exclusion.
 | `gear_class` | `MOBILE` / `FIXED` / `POLE_AND_LINE` / `UNRESOLVED` |
 | `basis`, `evidence_ref` | Where the gear came from, e.g. `analyst knowledge`, `GARFO permit`, `GFW registry`, with the hull or permit |
 | `gfw_gear_type`, `pull_date` | GFW's gear when the decision was made |
+| `gfw_pipeline` | GFW pipeline version of that pull, e.g. `v4`; never blank |
 | `Notes` | Free text |
 
 ### Ørsted survey dates {#orsted-survey-dates}
@@ -255,7 +279,7 @@ Fisheries permit pages).
 
 ## Generated files
 
-### `references/vessel_crosswalk.csv` {#vessel_crosswalk}
+### `references/vessel_crosswalk_{pipeline}.csv` {#vessel_crosswalk}
 
 **Generated** by 03 from the removal list, the survey-date files and the
 accepted decisions; do not edit. 04 rebuilds it and stops if the committed
@@ -277,8 +301,9 @@ membership; the `Vessel Type` column itself is never rewritten.
 | `Operation` | `Safety`, `Survey`, ... for charter rows |
 | `Identified_By`, `evidence_ref`, `Notes` | Where the decision came from |
 | `gfw_vessel_type`, `gfw_gear_type`, `pull_date` | GFW's labels for the MMSI in the pull the row was built against |
+| `gfw_pipeline` | GFW pipeline version of that pull, e.g. `v4`; never blank. Removal-list and survey-date rows get the version being rendered; decision rows keep their own |
 
-### `references/vessel_permit_groups.csv`
+### `references/vessel_permit_groups_{pipeline}.csv`
 
 **Generated** by 03; do not edit. The GARFO permit group of each MMSI with a
 unique, year-overlapping GARFO name match that USCG PSIX does not contradict:
@@ -310,7 +335,7 @@ named in `references/` with no records in the window are left off.
 | `src_cw_fishing` | `TRUE` if the crosswalk has a `fishing` hull row for the MMSI |
 | `src_gear_correction` | `TRUE` if `vessel_gear.csv` has an accepted row for it |
 | `src_garfo_permit` | `TRUE` if its permit group is `commercial`, `for-hire`, `commercial + for-hire` or `for-hire + open-access commercial` |
-| `permit_group` | From `vessel_permit_groups.csv`; blank if none |
+| `permit_group` | From `vessel_permit_groups_{pipeline}.csv`; blank if none |
 | `in_primary` | `TRUE` if any of its records is in the Primary set |
 | `vp_hours_s1`–`s3`, `afe_hours_s1`–`s3` | VP and AFE hours by development stage |
 | `vessel_ids` | Its GFW Vessel IDs, joined with `\|` (stable between v4 and v5) |
@@ -318,7 +343,7 @@ named in `references/` with no records in the window are left off.
 
 At least one `src_` column is `TRUE` on every row.
 
-### `data/processed/vessel_review/{vessel,gear}_review.csv`
+### `data/processed/vessel_review/{pipeline}/{vessel,gear}_review.csv`
 
 Generated by 03 every run; not tracked. The first columns are a suggestion in
 the layout of `vessel_decisions.csv` / `vessel_gear.csv`; set `decision` to
@@ -327,7 +352,7 @@ file. The rest of the columns are the evidence. If you open them in Excel,
 import every column as Text and save as CSV UTF-8; otherwise Excel rewrites
 dates and long IDs and validation stops the run.
 
-### `data/processed/gfw/gfw_{vp,afe}_id_classified.csv`
+### `data/processed/gfw/{pipeline}/gfw_{vp,afe}_id_classified.csv`
 
 Written by 04: every raw record inside the analysis window, with the
 [fields derived on read](#fields-derived-on-read) and:
@@ -345,7 +370,7 @@ Written by 04: every raw record inside the analysis window, with the
 | `gear_class` | The accepted correction in `vessel_gear.csv` for the record's date, otherwise `gear_class_gfw` (used for Primary) |
 | `gear_source` | `vessel_gear` or `gfw` |
 
-### `data/interim/gfw/` cell tables
+### `data/interim/gfw/{pipeline}/` cell tables
 
 Fishing-vessel tables, written by 04. Zero-filled across every grid cell,
 every stage or every month of the analysis window, both sets and, in the gear
@@ -379,7 +404,7 @@ Raw-data tables, written by 02, all vessel types and no classification:
 `_id` suffix so they are not mistaken for fishing-vessel totals. They stay
 in `data/interim/` alongside the fishing-vessel tables.
 
-### `data/processed/analysis/` analysis tables
+### `data/processed/analysis/{pipeline}/` analysis tables
 
 Written by `r/05_prepare_analysis.qmd` (Phase 0 of
 `planning/gfw_analysis_plan.qmd`) from the **Primary** gear tables. One table
@@ -426,7 +451,7 @@ Rounded when written (decimals): `dist_lease_km`, `x_km`, `y_km`, `depth_m`,
 other season-year means and shares 3. Every
 derived field is computed before rounding; `cells.gpkg` keeps full precision.
 
-### `data/processed/analysis/infra_cell_*.csv`
+### `data/processed/analysis/{pipeline}/infra_cell_*.csv`
 
 Infrastructure exposure per cell, without gear, written by 05 step 8 from
 `data/sf/infra/infrastructure.gpkg`. Distances are from the cell centroid.
@@ -450,7 +475,7 @@ Infrastructure exposure per cell, without gear, written by 05 step 8 from
 
 The radii are 05 parameters (`r_count_km`, `r_active_km`, `r_cable_km`).
 
-### `data/processed/analysis/cells.gpkg`
+### `data/processed/analysis/{pipeline}/cells.gpkg`
 
 One row per grid cell, EPSG:32619, with the static covariates.
 
@@ -521,7 +546,7 @@ project for its USCG safety-zone rule (`radius_m` 500, `rule_start`,
 `rule_end`, `zones`, `source` citing the Federal Register rules); SFW's
 window is the enforced period 2023-05-01 to 2024-05-31.
 
-### `data/processed/analysis/grid_queen.gal`, `grid_weights.rds`
+### `data/processed/analysis/{pipeline}/grid_queen.gal`, `grid_weights.rds`
 
 Queen contiguity of the grid, checked identical between `poly2nb()` and the
 integer lattice. The GAL file uses `cell_id` as the region id, for GeoDa and

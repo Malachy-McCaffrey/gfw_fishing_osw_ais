@@ -4,6 +4,7 @@ author: "Malachy McCaffrey"
 date: today
 format: html
 params:
+  pipeline: ""    # GFW pipeline version to render against (r/paths.R); blank = the default
   fishnet: ""     # override the grid output folder (paths$fishnet)
   interim_gfw: "" # override the aggregate-table output folder (paths$interim_gfw)
 ---
@@ -27,7 +28,7 @@ for aggregation and spatial analysis.
 ### Data status: aggregates describe the raw GFW data
 
 The aggregate tables built here describe the **raw, unfiltered** GFW records in
-`data/raw/gfw/gfw_vp_id.csv` and `gfw_afe_id.csv`. They include every vessel
+`data/raw/gfw/{pipeline}/gfw_vp_id.csv` and `gfw_afe_id.csv`. They include every vessel
 type and apply no vessel removals or fishing-hour threshold. They are **not**
 fishing-vessel totals and should not be analysed as such.
 
@@ -42,7 +43,7 @@ positives, so the raw data cannot be filtered on GFW's labels alone:
 
 Both problems affect VP and AFE. `03_review_vessels.qmd` and
 `04_classify_aggregate.qmd` correct them, and 04 writes the fishing-vessel
-aggregates to `data/interim/gfw/` for two analysis sets, **Strict** (GFW's
+aggregates to `data/interim/gfw/{pipeline}/` for two analysis sets, **Strict** (GFW's
 `FISHING` records, unchanged) and **Primary** (the verified classification,
 the headline analysis), each with a `set` column:
 
@@ -56,7 +57,7 @@ the headline analysis), each with a `set` column:
 **Use those tables for fishing analysis.** They share this script's grid and
 zero-filled layout. The record-level data behind them, with the set flags and
 gear class on every record, is in
-`data/processed/gfw/gfw_{vp,afe}_id_classified.csv`.
+`data/processed/gfw/{pipeline}/gfw_{vp,afe}_id_classified.csv`.
 
 The grid itself does not depend on that work, because it is built from the
 cells present in the raw VP data, so run this script first.

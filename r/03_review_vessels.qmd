@@ -8,10 +8,9 @@ params:
   run_psix_api: false # true to look up uncached hull IDs and call signs in USCG CGMIX PSIX
   # true to write the write-once fishing roster for this pull (end of Phase 5)
   write_roster: false
-  # GFW pipeline version of the raw pull, recorded in the roster. The
-  # 2026-10-06 pull is v4 (gfwr requested ":latest", which was v4 until
-  # 2026-10-21). Set by hand until paths.R carries the pipeline version.
-  roster_pipeline: "v4"
+  # GFW pipeline version to render against (r/paths.R); blank = the default.
+  # It also names the roster and is recorded in the review sheets' gfw_pipeline.
+  pipeline: ""
   # Path overrides (see r/paths.R); leave blank to use the project paths.
   decisions: ""
   gear: ""
@@ -71,11 +70,11 @@ on the raw pull, the GARFO files, the API cache and these files:
 | `references/vessel_decisions.csv` | Your hull and activity decisions (input, edited by hand) |
 | `references/vessel_gear.csv` | Your gear corrections (input, edited by hand) |
 | `references/garfo_permit_codes.csv` | GARFO permit code meanings (input) |
-| `references/vessel_crosswalk.csv` | Generated each run from the removals, survey dates and decisions -- do not edit |
-| `references/vessel_permit_groups.csv` | Generated each run: GARFO permit group per MMSI, for 04's dual-permit check -- do not edit |
+| `references/vessel_crosswalk_{pipeline}.csv` | Generated each run from the removals, survey dates and decisions -- do not edit |
+| `references/vessel_permit_groups_{pipeline}.csv` | Generated each run: GARFO permit group per MMSI, for 04's dual-permit check -- do not edit |
 | `references/fishing_roster_{pipeline}.csv` | Written **once** per GFW pipeline version with `-P write_roster:true`: every MMSI that counted as fishing in that pull -- never edit or regenerate |
-| `data/processed/vessel_review/vessel_review.csv` | Generated each run: hull/activity candidates, evidence and a suggested decision |
-| `data/processed/vessel_review/gear_review.csv` | Generated each run: fishing vessels whose gear needs checking, with a suggested gear class |
+| `data/processed/vessel_review/{pipeline}/vessel_review.csv` | Generated each run: hull/activity candidates, evidence and a suggested decision |
+| `data/processed/vessel_review/{pipeline}/gear_review.csv` | Generated each run: fishing vessels whose gear needs checking, with a suggested gear class |
 
 Each pass:
 
@@ -83,7 +82,8 @@ Each pass:
    thresholds.
 2. **Run once with the APIs on**: render with
    `-P run_gfw_api:true -P run_psix_api:true`, or set both in the header.
-   Lookups are cached in `data/raw/vessel_evidence/`, so each Vessel ID, hull
+   Lookups are cached in `data/raw/vessel_evidence/` (GFW identity lookups
+   in its `{pipeline}/` folder, PSIX lookups shared), so each Vessel ID, hull
    ID and call sign is queried once; set them back to `false` afterwards. The
    PSIX lookups need the GFW evidence (they run only for vessels that reach
    the review sheet), so turn PSIX on in the same run as the GFW API or after
@@ -253,12 +253,17 @@ vessel's gear never touches its hull or charter treatment.
 ```{r}
 # Copies rows marked accept/reject in a generated review sheet into its input
 # file, skipping MMSIs the input file already has, and returns the input file.
-collect_marked <- function(sheet, input, cols) {
+# A sheet written before the gfw_pipeline column existed was generated from
+# this version's pull (the sheets live in a version folder), so its rows get
+# `pipeline`.
+collect_marked <- function(sheet, input, cols, pipeline) {
   current <- if (file.exists(input)) read_chr(input) else empty_tbl(cols)
   stopifnot("input file is missing columns" = all(cols %in% names(current)))
 
   marked <- if (file.exists(sheet)) {
-    read_chr(sheet) |>
+    s <- read_chr(sheet)
+    if (!"gfw_pipeline" %in% names(s)) s$gfw_pipeline <- pipeline
+    s |>
       filter(decision %in% c("accept", "reject")) |>
       mutate(decided_on = coalesce(decided_on, as.character(Sys.Date()))) |>
       select(all_of(cols))
@@ -291,8 +296,8 @@ collect_marked <- function(sheet, input, cols) {
 review_path      <- file.path(paths$review, "vessel_review.csv")
 gear_review_path <- file.path(paths$review, "gear_review.csv")
 
-decisions   <- collect_marked(review_path, paths$decisions, decision_cols)
-gear_inputs <- collect_marked(gear_review_path, paths$gear, gear_cols)
+decisions   <- collect_marked(review_path, paths$decisions, decision_cols, paths$pipeline)
+gear_inputs <- collect_marked(gear_review_path, paths$gear, gear_cols, paths$pipeline)
 
 count(decisions, decision)
 count(gear_inputs, decision)
@@ -836,7 +841,7 @@ gear_candidates |>
 
 Looks up every Vessel ID belonging to a candidate MMSI, on either review
 sheet (the gear candidates need registry gear). Parsed results are
-appended to CSVs in `data/raw/vessel_evidence/`, and every queried ID is
+appended to CSVs in `data/raw/vessel_evidence/{pipeline}/`, and every queried ID is
 logged with the date and the GFW dataset version, so each ID is requested
 once across runs. The registry records (`registryInfo`) are the independent
 evidence: GFW's own label is derived from them, so a vessel typed OTHER whose
@@ -1162,7 +1167,7 @@ not used for its gear hint or permit group. `psix_hull` and
 when the AIS vessel's PSIX name differs from its AIS name.
 
 ```{r}
-psix_path <- file.path(evid_dir, "psix_lookups.csv")
+psix_path <- paths$psix # shared by every pipeline version: PSIX is USCG, not GFW
 psix_cols <- c("key_type", "key", "queried_on", "status", "psix_official_no",
                "psix_name", "psix_call_sign", "psix_service", "psix_status")
 
@@ -1392,6 +1397,7 @@ review <- assessed |>
                            paste0("GARFO hull ", garfo_hull_id, "; permit ", garfo_permits),
                            NA_character_),
     pull_date = as.character(pull_date),
+    gfw_pipeline = paths$pipeline, # GFW pipeline version of this pull
     hms_chb   = str_detect(coalesce(garfo_categories, ""), fixed("HMS:CHARTER/HEADBOAT")),
     Notes = paste0(
       case_when(
@@ -1562,6 +1568,7 @@ gear_review <- gear_candidates |>
                            paste0("GARFO hull ", garfo_hull_id, "; permit ", garfo_permits),
                            NA_character_),
     pull_date = as.character(pull_date),
+    gfw_pipeline = paths$pipeline, # GFW pipeline version of this pull
     Notes = paste0(
       gear_reason,
       if_else(!is.na(garfo_hint) & !is.na(reg_hint) & garfo_hint != reg_hint,
@@ -1594,7 +1601,7 @@ whether the Stage 2 → 3 change holds without them. Only unique,
 year-overlapping GARFO matches that PSIX does not contradict get a group; every
 other MMSI is `no unique GARFO match` in 04.
 
-The groups are written to `references/vessel_permit_groups.csv` so that 04 can
+The groups are written to `references/vessel_permit_groups_{pipeline}.csv` so that 04 can
 run without the GARFO files. Only the MMSI and the permit group are written;
 no GARFO hull, permit number or owner field leaves this step.
 
@@ -1628,7 +1635,7 @@ roster always matches a commit of the crosswalk and decisions it was built
 from.
 
 ```{r}
-roster_path <- sprintf(paths$roster, qparams$roster_pipeline)
+roster_path <- sprintf(paths$roster, paths$pipeline)
 
 if (isTRUE(qparams$write_roster)) {
   # this run has just rewritten the crosswalk, permit groups and (if any rows
@@ -1642,15 +1649,15 @@ if (isTRUE(qparams$write_roster)) {
   head_commit <- system2("git", c("rev-parse", "--short", "HEAD"), stdout = TRUE)
 
   roster <- build_fishing_roster(vp, afe, cw, gear, permit_groups, gfw_labels,
-                                 pull_date, pipeline = qparams$roster_pipeline,
+                                 pull_date, pipeline = paths$pipeline,
                                  source_commit = head_commit)
   write_roster_once(roster, roster_path)
 } else if (file.exists(roster_path)) {
   roster <- read_chr(roster_path)
-  message("Roster for ", qparams$roster_pipeline, " already written: ", roster_path)
+  message("Roster for ", paths$pipeline, " already written: ", roster_path)
 } else {
   roster <- NULL
-  message("No roster for ", qparams$roster_pipeline,
+  message("No roster for ", paths$pipeline,
           " yet; render once with -P write_roster:true")
 }
 

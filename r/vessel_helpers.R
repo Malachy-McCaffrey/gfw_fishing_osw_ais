@@ -440,3 +440,65 @@ write_roster_once <- function(roster, path) {
   message("Wrote ", nrow(roster), " MMSIs to ", path)
   invisible(path)
 }
+
+# Roster check ------------------------------------------------------------------
+# On a later pipeline version's run, 03 compares the previous version's roster
+# with the current pull (planning/gfw_pipeline_v5_plan.qmd, Section 3.6, Part B)
+# and 04 checks that every roster vessel is accounted for (Part C).
+
+# The roster a run compares against: the newest roster written for a pipeline
+# version other than `pipeline` (v4 on a v5 run), or NULL if there is none (a
+# v4 run). Versions are ordered by their number, so v10 comes after v9.
+# `template` is paths$roster, e.g. "references/fishing_roster_%s.csv".
+previous_roster_path <- function(template, pipeline) {
+  files <- Sys.glob(sprintf(template, "*"))
+  # the version each file names: what sits where the template has %s
+  ends     <- strsplit(basename(template), "%s", fixed = TRUE)[[1]]
+  versions <- substring(basename(files), nchar(ends[1]) + 1,
+                        nchar(basename(files)) - nchar(ends[2]))
+  keep <- versions != pipeline
+  if (!any(keep)) return(NULL)
+  files <- files[keep]; versions <- versions[keep]
+  # numeric part of the version (v4 -> 4, v4.1 -> 4.1), then the name itself
+  num <- suppressWarnings(as.numeric(sub("^v", "", versions)))
+  files[order(num, versions)][length(files)]
+}
+
+# One row per change in the current pull for a roster MMSI:
+#   type        GFW's vessel type differs from the roster's
+#   gear_class  the analysis gear class the records now get differs from the
+#               roster's (a type change usually brings one too; both are listed)
+#   missing     the MMSI has no records in the current pull's analysis window
+# roster is a fishing_roster_*.csv read with read_chr(); gfw_labels the
+# gfw_labels_of() table of the current pull; gear_now one row per MMSI with
+# the gear class its current records get (classify(), hours-weighted, as in
+# build_fishing_roster()); cw the current typed crosswalk; gear the accepted
+# gear rows. A change is `protected` when an analyst's decision already
+# settles it whatever GFW now says: a type change when the MMSI has a
+# crosswalk row (its hull class is decided), a gear-class change when it has
+# a gear correction. Protected changes are kept for the record.
+roster_changes <- function(roster, gfw_labels, gear_now, cw, gear) {
+  base <- roster |>
+    transmute(MMSI, Vessel_Name, in_primary = as.logical(in_primary),
+              type_old = gfw_vessel_type, gear_old = gfw_gear_type,
+              class_old = gear_class,
+              vp_hours_old  = as.numeric(vp_hours_s1) + as.numeric(vp_hours_s2) + as.numeric(vp_hours_s3),
+              afe_hours_old = as.numeric(afe_hours_s1) + as.numeric(afe_hours_s2) + as.numeric(afe_hours_s3)) |>
+    left_join(transmute(gfw_labels, MMSI, type_new = gfw_vessel_type, gear_new = gfw_gear_type),
+              by = "MMSI") |>
+    left_join(transmute(gear_now, MMSI, class_new = gear_class), by = "MMSI") |>
+    mutate(present = MMSI %in% gfw_labels$MMSI)
+
+  # NA-safe "differs": a label that appears or disappears counts as a change
+  differs <- \(a, b) coalesce(a != b, !(is.na(a) & is.na(b)))
+
+  bind_rows(
+    base |> filter(!present) |> mutate(change = "missing", protected = FALSE),
+    base |> filter(present, differs(type_old, type_new)) |>
+      mutate(change = "type", protected = MMSI %in% cw$MMSI),
+    base |> filter(present, differs(class_old, class_new)) |>
+      mutate(change = "gear_class", protected = MMSI %in% gear$MMSI)) |>
+    select(MMSI, Vessel_Name, change, protected, in_primary, type_old, type_new,
+           gear_old, gear_new, class_old, class_new, vp_hours_old, afe_hours_old) |>
+    arrange(match(change, c("type", "gear_class", "missing")), desc(afe_hours_old), MMSI)
+}

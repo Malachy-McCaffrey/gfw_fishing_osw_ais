@@ -600,6 +600,14 @@ analysis-window records.
 
 #### Part B: roster check in 03 (before the v5 review session)
 
+**Status (2026-10-29, D-064): implemented and run in a sandbox on v5.** List 5
+holds 379 vessels, not a few dozen: mostly MID-338 recreational and for-hire
+boats v5 retypes PASSENGER. The list is named `5_roster_label_change`, and
+retyped vessels reach the gear sheet only after a decision (D-064). Still
+open from step 5: extend `parse_identity()` with the v5 fields before the
+APIs-on run (the cache stores parsed fields only), and the list-1 count by
+type transition (left to 01a).
+
 | File | Change |
 |---|---|
 | `r/vessel_helpers.R` | New `roster_changes(roster, gfw_labels, gear_now)`. It compares each roster row with the current pull and returns `MMSI`, `change` (`type`, `gear_class`, `missing`), the old and new labels, and v4 hours. Changes already covered by a crosswalk fishing hull (type) or a gear correction (gear) are marked `protected` and kept for the record. |

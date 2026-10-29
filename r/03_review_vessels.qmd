@@ -18,6 +18,7 @@ params:
   permit_groups: ""
   review: ""
   evidence: ""
+  grid: ""
 ---
 
 ```{r setup, include=FALSE}
@@ -51,7 +52,8 @@ Re-render this file before 04 whenever an input in `references/` changes;
 Two separate problems are handled:
 
 - **Hull identity** -- is the vessel a fishing vessel at all? GFW types some
-  fishing vessels OTHER, GEAR or PASSENGER (false negatives) and some
+  fishing vessels OTHER (`OTHER_NON_FISHING` from pipeline v5), GEAR,
+  PASSENGER or, in v5, `INSUFFICIENT_DATA` (false negatives) and some
   non-fishing vessels FISHING (false positives).
 - **Activity** -- is a fishing vessel fishing at this moment? Charter guard and
   survey work by fishing hulls is classed as fishing by GFW (false positives).
@@ -92,7 +94,11 @@ Each pass:
    layout as the matching input file (`vessel_review.csv` →
    `vessel_decisions.csv`; `gear_review.csv` → `vessel_gear.csv`). For each row
    you decide on, correct the suggestion if needed and set `decision` to
-   `accept` or `reject`. Leave `decision` blank to skip a row.
+   `accept` or `reject`. Leave `decision` blank to skip a row. On the first
+   run against a new GFW pipeline version, list 5 of the review sheet holds
+   the vessels that counted as fishing in the previous version but that GFW
+   no longer types FISHING (the roster check, Phase 1): accept to keep one in
+   Primary, reject to let the new label stand.
 4. **Re-run.** The run first copies every row with a `decision` from the two
    sheets into their input files, then regenerates the crosswalk and both
    sheets, so decided vessels drop off. You can also edit the input files
@@ -294,6 +300,73 @@ gear <- validate_gear(gear_inputs, source = paths$gear)
 count(gear, gear_class, basis)
 ```
 
+### The previous version's fishing roster
+
+GFW relabels vessels between pipeline versions. Most vessels counted as
+fishing are in Strict and Primary only because GFW types them FISHING, with
+no crosswalk row, so a retype would drop them unseen. On a run against a new
+version this step reads the roster written for the previous one
+(`references/fishing_roster_{version}.csv`, Phase 5) and compares every
+roster MMSI with this pull (`roster_changes()` in `r/vessel_helpers.R`;
+`planning/gfw_pipeline_v5_plan.qmd`, Sections 2.7 and 3.6):
+
+- **type** -- GFW's vessel type changed. Unless the MMSI already has a
+  crosswalk row, a vessel that was in the previous Primary set goes on list 5
+  of the review sheet (Phase 2).
+- **gear_class** -- the analysis gear class its records get changed. Unless
+  it has a gear correction, it goes on the gear review sheet.
+- **missing** -- no records in this pull's analysis window; reported in
+  Phase 6.
+
+A change is **protected** when an existing decision settles it (a crosswalk
+row for a type change, a gear correction for a gear-class change); protected
+changes are listed but need no review. On a run against the version the
+newest roster describes (v4 now), there is nothing to compare and the step is
+skipped.
+
+```{r}
+prev_roster_path <- previous_roster_path(paths$roster, paths$pipeline)
+
+if (is.null(prev_roster_path)) {
+  prev_roster   <- NULL
+  roster_chk    <- NULL
+  prev_pipeline <- NA_character_
+  message("No roster of an earlier pipeline version than ", paths$pipeline,
+          "; the roster check is skipped")
+} else {
+  prev_roster   <- read_chr(prev_roster_path)
+  prev_pipeline <- unique(prev_roster$pipeline)
+  message("Roster check against ", prev_roster_path, " (", nrow(prev_roster), " MMSIs)")
+
+  # the gear class each MMSI's records get in this pull, weighted by hours,
+  # computed as build_fishing_roster() did for the roster
+  gear_now <- bind_rows(classify(vp, cw, gear), classify(afe, cw, gear)) |>
+    filter(!is.na(MMSI)) |>
+    count(MMSI, gear_class, wt = hours) |>
+    group_by(MMSI) |>
+    slice_max(n, n = 1, with_ties = FALSE) |>
+    ungroup()
+
+  roster_chk <- roster_changes(prev_roster, gfw_labels, gear_now, cw, gear)
+
+  # changes by kind, for vessels in and out of the previous Primary set, with
+  # their hours in the previous version
+  roster_chk |>
+    group_by(change, protected, in_primary) |>
+    summarise(vessels = n(), vp_hours_old = round(sum(vp_hours_old)),
+              afe_hours_old = round(sum(afe_hours_old)), .groups = "drop")
+}
+```
+
+```{r}
+# how the previous Primary set's type changes moved, unprotected ones only
+if (!is.null(roster_chk)) {
+  roster_chk |>
+    filter(change == "type", in_primary, !protected) |>
+    count(type_old, type_new, name = "vessels", sort = TRUE)
+}
+```
+
 ## Phase 2: Screen the raw data
 
 ### Per-MMSI profile
@@ -491,16 +564,51 @@ Each list excludes vessels already in the crosswalk or in the decisions file.
    Stages 1–2 to Stage 3 (catches established vessels that took a charter, the
    *Virginia Wave* blind spot).
 3. **Non-fishing vessels typed FISHING** -- research or survey names, short
-   intense foreign-flag visits, or foreign-flag `INCONCLUSIVE` gear.
+   intense foreign-flag visits, or foreign-flag vessels whose gear is
+   unresolved (`INCONCLUSIVE` in v4; generic `FISHING` and the rest of the
+   `UNRESOLVED` gear class in any version, since v5 dropped `INCONCLUSIVE`).
 4. **Gear markers and malformed MMSIs** -- call signs holding battery levels
    (e.g. ONWA33NT, likely AIS net buoys), or MMSIs that are not 9 digits
    (some are vessels with misconfigured transponders, e.g. ROYAL with call sign
    WDD3653, so these are suggested as `unknown` for review).
+5. **Roster label changes** (a run against a new pipeline version only) --
+   vessels in the previous version's Primary set that GFW has retyped, with no
+   crosswalk row and no decision made against this version. Unlike list 1,
+   every one is reviewed, evidence or not. A vessel on list 5 is left off
+   list 1, so it appears once. A decision from an earlier version that added
+   no crosswalk row (a `reject`) does not keep a vessel off list 5: it was
+   made against the old label.
 
 ```{r}
 open_profiles <- profiles |> filter(!MMSI %in% c(cw$MMSI, decisions$MMSI))
 
+# list 5 first, so list 1 can leave its vessels out
+roster_type <- if (is.null(roster_chk)) {
+  # no roster check on this run: an empty table, so list 5 is empty
+  tibble(MMSI = character(), type_old = character(), gear_old = character(),
+         vp_hours_old = numeric(), afe_hours_old = numeric())
+} else {
+  roster_chk |> filter(change == "type", in_primary, !protected)
+}
+decided_now <- decisions$MMSI[decisions$gfw_pipeline %in% paths$pipeline]
+
+cand_roster <- profiles |>
+  filter(MMSI %in% roster_type$MMSI, !MMSI %in% c(cw$MMSI, decided_now)) |>
+  left_join(select(roster_type, MMSI, type_old, gear_old, vp_hours_old, afe_hours_old),
+            by = "MMSI") |>
+  mutate(list = "5_roster_label_change",
+         reason = paste0(prev_pipeline, " ", type_old, "/", coalesce(gear_old, "none"),
+                         " -> ", paths$pipeline, " ", gfw_vessel_type, "/",
+                         coalesce(gfw_gear_type, "none"), "; ", prev_pipeline,
+                         " hours VP ", round(vp_hours_old, 1), ", AFE ",
+                         round(afe_hours_old, 1))) |>
+  # keep the previous version's AFE hours to order list 5 by: GFW computes
+  # fishing effort only for vessels it treats as fishing, so a retyped vessel
+  # has next to none in this pull
+  select(-type_old, -gear_old, -vp_hours_old)
+
 cand_missed <- open_profiles |>
+  filter(!MMSI %in% cand_roster$MMSI) |>
   filter(!gfw_vessel_type %in% "FISHING", mmsi_valid,
          flag %in% "USA" | garfo_match == "unique_years") |>
   mutate(list = "1_missed_fishing",
@@ -522,12 +630,15 @@ cand_nonfishing <- open_profiles |>
   mutate(research = str_detect(names, "\\bNOAA\\b|^R/V|RESEARCH|SURVEY"),
          visit    = !flag %in% "USA" & days <= screen$fp_max_days &
                     h_day >= screen$fp_min_h_day,
-         inconcl  = !flag %in% "USA" & gfw_gear_type %in% "INCONCLUSIVE") |>
+         # v5 has no INCONCLUSIVE gear; the UNRESOLVED class covers it, generic
+         # FISHING and any other code the gear map does not resolve
+         inconcl  = !flag %in% "USA" & gear_class_of(gfw_gear_type) == "UNRESOLVED") |>
   filter(research | visit | inconcl) |>
   mutate(list = "3_nonfishing_typed_fishing",
          reason = case_when(research ~ "research or survey name",
                             visit    ~ "short, intense foreign-flag visit",
-                            TRUE     ~ "foreign flag with INCONCLUSIVE gear"))
+                            TRUE     ~ paste0("foreign flag with unresolved gear (",
+                                              gfw_gear_type, ")")))
 
 cand_marker <- open_profiles |>
   filter(!mmsi_valid | battery_call_sign) |>
@@ -535,11 +646,12 @@ cand_marker <- open_profiles |>
          reason = if_else(battery_call_sign, "call sign holds a battery level",
                           "MMSI is not 9 digits"))
 
-candidates <- bind_rows(cand_missed, cand_charter, cand_nonfishing, cand_marker) |>
+candidates <- bind_rows(cand_missed, cand_charter, cand_nonfishing, cand_marker,
+                        cand_roster) |>
   select(list, reason, MMSI, names, flag, call_sign, gfw_vessel_type,
          gfw_gear_type, vp_hours, s1, s2, s3, afe_hours, days, h_day,
          lease_share, lease_share_s12, lease_share_s3, s3_lease_first,
-         s3_lease_last, first, last, any_of(c("burst", "shift")),
+         s3_lease_last, first, last, any_of(c("burst", "shift", "afe_hours_old")),
          starts_with("garfo_"), hull_is_uscg) |>
   arrange(list, desc(vp_hours))
 
@@ -584,7 +696,14 @@ them goes on the gear review sheet, until it has a row in
   reviewed, because GFW's gear can be wrong even when it is resolved (e.g.
   CAILYN AND MAREN, a lobster trap boat GFW labels `POLE_AND_LINE`);
 - GFW's gear is **unresolved** (`FISHING`, `INCONCLUSIVE`, `OTHER`, ...);
-- or a unique GARFO match's permits **disagree** with GFW's gear class.
+- or a unique GARFO match's permits **disagree** with GFW's gear class;
+- or, on a run against a new pipeline version, its **gear class changed**
+  since the previous version's roster and no gear correction covers it (the
+  roster check, Phase 1). This catches a change from one specific class to
+  another (e.g. FIXED to MOBILE), which none of the rules above would. A
+  roster vessel GFW has retyped away from FISHING is on list 5 of the review
+  sheet instead; like an accepted list-1 vessel, it reaches this sheet once
+  its decision makes it a crosswalk fishing hull.
 
 ```{r}
 removal_mmsi <- read_chr(paths$removals)$MMSI
@@ -593,23 +712,43 @@ fishing_mmsi <- union(profiles$MMSI[profiles$gfw_vessel_type %in% "FISHING"],
                       cw$MMSI[cw$hull_class == "fishing"]) |>
   setdiff(cw$MMSI[cw$hull_class != "fishing"])
 
+# gear-class changes since the previous roster that no correction covers, and
+# the note that says what changed
+roster_gear_note <- if (is.null(roster_chk)) {
+  tibble(MMSI = character(), roster_gear_change = character())
+} else {
+  roster_chk |>
+    filter(change == "gear_class", !protected) |>
+    transmute(MMSI, roster_gear_change = paste0(
+      "gear class changed since ", prev_pipeline, ": ", class_old, " -> ", class_new))
+}
+roster_gear_mmsi <- roster_gear_note$MMSI
+
 gear_candidates <- profiles |>
   filter(MMSI %in% fishing_mmsi, !MMSI %in% gear_inputs$MMSI) |>
   mutate(gfw_class       = gear_class_of(gfw_gear_type),
          garfo_hint      = if_else(garfo_match == "unique_years", garfo_gear_hint, NA_character_),
          on_removal_list = MMSI %in% removal_mmsi,
          unresolved      = gfw_class == "UNRESOLVED",
-         garfo_conflict  = !unresolved & !is.na(garfo_hint) & garfo_hint != gfw_class) |>
-  filter(on_removal_list | unresolved | garfo_conflict) |>
+         garfo_conflict  = !unresolved & !is.na(garfo_hint) & garfo_hint != gfw_class,
+         # unprotected gear-class changes since the previous roster (none on a
+         # run without a roster check)
+         roster_gear     = MMSI %in% roster_gear_mmsi) |>
+  filter(on_removal_list | unresolved | garfo_conflict | roster_gear) |>
+  left_join(roster_gear_note, by = "MMSI") |>
   mutate(gear_reason = str_remove(paste0(
     if_else(on_removal_list, "removal list; ", ""),
     if_else(unresolved, "GFW gear unresolved; ", ""),
-    if_else(garfo_conflict, "GARFO permits disagree with GFW gear; ", "")), "; $"))
+    if_else(garfo_conflict, "GARFO permits disagree with GFW gear; ", ""),
+    if_else(roster_gear, paste0(roster_gear_change, "; "), "")), "; $")) |>
+  select(-roster_gear_change)
 
 gear_candidates |>
-  count(on_removal_list, unresolved, garfo_conflict, wt = afe_hours, name = "afe_hours") |>
-  left_join(count(gear_candidates, on_removal_list, unresolved, garfo_conflict, name = "vessels"),
-            by = c("on_removal_list", "unresolved", "garfo_conflict"))
+  count(on_removal_list, unresolved, garfo_conflict, roster_gear, wt = afe_hours,
+        name = "afe_hours") |>
+  left_join(count(gear_candidates, on_removal_list, unresolved, garfo_conflict, roster_gear,
+                  name = "vessels"),
+            by = c("on_removal_list", "unresolved", "garfo_conflict", "roster_gear"))
 ```
 
 ## Phase 3: Gather evidence
@@ -621,9 +760,17 @@ sheet (the gear candidates need registry gear). Parsed results are
 appended to CSVs in `data/raw/vessel_evidence/{pipeline}/`, and every queried ID is
 logged with the date and the GFW dataset version, so each ID is requested
 once across runs. The registry records (`registryInfo`) are the independent
-evidence: GFW's own label is derived from them, so a vessel typed OTHER whose
-registry lists a fishing gear is a strong false-negative candidate, and a
-vessel with no registry record at all has no evidence either way.
+evidence. In pipeline v4 GFW's own label was derived largely from them; from
+v5 it comes mainly from a model of the vessel's movements, with registry
+records as one input. Either way a vessel typed non-fishing whose registry
+lists a fishing gear is a strong false-negative candidate, and a vessel with
+no registry record at all has no evidence either way.
+
+The identity API is requested through gfwr, which always asks for the
+dataset's `:latest` version. Each lookup records the version GFW served, and
+the run stops if any lookup in this pipeline's cache came from another
+pipeline version (e.g. a v4 cache topped up after v5 became `:latest`), since
+its labels would not match this pull's.
 
 ```{r}
 evid_dir <- paths$evidence
@@ -664,6 +811,12 @@ if (run_gfw_api && length(to_query) > 0) {
 
     if (status == "ok") {
       parsed <- parse_identity(res)
+      # gfwr asks for ":latest"; refuse to cache a version this pull is not
+      if (!str_detect(coalesce(parsed$dataset, ""), paste0(":", paths$pipeline, "(\\.|$)"))) {
+        stop("The identity API served ", parsed$dataset, ", not pipeline ", paths$pipeline,
+             "; nothing from this batch was cached. Turn run_gfw_api off for this version.",
+             call. = FALSE)
+      }
       append_csv(parsed$registry, ev_paths$registry)
       append_csv(parsed$combined, ev_paths$combined)
       dataset <- parsed$dataset
@@ -684,6 +837,17 @@ registry <- read_ev(ev_paths$registry, registry_cols)
 combined <- read_ev(ev_paths$combined, combined_cols)
 
 count(queried, status, dataset)
+
+# every successful lookup must come from this pipeline version, e.g.
+# "public-global-vessel-identity:v5.0" in the v5 cache
+wrong_version <- queried |>
+  filter(status == "ok", !str_detect(coalesce(dataset, ""), paste0(":", paths$pipeline, "(\\.|$)")))
+if (nrow(wrong_version) > 0) {
+  stop(nrow(wrong_version), " identity lookups in ", ev_paths$queried,
+       " are not from pipeline ", paths$pipeline, ": ",
+       paste(unique(wrong_version$dataset), collapse = ", "),
+       ". Move them out of this version's cache before continuing.", call. = FALSE)
+}
 
 queried_mmsi <- id_lookup |>
   filter(vessel_id %in% queried$vessel_id[queried$status %in% c("ok", "not_found")]) |>
@@ -754,6 +918,7 @@ that cannot be verified.
 | GFW registry lists non-fishing gear, or name or behaviour only (list 3) | `non_fishing` | MarineTraffic MMSI search; a unique GARFO match is noted as contrary evidence |
 | Battery-level call sign (list 4) | `gear_marker` | |
 | MMSI not 9 digits only (list 4) | `unknown` | Whether it is a vessel |
+| Counted as fishing in the previous pipeline version, retyped in this one (list 5) | `fishing` | As for list 1: MarineTraffic MMSI search, PSIX, the GARFO match if any. Reject when the new label is right (e.g. a yacht or a recreational boat the analysis does not count as fishing) |
 
 Charter windows are suggested from the first and last Stage 3 day with lease
 activity; replace them with Ørsted's dates where available.
@@ -923,7 +1088,7 @@ assessed |>
 
 ```{r}
 review <- assessed |>
-  # list 1 is reviewed only where there is evidence
+  # list 1 is reviewed only where there is evidence; list 5 always is
   filter(list != "1_missed_fishing" | has_evidence) |>
   mutate(
     decision    = NA_character_,
@@ -934,7 +1099,8 @@ review <- assessed |>
       list == "4_gear_marker"                                 ~ "unknown",
       list == "1_missed_fishing"                              ~ "fishing",
       list == "2_charter_activity"                            ~ "fishing",
-      list == "3_nonfishing_typed_fishing"                    ~ "non_fishing"),
+      list == "3_nonfishing_typed_fishing"                    ~ "non_fishing",
+      list == "5_roster_label_change"                         ~ "fishing"),
     activity_excluded = as.character(list == "2_charter_activity"),
     valid_from = if_else(list == "2_charter_activity",
                          as.character(s3_lease_first), NA_character_),
@@ -948,6 +1114,7 @@ review <- assessed |>
       list == "3_nonfishing_typed_fishing" & reg_nonfishing ~ "gfw_registry",
       list == "2_charter_activity"                          ~ "behavioural_screen",
       list == "4_gear_marker"                               ~ "mmsi_format_screen",
+      list == "5_roster_label_change"                       ~ paste0(prev_pipeline, "_roster_check"),
       TRUE                                                  ~ "screen"),
     evidence_ref = if_else(garfo_support,
                            paste0("GARFO hull ", garfo_hull_id, "; permit ", garfo_permits),
@@ -983,8 +1150,10 @@ review <- assessed |>
           TRUE    ~ "no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)")),
         ""))) |>
   # within each list: GFW registry evidence first, then RFMO listings, then
-  # GARFO hulls PSIX ties to the AIS call sign, then by hours
-  arrange(list, desc(reg_fishing), desc(reg_rfmo),
+  # GARFO hulls PSIX ties to the AIS call sign, then by hours; list 5 by its
+  # fishing-effort hours in the previous version
+  arrange(list, desc(coalesce(afe_hours_old, 0)),
+          desc(reg_fishing), desc(reg_rfmo),
           desc(psix_link %in% "match"), desc(vp_hours)) |>
   mutate(across(where(is.numeric), \(x) round(x, 3))) |>
   select(all_of(decision_cols), any_of(evidence_cols))
@@ -1236,6 +1405,60 @@ decisions |>
   filter(is.na(gfw_vessel_type_current) |
            gfw_vessel_type_recorded != gfw_vessel_type_current |
            gfw_gear_type_recorded != gfw_gear_type_current)
+```
+
+### Label drift across the roster
+
+On a run against a new pipeline version, the same check for every vessel on
+the previous version's roster, decided or not (Phase 1). **Type drift** is a
+change of GFW vessel type; unprotected ones in the previous Primary set are
+list 5 of the review sheet. **Gear-only drift** is a change of gear class
+with the same vessel type; unprotected ones are on the gear review sheet.
+Protected changes are settled by an existing crosswalk row or gear
+correction. The hours are the previous version's.
+
+```{r}
+if (!is.null(roster_chk)) {
+  type_mmsi <- roster_chk$MMSI[roster_chk$change == "type"]
+  roster_chk |>
+    filter(change != "missing") |>
+    mutate(drift = case_when(change == "type" ~ "type",
+                             !MMSI %in% type_mmsi ~ "gear only",
+                             TRUE ~ "gear, with a type change")) |>
+    group_by(drift, protected, in_primary) |>
+    summarise(vessels = n(), vp_hours_old = round(sum(vp_hours_old)),
+              afe_hours_old = round(sum(afe_hours_old)), .groups = "drop")
+}
+```
+
+```{r}
+# gear-only drift: the transitions between gear classes
+if (!is.null(roster_chk)) {
+  roster_chk |>
+    filter(change == "gear_class", !MMSI %in% type_mmsi) |>
+    count(protected, class_old, class_new, name = "vessels", sort = TRUE)
+}
+```
+
+### Roster vessels missing from this pull
+
+Roster vessels with no records in this pull's analysis window. A pipeline
+version can drop records (e.g. v5 removes port false positives) or split a
+vessel's identity, so check the hours before reading anything into them.
+Report only; there is nothing to decide.
+
+```{r}
+if (!is.null(roster_chk)) {
+  missing_roster <- roster_chk |> filter(change == "missing")
+  # an if block shows only its last value, so the summary is printed
+  print(missing_roster |>
+    group_by(in_primary) |>
+    summarise(vessels = n(), vp_hours_old = round(sum(vp_hours_old)),
+              afe_hours_old = round(sum(afe_hours_old)), .groups = "drop"))
+  missing_roster |>
+    arrange(desc(vp_hours_old)) |>
+    select(MMSI, Vessel_Name, in_primary, type_old, gear_old, vp_hours_old, afe_hours_old)
+}
 ```
 
 ## Session info

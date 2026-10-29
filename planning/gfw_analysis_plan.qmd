@@ -1356,7 +1356,8 @@ until 2026-10-28; D-060) into
 | `months_since_first_found(t)` | Months from the nearest project's first foundation, for event-time plots |
 | `d_found_final_km`, `d_cable_km` | Static: nearest eventual foundation (planned included) and nearest cable route |
 
-The radii (2, 5, 2 km) and the SRW sensitivity month are `05` parameters.
+The radii (2, 5, 2 km; reasons in decision 2026-10-29, D-065) and the SRW
+sensitivity month are `02a` parameters (decision 2026-10-28, D-060).
 With these data, SFW reaches `post_construction` in October 2023, while RWF
 and SRW stay in `construction` to the end of the window (RWF's inter-array
 works are open; SRW has unrecorded positions).
@@ -1501,12 +1502,13 @@ settled the base model (the Phase 3 power simulation has the same dependency,
 2. Inject a known BAG effect: multiply the simulated mean by (1 − *e*) in the
    `inside` and `0–2` km bands in Stage 3 (and, for the timing model, as a
    function of turbine distance after installation). Effect sizes
-   *e* ∈ {10, 20, 30, 50}%, plus *e* = 0 to check the false-positive rate.
+   *e* ∈ {20, 30, 50}% (D-049), plus *e* = 0 to check the false-positive rate.
 3. Refit the full BAG model to each simulated dataset and record whether the
    95% CI of the headline rate ratio excludes 1, its bias, and the CI coverage.
-4. 200 simulations per effect size and model (`set.seed(42)`, parallel,
-   cached with `fit_cached()`). Increase to 500 for any gear whose power curve
-   crosses 0.8 between two tested effect sizes, to pin down the MDE.
+4. 100 simulations per effect size and model (decision 2026-10-20, D-049;
+   `set.seed(42)`, parallel worker processes via `callr`, cached with
+   `fit_cached()`). Increase to 500 for any gear whose power curve crosses 0.8
+   between two tested effect sizes, to pin down the MDE.
 
 **Outputs.** Power curves per gear × dataset × model; a table of the
 **minimum detectable effect** (MDE, the smallest *e* with power ≥ 0.8); the
@@ -1520,12 +1522,37 @@ As a check, repeat the *e* = 20% scenario with vessel-level resampling:
 redraw vessels with replacement within gear × stage from the records, rebuild
 the cell table, and inject the effect. Report how much it lowers power.
 
+**Radius recovery (timing models; decision 2026-10-29, D-065).** Can the data
+choose the `active_construction` radius at all? Simulate from the timing
+model's base model (without *λ*) as in steps 1 and 4, and inject a
+construction effect at the primary radius: multiply the mean by (1 − *e*) in
+the cell-months with `active_construction` at 5 km, for *e* ∈ {0, 30, 50}%.
+Refit the full timing model with `active_construction` at 2, 5 and 10 km,
+and record:
+
+- power for *λ* at 5 km (the 95% CI excludes 0);
+- the share of simulations in which the 5 km fit has the lowest AIC
+  (**recovery**), and, at *e* = 0, how often 2 or 10 km beats it by more than
+  2 AIC units (selection noise);
+- the bias in *λ* when it is reported at whichever radius fits best
+  (the winner's curse).
+
+The 2 and 10 km exposures are the `active_construction_<r>km` columns of
+`infra_cell_month_radii.csv` and `infra_cell_season_year_radii.csv`, which 02a
+writes in the same render as the primary tables (decision 2026-10-29, D-066).
+The Phase 7 sensitivity runs use the same tables.
+
 **Use of the result.**
 
 - Report every BAG estimate next to its MDE.
 - A gear × dataset with an **MDE above 50%** is reported descriptively
   (steps 1–2), with its MDE stated, not as a hypothesis test.
 - The MDE sets the pre-trend equivalence margin (@sec-bag-pretrend).
+- The `active_construction` radius stays fixed at 5 km. Comparing the 2 / 5 /
+  10 km fits to choose a radius is allowed only for a gear × dataset where
+  recovery is at least 0.8 at an *e* for which *λ*'s power is at least 0.8.
+  Anywhere else, the radius runs are reported as a sensitivity check (does the
+  result hold?), not as an estimate of the radius (D-065).
 
 No new dependency: `simulate()` for `glmmTMB` and `sdmTMB` fits does the
 simulation, and the refits use the Phase 5 code.
@@ -2003,7 +2030,7 @@ grid: variant × outcome, with the estimate and CI.
 | `band × year` pre-trend term, every gear (Phase 1 gate, 2026-10-19, D-018) | Parallel pre-construction trends across distance bands, which the Phase 1 tests could not establish with power |
 | Distance bands vs a continuous distance smooth | BAG specification |
 | SRW's 40 unrecorded positions installed from May 2026 (`infra_cell_month_srw_planned.csv`) | Upper bound on SRW exposure (decision 2026-10-19, D-024) |
-| Exposure radii: `active_construction` at 2 / 5 / 10 km; `n_found` at 1 / 2 / 4 km | Scale of the construction and structure effects |
+| Exposure radii: `active_construction` at 2 / 5 / 10 km; `n_found` at 1 / 2 / 4 km (`infra_cell_*_radii.csv` from 02a, D-066) | Scale of the construction and structure effects (D-065) |
 | `cable_works(t)` in the timing model | Coarse cable windows |
 | `sz_share_install` (zones on installation days only) in place of `sz_share` | Enforcement-only safety zones: the RWF and SRW rules enforce zones only during active construction (caveat 17) |
 | Stage × season BAG without the cells ever inside a safety zone | Mandated exclusion driving the inside-band *γ* (caveat 17) |

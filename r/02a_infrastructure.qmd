@@ -11,10 +11,18 @@ params:
   grid: ""
   analysis: ""
   infra: ""
-  # Infrastructure exposure radii (km)
+  # Infrastructure exposure radii (km), from the cell centroid. Reasons in
+  # decision 2026-10-29, D-065: 2 km ~ one 1 nm turbine spacing and the 0-2 km
+  # BAG band; 5 km is a judgement for avoidance of the construction spread
+  # beyond the safety zones (no published scale), tested at 2 / 5 / 10 km
   r_count_km: 2       # n_found_<r>km: installed foundations within this distance
   r_active_km: 5      # active_construction: a foundation going in this month within this distance
   r_cable_km: 2       # cable_works: a cable route with works this month within this distance
+  # Sensitivity radii (km), written to infra_cell_*_radii.csv (decision
+  # 2026-10-29, D-066): half, primary and double. Each set must include its
+  # primary radius above, which the gate checks against the main tables
+  r_count_sens_km: [1, 2, 4]     # n_found_<r>km
+  r_active_sens_km: [2, 5, 10]   # active_construction_<r>km
   # SRW sensitivity: month the 40 positions with no installation record are
   # assumed installed (decision 2026-10-19, D-024)
   srw_planned_from: "2026-05-01"
@@ -47,6 +55,7 @@ touching the vessel workflow.
 | `data/processed/analysis/{pipeline}/infra_cell_static.csv` | cell: distance to the nearest eventual foundation and cable route (full precision) |
 | `.../infra_cell_month.csv`, `.../infra_cell_season_year.csv` | cell × month / season-year: exposure covariates |
 | `.../infra_cell_month_srw_planned.csv` | cell × month: the same, with SRW's 40 unrecorded positions installed (sensitivity) |
+| `.../infra_cell_month_radii.csv`, `.../infra_cell_season_year_radii.csv` | cell × month / season-year: `n_found` and `active_construction` at the sensitivity radii (D-066) |
 
 Every output has a `<file>.json` provenance sidecar. The source files under
 `data/sf/owf/*/turbines/` are read only. Fields are defined in
@@ -518,6 +527,75 @@ check("the enforcement-only zones never exceed the main ones",
       all(infra_month$sz_share_install <= infra_month$sz_share + 1e-9))
 ```
 
+### Sensitivity radii
+
+`n_found` and `active_construction` at half, the primary and double radius
+(decision 2026-10-29, D-066), for the Phase 4 radius-recovery simulation and
+the Phase 7 sensitivity runs (plan, "Simulation power analysis" and Phase 7). They
+go in their own tables, one column per radius, so the primary tables, 05 and
+the analysis tables are unchanged; a model swaps the column in. Recorded
+installation dates only (no SRW-planned variant), and no `cable_works`, which
+the sensitivity runs do not vary.
+
+```{r}
+# the YAML lists arrive as vectors when rendered and as lists when read by
+# knit_params(), so flatten them; each set must contain its primary radius
+r_count_sens <- sort(unlist(qparams$r_count_sens_km))
+r_active_sens <- sort(unlist(qparams$r_active_sens_km))
+stopifnot("r_count_sens_km must include r_count_km" = qparams$r_count_km %in% r_count_sens,
+          "r_active_sens_km must include r_active_km" = qparams$r_active_km %in% r_active_sens)
+count_col <- \(r) sprintf("n_found_%gkm", r)
+active_col <- \(r) sprintf("active_construction_%gkm", r)
+
+# one foundation_exposure() pass per radius (the cell × foundation distances
+# are already in d_fdn, so each pass is cheap). Rows come out in the same
+# cell × month order every time, so the columns can be bound side by side.
+# Each pass varies one radius; the other is held at its primary value and
+# its column dropped
+exposure_at <- \(r_count, r_active) foundation_exposure(
+  d_fdn, foundations$foundation_installed, foundations$foundation_end, months,
+  r_count_km = r_count, r_active_km = r_active)
+count_by_r <- map(r_count_sens, \(r) exposure_at(r, qparams$r_active_km)[[count_col(r)]]) |>
+  set_names(count_col(r_count_sens))
+active_by_r <- map(r_active_sens, \(r) exposure_at(qparams$r_count_km, r)$active_construction) |>
+  set_names(active_col(r_active_sens))
+infra_month_radii <- exposure_at(qparams$r_count_km, qparams$r_active_km) |>
+  transmute(cell_id = grid$cell_id[cell], year_month) |>
+  bind_cols(as_tibble(count_by_r), as_tibble(active_by_r))
+
+# season-year, as for the main table: counts averaged, flags as shares of months
+infra_season_year_radii <- infra_month_radii |>
+  left_join(select(calendar, year_month, season, season_year), by = "year_month") |>
+  group_by(cell_id, season, season_year) |>
+  summarise(across(all_of(count_col(r_count_sens)), mean),
+            across(all_of(active_col(r_active_sens)), mean, .names = "{.col}_share"),
+            .groups = "drop")
+
+# cell-months reached by each radius: how much exposure each choice gives the
+# timing model to work with
+infra_month_radii |>
+  summarise(across(all_of(count_col(r_count_sens)), \(x) sum(x > 0)),
+            across(all_of(active_col(r_active_sens)), sum)) |>
+  pivot_longer(everything(), names_to = "column", values_to = "exposed_cell_months") |>
+  knitr::kable()
+
+# the primary radius reproduces the main table exactly (same rows, same order)
+check("sensitivity radii: the primary radii reproduce n_found and active_construction exactly",
+      identical(infra_month_radii$cell_id, infra_month$cell_id) &&
+        identical(infra_month_radii$year_month, infra_month$year_month) &&
+        identical(infra_month_radii[[count_col(qparams$r_count_km)]], infra_month[[n_col]]) &&
+        identical(infra_month_radii[[active_col(qparams$r_active_km)]], infra_month$active_construction))
+# a larger radius only ever adds exposure (columns are in increasing radius)
+nested <- \(cols, ge) all(map2_lgl(cols[-length(cols)], cols[-1],
+                                   \(a, b) ge(infra_month_radii[[b]], infra_month_radii[[a]])))
+check("sensitivity radii: exposure never shrinks as the radius grows",
+      nested(count_col(r_count_sens), \(b, a) all(b >= a)) &&
+        nested(active_col(r_active_sens), \(b, a) all(b | !a)))
+check("sensitivity radii: one row per cell × month and per cell × season-year, no gaps",
+      nrow(infra_month_radii) == nrow(infra_month) && !anyNA(infra_month_radii) &&
+        nrow(infra_season_year_radii) == nrow(infra_season_year) && !anyNA(infra_season_year_radii))
+```
+
 ## Write the outputs
 
 The covariate tables are rounded when written, to the decimals in
@@ -529,7 +607,10 @@ which keeps full precision.
 ```{r}
 dir.create(paths$analysis, recursive = TRUE, showWarnings = FALSE)
 
-write_digits <- c(infra_write_digits, set_names(3, n_col))
+# season-year means of the counts and shares of the flags, at every radius
+radii_cols <- c(count_col(r_count_sens), paste0(active_col(r_active_sens), "_share"))
+write_digits <- c(infra_write_digits, set_names(3, n_col),
+                  set_names(rep(3, length(radii_cols)), radii_cols))
 round_written <- \(t) mutate(t, across(any_of(names(write_digits)),
                                        \(x) round(x, write_digits[[cur_column()]])))
 
@@ -544,17 +625,23 @@ infra_out <- list(
   infra_cell_static = mutate(infra_static, across(where(is.double), exact_chr)),
   infra_cell_month = round_written(infra_month),
   infra_cell_season_year = round_written(infra_season_year),
-  infra_cell_month_srw_planned = round_written(infra_month_srw))
+  infra_cell_month_srw_planned = round_written(infra_month_srw),
+  # sensitivity radii (D-066)
+  infra_cell_month_radii = round_written(infra_month_radii),
+  infra_cell_season_year_radii = round_written(infra_season_year_radii))
 
 written <- tibble(file = character(), rows = integer())
 for (nm in names(infra_out)) {
   f <- file.path(paths$analysis, paste0(nm, ".csv"))
   write_csv(infra_out[[nm]], f, na = "")
-  write_provenance(f, c(paths$infra, infra_inputs, paths$grid, paths$leases), extra = list(
+  write_provenance(f, c(paths$infra, infra_inputs, paths$grid, paths$leases), extra = c(list(
     rows = nrow(infra_out[[nm]]), r_count_km = qparams$r_count_km,
     r_active_km = qparams$r_active_km, r_cable_km = qparams$r_cable_km,
     srw_planned = if (nm == "infra_cell_month_srw_planned")
-      paste("40 unrecorded SRW positions installed", qparams$srw_planned_from) else "planned, never installed"))
+      paste("40 unrecorded SRW positions installed", qparams$srw_planned_from) else "planned, never installed"),
+    # only the radii tables (D-066) record their radius sets, so the other
+    # sidecars keep their fields unchanged
+    if (grepl("_radii$", nm)) list(r_count_sens_km = r_count_sens, r_active_sens_km = r_active_sens)))
   written <- add_row(written, file = basename(f), rows = nrow(infra_out[[nm]]))
 }
 written

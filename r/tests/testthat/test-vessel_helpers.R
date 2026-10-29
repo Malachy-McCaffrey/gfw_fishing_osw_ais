@@ -162,3 +162,62 @@ test_that("write_roster_once() writes a roster and refuses to replace it", {
   expect_equal(read_chr(path)$MMSI, "1")
   expect_error(write_roster_once(r, path), "already exists")
 })
+
+# Roster check -----------------------------------------------------------------
+
+# a toy roster as read from fishing_roster_*.csv (every column text), one row
+# per MMSI with the labels and gear class it had in the previous version
+toy_roster <- function(MMSI, type = "FISHING", gear_type = "TRAWLERS",
+                       gear_class = "MOBILE", in_primary = "TRUE", afe = "1") {
+  tibble(MMSI, Vessel_Name = paste("BOAT", MMSI), gfw_vessel_type = type,
+         gfw_gear_type = gear_type, gear_class, in_primary,
+         vp_hours_s1 = "1", vp_hours_s2 = "0", vp_hours_s3 = "0",
+         afe_hours_s1 = afe, afe_hours_s2 = "0", afe_hours_s3 = "0")
+}
+
+test_that("roster_changes() finds type, gear-class and missing changes, and marks protected ones", {
+  roster <- toy_roster(c("1", "2", "3", "4", "5", "6"))
+  # current labels: 1 unchanged, 2 retyped, 3 retyped but has a crosswalk row,
+  # 4 same type with another gear class, 5 gear changed but corrected, 6 absent
+  labels <- tibble(MMSI = c("1", "2", "3", "4", "5"),
+                   gfw_vessel_type = c("FISHING", "PASSENGER", "PASSENGER", "FISHING", "FISHING"),
+                   gfw_gear_type   = c("TRAWLERS", "PASSENGER", "PASSENGER", "POTS_AND_TRAPS", "FISHING"))
+  gear_now <- tibble(MMSI = c("1", "2", "3", "4", "5"),
+                     gear_class = c("MOBILE", "UNRESOLVED", "UNRESOLVED", "FIXED", "UNRESOLVED"))
+  cw   <- cw_row("3")
+  gear <- tibble(MMSI = "5", gear_class = "MOBILE")
+
+  out <- roster_changes(roster, labels, gear_now, cw, gear)
+
+  expect_equal(paste(out$change, out$MMSI),
+               c("type 2", "type 3", "gear_class 2", "gear_class 3", "gear_class 4",
+                 "gear_class 5", "missing 6"))
+  expect_equal(out$protected, c(FALSE, TRUE, FALSE, FALSE, FALSE, TRUE, FALSE))
+  expect_equal(out$type_new[out$MMSI == "2" & out$change == "type"], "PASSENGER")
+  expect_equal(out$class_new[out$MMSI == "4"], "FIXED")
+  expect_true(is.na(out$type_new[out$change == "missing"]))
+  expect_type(out$in_primary, "logical")
+  expect_equal(out$afe_hours_old[1], 1)
+})
+
+test_that("roster_changes() returns no rows when nothing changed", {
+  roster <- toy_roster("1")
+  out <- roster_changes(roster,
+                        tibble(MMSI = "1", gfw_vessel_type = "FISHING", gfw_gear_type = "TRAWLERS"),
+                        tibble(MMSI = "1", gear_class = "MOBILE"),
+                        cw_row("9")[0, ], tibble(MMSI = character()))
+  expect_equal(nrow(out), 0)
+})
+
+test_that("previous_roster_path() picks the newest roster of another version", {
+  dir <- tempfile(); dir.create(dir)
+  template <- file.path(dir, "fishing_roster_%s.csv")
+  expect_null(previous_roster_path(template, "v4"))
+  for (v in c("v4", "v9", "v10")) writeLines("MMSI", sprintf(template, v))
+  # numeric order, not text order: v10 is newer than v9
+  expect_equal(basename(previous_roster_path(template, "v11")), "fishing_roster_v10.csv")
+  expect_equal(basename(previous_roster_path(template, "v10")), "fishing_roster_v9.csv")
+  unlink(c(sprintf(template, c("v9", "v10"))))
+  expect_null(previous_roster_path(template, "v4"))
+  expect_equal(basename(previous_roster_path(template, "v5")), "fishing_roster_v4.csv")
+})

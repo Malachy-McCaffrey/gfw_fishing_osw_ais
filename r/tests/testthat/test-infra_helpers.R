@@ -151,6 +151,30 @@ test_that("foundation_exposure() counts a foundation once its last day has passe
   expect_equal(by_m[["2024-04-01"]]$active_construction, c(FALSE, FALSE))
 })
 
+test_that("foundation_exposure() is nested across radii (02a's sensitivity tables, D-066)", {
+  # 3 cells × 3 foundations at a spread of distances, km, so each radius step
+  # adds some cells: 02a's gate relies on a larger radius never losing exposure
+  d_km <- matrix(c(0.5, 3,   9,
+                   1.5, 4.5, 12,
+                   3.5, 8,   20), nrow = 3, byrow = TRUE)
+  installed <- as.Date(c("2024-01-05", "2024-02-10", "2024-02-20"))
+  end       <- as.Date(c("2024-01-06", "2024-02-11", "2024-03-02"))
+  months    <- as.Date(c("2024-01-01", "2024-02-01", "2024-03-01"))
+  at <- \(rc, ra) foundation_exposure(d_km, installed, end, months, r_count_km = rc, r_active_km = ra)
+  n1 <- at(1, 5)$n_found_1km; n2 <- at(2, 5)$n_found_2km; n4 <- at(4, 5)$n_found_4km
+  a2 <- at(2, 2)$active_construction; a5 <- at(2, 5)$active_construction
+  a10 <- at(2, 10)$active_construction
+  expect_true(all(n1 <= n2 & n2 <= n4))
+  expect_true(all(a5 | !a2) && all(a10 | !a5))
+  # and each step adds something here, so the test is not vacuous
+  expect_true(sum(n4) > sum(n2) && sum(n2) > sum(n1))
+  expect_true(sum(a10) > sum(a5) && sum(a5) > sum(a2))
+  # the radius changes only its own column: the count is the same whatever
+  # the active radius, and vice versa
+  expect_identical(at(2, 2)$n_found_2km, at(2, 10)$n_found_2km)
+  expect_identical(at(1, 5)$active_construction, at(4, 5)$active_construction)
+})
+
 test_that("foundation_exposure() ignores foundations with no dates (planned)", {
   d_km <- matrix(c(1, 0.1), nrow = 1)
   ex <- foundation_exposure(d_km, as.Date(c("2024-01-05", NA)), as.Date(c("2024-01-05", NA)),

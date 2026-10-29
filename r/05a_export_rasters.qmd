@@ -1,0 +1,448 @@
+---
+title: "MM GFW Raster Export (Primary set)"
+author: "Malachy McCaffrey"
+date: today
+format: html
+params:
+  # GFW pipeline version to render against (r/paths.R); blank = the default
+  pipeline: ""
+  # Path overrides (see r/paths.R); leave blank to use the project paths.
+  interim_gfw: ""
+  grid: ""
+  analysis: ""
+  aoi: ""
+  rasters: ""
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# run from the repo root (the folder holding renv.lock) so the relative paths
+# in r/paths.R resolve whether the qmd is rendered or run chunk by chunk
+root <- getwd()
+while (!file.exists(file.path(root, "renv.lock")) && dirname(root) != root) root <- dirname(root)
+knitr::opts_knit$set(root.dir = root)
+```
+
+## Objective
+
+Write the **Primary** set's per-cell effort and the static cell covariates
+as rasters, so they can be overlaid with other gridded fisheries data (NOAA
+fishing footprints, VMS and VTR products) or opened in any GIS (D-067). This
+is an output step only: nothing in 06 onward reads these files, and no
+analysis table changes.
+
+The rasters sit on GFW's own 0.01° lattice in EPSG:4326, so each grid cell
+is exactly one pixel and nothing is resampled. The extent is the AOI's
+bounding box snapped outward to the lattice and padded by one cell, so every
+pipeline version is written on the same extent. Grid cells with no effort
+are `0`; pixels outside the grid are `NA`.
+
+Effort comes from 04's zero-filled cell tables, not from 05's analysis
+tables, because only 04 carries `n_mmsi` for all gears together. Each
+gear's vessel count, and the all-gear count, is a **distinct** count within
+its cell and time window. It does not add across cells, gears or time, so
+the `all` layer is read from 04's all-gear table, never summed from the gear
+layers. Hours do add, and the gate checks that the gear layers sum to `all`.
+
+| Output (`data/processed/rasters/{pipeline}/`) | Contents |
+|---|---|
+| `{vp,afe}_primary_hours_{stage,month}.tif` | hours, one layer per gear × stage or month (Float64) |
+| `{vp,afe}_primary_nmmsi_{stage,month}.tif` | distinct MMSIs, same layers (Int32) |
+| `{vp,afe}_primary_{stage,month}.nc` | both variables per gear (`hours_{gear}`, `n_mmsi_{gear}`) on lon × lat × time |
+| `cell_covariates.tif`, `cell_covariates.nc` | static covariates from `cells.gpkg` |
+
+Gears are `all` plus the three analysis gears (`mobile`, `fixed`,
+`pole_and_line`). `UNRESOLVED` holds no Primary hours, which the gate
+checks, so it is not written. GeoTIFF layers are named `{gear}_{time}`, with
+`stage1`–`stage3` or `YYYY-MM` for the time. The NetCDF time values are
+each stage's or month's first day. Every file has a `<file>.json`
+provenance sidecar. Fields are defined in `references/data_dictionary.md`.
+
+The **gate** at the end collects every check. The step passes only if all
+of them hold.
+
+## Libraries and shared code
+
+```{r}
+library(tidyverse)
+library(sf)
+library(terra)
+library(ncdf4)
+
+source("r/paths.R")
+source("r/gfw_helpers.R")
+source("r/vessel_helpers.R")
+source("r/analysis_helpers.R")
+
+# Quarto parameters (header); `params` is read-only while rendering. Run chunk
+# by chunk, `params` is missing or left over from another session, so the
+# header is read from this file directly instead
+qparams <- if (isTRUE(getOption("knitr.in.progress"))) params else {
+  hdr <- knitr::knit_params(readLines(
+    file.path(root, "r/05a_export_rasters.qmd"), warn = FALSE))
+  lapply(hdr, function(p) p$value)
+}
+paths <- gfw_paths_with(qparams)
+
+set.seed(42) # workflow-wide seed (plan, FAIR); nothing here is random
+
+datasets   <- c("vp", "afe")
+time_steps <- c("stage", "month")
+# 04's time column for each time step
+time_col   <- c(stage = "Development Stage", month = "Year Month")
+# layer and variable names use lower-case gear tokens; `all` comes first
+gears      <- c("all", tolower(analysis_gears))
+pull_date  <- as.character(read_pull_date(paths))
+
+# every check the gate needs, filled in as the steps run
+gate <- tibble(check = character(), pass = logical())
+check <- function(name, ok) {
+  gate <<- add_row(gate, check = name, pass = isTRUE(ok))
+  invisible(ok)
+}
+```
+
+## Step 1: read the grid and the Primary cell tables
+
+The grid supplies each cell's lattice indices. For each dataset and time
+step, the all-gear table gives the `all` rows and the gear table the three
+analysis gears, both filtered to Primary.
+
+```{r}
+grid <- st_read(paths$grid, quiet = TRUE) |>
+  st_drop_geometry() |>
+  select(cell_id, ix, iy)
+
+# one of 04's zero-filled cell tables, Primary rows only, with `hours`,
+# `n_mmsi`, `time` and a lower-case `gear` column
+cell_table_path <- function(ds, tm, by_gear) {
+  file.path(paths$interim_gfw, sprintf("gfw_%s_cell_%s%s_sets.csv",
+                                       ds, tm, if (by_gear) "_gear" else ""))
+}
+read_cell_table <- function(ds, tm, by_gear) {
+  t <- read_csv(cell_table_path(ds, tm, by_gear),
+                col_types = cols(cell_id = "c", set = "c", n_mmsi = "i", .default = "?")) |>
+    filter(set == "primary") |>
+    select(-set) |>
+    rename(hours = paste0(ds, "_hours"), time = all_of(time_col[[tm]]))
+  if (by_gear) mutate(t, gear = tolower(gear_class), .keep = "unused") else mutate(t, gear = "all")
+}
+
+effort <- list()
+for (ds in datasets) for (tm in time_steps) {
+  by_gear <- read_cell_table(ds, tm, by_gear = TRUE)
+  # UNRESOLVED is a structural zero in Primary (05, step 1): check it, then drop it
+  unres <- filter(by_gear, gear == "unresolved")
+  check(sprintf("%s %s: Primary UNRESOLVED holds 0 h and 0 vessels", ds, tm),
+        sum(unres$hours) == 0 && all(unres$n_mmsi == 0))
+  effort[[ds]][[tm]] <- bind_rows(read_cell_table(ds, tm, by_gear = FALSE),
+                                  filter(by_gear, gear != "unresolved")) |>
+    left_join(grid, by = "cell_id")
+}
+
+# the time values each table must cover: the three stages, and every month
+# of the analysis window
+time_levels <- list(stage = dev_stages$stage,
+                    month = seq(as.Date(analysis_start), as.Date(analysis_end), by = "month"))
+
+for (ds in datasets) for (tm in time_steps) {
+  t <- effort[[ds]][[tm]]
+  check(sprintf("%s %s: every row is on the grid", ds, tm), !anyNA(t$ix))
+  check(sprintf("%s %s: one row per grid cell × %s × gear (zero-filled)", ds, tm, tm),
+        nrow(t) == nrow(grid) * length(time_levels[[tm]]) * length(gears) &&
+          !anyDuplicated(select(t, cell_id, time, gear)) &&
+          setequal(t$time, time_levels[[tm]]) && setequal(t$gear, gears))
+}
+```
+
+## Step 2: the raster template
+
+The AOI's bounding box on the 0.01° lattice, padded by one cell
+(`lattice_template()` in `r/analysis_helpers.R`). The same AOI gives the same
+template for every pipeline version.
+
+```{r}
+aoi      <- st_read(paths$aoi, quiet = TRUE)
+template <- lattice_template(aoi)
+template
+
+# the lattice edges as indices; an exact lattice gives whole numbers
+edges <- as.vector(ext(template)) * 100
+check("template: EPSG:4326, 0.01° pixels, edges on the lattice",
+      crs(template, describe = TRUE)$code == "4326" &&
+        isTRUE(all.equal(res(template), c(0.01, 0.01))) &&
+        all(abs(edges - round(edges)) < 1e-6))
+# raster_cells() stops on a cell outside the template; this records it
+check("template: every grid cell is inside it",
+      !inherits(try(raster_cells(grid$ix, grid$iy, template), silent = TRUE), "try-error"))
+```
+
+## Step 3: build the effort rasters
+
+One raster per dataset × time step × variable × gear, with one layer per
+stage or month. The GeoTIFF stacks the four gears; the NetCDF keeps each
+gear as its own variable with a time dimension.
+
+```{r}
+# per time step: layer labels, and the date each layer starts on
+time_label <- list(
+  stage = \(x) sub("Stage ", "stage", x, fixed = TRUE),
+  month = \(x) format(x, "%Y-%m"))
+time_start <- list(
+  stage = \(x) as.Date(dev_stages$start[match(x, dev_stages$stage)]),
+  month = \(x) x)
+
+variables <- c(hours = "hours", n_mmsi = "n_mmsi")
+
+# build[[ds]][[tm]][[var]][[gear]]: a SpatRaster with one layer per time value
+build <- list()
+for (ds in datasets) for (tm in time_steps) {
+  labels <- time_label[[tm]](time_levels[[tm]])
+  dates  <- time_start[[tm]](time_levels[[tm]])
+  for (var in names(variables)) for (g in gears) {
+    t <- filter(effort[[ds]][[tm]], gear == g)
+    r <- cells_to_raster(t$ix, t$iy, time_label[[tm]](t$time), t[[var]],
+                         template, layers = labels)
+    time(r) <- dates
+    build[[ds]][[tm]][[var]][[g]] <- r
+  }
+}
+```
+
+## Step 4: write the effort rasters
+
+GeoTIFFs are DEFLATE-compressed. Hours are written as Float64, so every
+pixel equals its table value exactly, and counts as Int32. The NetCDF
+carries the same values. ncdf4 then adds attributes that terra does not
+write: the source, the set and pipeline, the stage definitions, and on each
+count variable a note that it does not add.
+
+```{r}
+dir.create(paths$rasters, recursive = TRUE, showWarnings = FALSE)
+
+tif_type  <- c(hours = "FLT8S", n_mmsi = "INT4S")
+nc_prec   <- c(hours = "double", n_mmsi = "integer")
+units_of  <- c(hours = "hours", n_mmsi = "vessels")
+long_name <- c(vp = "vessel presence", afe = "apparent fishing effort")
+file_var  <- c(hours = "hours", n_mmsi = "nmmsi") # file-name token for each variable
+
+# what each variable is, and whether it adds across pixels, gears and time
+var_comment <- c(
+  hours  = "Sum of hours in the cell over the layer's time window. Adds across cells, gears and time.",
+  n_mmsi = paste("Distinct MMSIs with records in the cell over the layer's time window.",
+                 "Does NOT add across cells, gears or time: recompute from the records."))
+
+effort_inputs <- \(ds, tm) c(cell_table_path(ds, tm, FALSE), cell_table_path(ds, tm, TRUE),
+                             paths$grid, paths$aoi)
+written <- tibble(file = character(), layers = integer())
+
+for (ds in datasets) for (tm in time_steps) {
+  # GeoTIFF: one file per variable, the four gears stacked
+  for (var in names(variables)) {
+    r <- rast(unname(build[[ds]][[tm]][[var]]))
+    names(r) <- unlist(map(gears, \(g) paste0(g, "_", names(build[[ds]][[tm]][[var]][[g]]))))
+    f <- file.path(paths$rasters, sprintf("%s_primary_%s_%s.tif", ds, file_var[[var]], tm))
+    writeRaster(r, f, datatype = tif_type[[var]], gdal = "COMPRESS=DEFLATE", overwrite = TRUE)
+    write_provenance(f, effort_inputs(ds, tm), extra = list(
+      dataset = ds, time_step = tm, set = "primary", variable = var,
+      units = units_of[[var]], additive = var == "hours", pull_date = pull_date,
+      crs = "EPSG:4326", resolution_deg = 0.01, extent = as.vector(ext(r)),
+      layers = names(r)))
+    written <- add_row(written, file = basename(f), layers = nlyr(r))
+  }
+
+  # NetCDF: one variable per variable × gear, each with a time dimension
+  # hours for the four gears, then n_mmsi for the four gears, as nc_vars below
+  s <- sds(list_flatten(map(names(variables), \(var) unname(build[[ds]][[tm]][[var]]))))
+  # one row per NetCDF variable, gears varying fastest to match `s`
+  nc_grid <- expand_grid(var = names(variables), gear = gears)
+  nc_vars <- paste0(nc_grid$var, "_", nc_grid$gear)
+  names(s) <- nc_vars
+  longnames(s) <- sprintf("%s %s, %s gear, Primary set", long_name[[ds]],
+                          if_else(nc_grid$var == "hours", "hours", "distinct vessels (MMSI)"),
+                          nc_grid$gear)
+  units(s) <- unname(units_of[nc_grid$var])
+  f <- file.path(paths$rasters, sprintf("%s_primary_%s.nc", ds, tm))
+  writeCDF(s, f, prec = unname(nc_prec[nc_grid$var]),
+           zname = "time", compression = 4, overwrite = TRUE)
+
+  nc <- nc_open(f, write = TRUE)
+  ncatt_put(nc, 0, "title", sprintf("GFW %s, Primary set, by cell and %s", long_name[[ds]], tm))
+  ncatt_put(nc, 0, "source", sprintf(
+    "Global Fishing Watch 4Wings API, pipeline %s, pulled %s; Primary set classified by r/04_classify_aggregate.qmd",
+    paths$pipeline, pull_date))
+  ncatt_put(nc, 0, "pipeline", paths$pipeline)
+  ncatt_put(nc, 0, "set", "primary")
+  ncatt_put(nc, 0, "grid", "GFW 4Wings 0.01 degree lattice, EPSG:4326; cell (ix, iy) spans [ix, ix+1]/100 lon, [iy, iy+1]/100 lat")
+  ncatt_put(nc, 0, "fill", "0 = grid cell with no effort; missing = outside the grid")
+  ncatt_put(nc, 0, "license", "Data (c) Global Fishing Watch, CC BY-SA 4.0")
+  ncatt_put(nc, 0, "decision", "D-067, planning/decisions.md")
+  if (tm == "stage") {
+    # the time values are stage start dates; name the stages they stand for
+    ncatt_put(nc, 0, "stage_names", paste(dev_stages$stage, collapse = "; "))
+    ncatt_put(nc, 0, "stage_start", paste(dev_stages$start, collapse = "; "))
+    ncatt_put(nc, 0, "stage_end",   paste(dev_stages$end,   collapse = "; "))
+  }
+  for (v in nc_vars) {
+    var <- if (startsWith(v, "hours_")) "hours" else "n_mmsi"
+    ncatt_put(nc, v, "comment", var_comment[[var]])
+    ncatt_put(nc, v, "additive", if (var == "hours") "true" else "false")
+  }
+  nc_close(nc)
+
+  write_provenance(f, effort_inputs(ds, tm), extra = list(
+    dataset = ds, time_step = tm, set = "primary", pull_date = pull_date,
+    crs = "EPSG:4326", resolution_deg = 0.01, extent = as.vector(ext(template)),
+    variables = nc_vars, time = as.character(time_start[[tm]](time_levels[[tm]]))))
+  written <- add_row(written, file = basename(f), layers = length(nc_vars) * length(time_levels[[tm]]))
+}
+```
+
+## Step 5: the static covariates
+
+The static fields of `cells.gpkg` (05), one layer each. Categorical fields
+are stored as integer codes, listed in the sidecar and in the NetCDF
+`flag_values` / `flag_meanings` attributes, and the gear-domain flags as
+0/1. Two fields are left out. `dist_band` is a binning of `dist_lease_km`.
+`x_km` and `y_km` are UTM centroids, which a lon/lat raster already
+carries.
+
+```{r}
+cells <- st_read(file.path(paths$analysis, "cells.gpkg"), quiet = TRUE) |>
+  st_drop_geometry()
+check("covariates: cells.gpkg holds the same cells as the grid",
+      setequal(cells$cell_id, grid$cell_id) && nrow(cells) == nrow(grid))
+
+# categorical fields and their codes (1, 2, ... in this order)
+categories <- list(aoi_class = c("inside", "edge", "outside"),
+                   nearest_project = c("SFW", "RWF", "SRW"))
+check("covariates: every categorical value has a code",
+      all(imap_lgl(categories, \(lv, col) all(cells[[col]] %in% lv))))
+
+covariate_cols <- c("area_km2", "aoi_frac", "aoi_class", "dist_lease_km", "nearest_project",
+                    "depth_m", "depth_sd_m", "slope_deg", "bpi_broad",
+                    "d_found_final_km", "d_cable_km",
+                    grep("^domain_", names(cells), value = TRUE))
+cov <- cells |>
+  mutate(across(all_of(names(categories)), \(x) match(x, categories[[cur_column()]])),
+         across(starts_with("domain_"), as.integer)) |>
+  select(ix, iy, all_of(covariate_cols)) |>
+  pivot_longer(all_of(covariate_cols), names_to = "layer", values_to = "value")
+
+cov_r <- cells_to_raster(cov$ix, cov$iy, cov$layer, as.numeric(cov$value), template,
+                         layers = covariate_cols)
+# integer-coded layers: the categorical codes and the 0/1 domain flags
+int_layers <- c(names(categories), grep("^domain_", covariate_cols, value = TRUE))
+
+f_tif <- file.path(paths$rasters, "cell_covariates.tif")
+writeRaster(cov_r, f_tif, datatype = "FLT8S", gdal = "COMPRESS=DEFLATE", overwrite = TRUE)
+
+cov_s <- sds(as.list(cov_r))
+names(cov_s) <- covariate_cols
+f_nc <- file.path(paths$rasters, "cell_covariates.nc")
+writeCDF(cov_s, f_nc, prec = if_else(covariate_cols %in% int_layers, "integer", "double"),
+         compression = 4, overwrite = TRUE)
+nc <- nc_open(f_nc, write = TRUE)
+ncatt_put(nc, 0, "title", "Static cell covariates (cells.gpkg, r/05_prepare_analysis.qmd)")
+ncatt_put(nc, 0, "pipeline", paths$pipeline)
+ncatt_put(nc, 0, "grid", "GFW 4Wings 0.01 degree lattice, EPSG:4326")
+ncatt_put(nc, 0, "decision", "D-067, planning/decisions.md")
+for (col in names(categories)) {
+  ncatt_put(nc, col, "flag_values", seq_along(categories[[col]]), prec = "int")
+  ncatt_put(nc, col, "flag_meanings", paste(categories[[col]], collapse = " "))
+}
+for (col in grep("^domain_", covariate_cols, value = TRUE)) {
+  ncatt_put(nc, col, "flag_values", 0:1, prec = "int")
+  ncatt_put(nc, col, "flag_meanings", "inactive active")
+}
+nc_close(nc)
+
+for (f in c(f_tif, f_nc)) {
+  write_provenance(f, c(file.path(paths$analysis, "cells.gpkg"), paths$grid, paths$aoi),
+                   extra = list(pipeline = paths$pipeline, crs = "EPSG:4326",
+                                resolution_deg = 0.01, layers = covariate_cols,
+                                codes = categories,
+                                domain_flags = "0 = inactive, 1 = active in Stage 1"))
+  written <- add_row(written, file = basename(f), layers = length(covariate_cols))
+}
+
+written
+```
+
+## Gate
+
+Every file is read back from disk and compared with the tables it came
+from. Each grid cell's pixel must equal its table value exactly, every other
+pixel must be NA, and the NetCDF must match the GeoTIFF. For hours, the
+three gear layers must sum to `all`.
+
+```{r}
+# the pixel number of every row of a table, and the layer it belongs to
+pixel_of <- \(t) raster_cells(t$ix, t$iy, template)
+
+# two pixel matrices hold the same data: missing in the same pixels, and
+# exactly equal everywhere else. Missing pixels can come back as NA from one
+# format and NaN from the other, which identical() alone would count as a
+# difference
+same_pixels <- function(a, b) {
+  a <- unname(as.numeric(a))
+  b <- unname(as.numeric(b))
+  identical(is.na(a), is.na(b)) && identical(a[!is.na(a)], b[!is.na(b)])
+}
+
+for (ds in datasets) for (tm in time_steps) {
+  t   <- effort[[ds]][[tm]] |> mutate(label = paste0(gear, "_", time_label[[tm]](time)))
+  pix <- pixel_of(t)
+  for (var in names(variables)) {
+    f <- file.path(paths$rasters, sprintf("%s_primary_%s_%s.tif", ds, file_var[[var]], tm))
+    m <- values(rast(f))
+    idx <- cbind(pix, match(t$label, colnames(m)))
+    check(sprintf("%s %s %s .tif: every grid pixel equals the table, every other pixel is NA",
+                  ds, tm, var),
+          !anyNA(idx) && identical(as.numeric(m[idx]), as.numeric(t[[var]])) &&
+            sum(!is.na(m)) == nrow(t))
+
+    # NetCDF: each gear's variable against the same GeoTIFF columns
+    s <- sds(file.path(paths$rasters, sprintf("%s_primary_%s.nc", ds, tm)))
+    same <- map_lgl(gears, \(g) {
+      cols <- startsWith(colnames(m), paste0(g, "_"))
+      same_pixels(values(s[[paste0(var, "_", g)]]), m[, cols])
+    })
+    check(sprintf("%s %s %s .nc: identical to the GeoTIFF", ds, tm, var), all(same))
+  }
+
+  # hours add: the three gear layers sum to `all`, time value by time value
+  h <- values(rast(file.path(paths$rasters, sprintf("%s_primary_hours_%s.tif", ds, tm))))
+  labels <- time_label[[tm]](time_levels[[tm]])
+  gear_sum <- Reduce(`+`, map(tolower(analysis_gears), \(g) h[, paste0(g, "_", labels)]))
+  check(sprintf("%s %s: gear hours sum to all-gear hours in every pixel", ds, tm),
+        isTRUE(all.equal(unname(gear_sum), unname(h[, paste0("all_", labels)]))))
+}
+
+# covariates: GeoTIFF and NetCDF against the coded table
+cov_pix <- cbind(pixel_of(cov), match(cov$layer, covariate_cols))
+m_tif <- values(rast(f_tif))
+m_nc  <- do.call(cbind, map(covariate_cols, \(col) values(sds(f_nc)[[col]])))
+check("covariates .tif: every grid pixel equals cells.gpkg, every other pixel is NA",
+      identical(as.numeric(m_tif[cov_pix]), as.numeric(cov$value)) &&
+        sum(!is.na(m_tif)) == nrow(cov))
+check("covariates .nc: identical to the GeoTIFF",
+      same_pixels(m_nc, m_tif))
+
+gate |> mutate(pass = if_else(pass, "pass", "FAIL")) |> knitr::kable()
+
+stopifnot("Raster export gate failed; see the table above" = all(gate$pass))
+```
+
+## Session info
+
+The R and package versions this render ran with, and renv's report on the
+project library against `renv.lock`.
+
+```{r}
+sessionInfo()
+```
+
+```{r}
+renv::diagnostics()
+```

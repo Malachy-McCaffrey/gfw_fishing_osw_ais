@@ -592,6 +592,51 @@ metres, positive up), subset to the grid's bounding box plus 5 km via THREDDS
 WCS by 05. Public domain. The sidecar records the request URL, access date
 and file hash; 05 fetches again only if the hash or request changes.
 
+### `data/processed/rasters/{pipeline}/` rasters
+
+Written by `r/05a_export_rasters.qmd` (D-067) from 04's **Primary** cell
+tables and 05's `cells.gpkg`, for overlay with other gridded data. Nothing in
+the analysis reads them. The grid is GFW's 0.01° lattice in EPSG:4326: cell
+(`ix`, `iy`) is the pixel spanning longitude [`ix`, `ix` + 1] / 100 and
+latitude [`iy`, `iy` + 1] / 100. The extent is the AOI's bounding box
+snapped outward to the lattice plus one cell, the same for every pipeline
+version (74 × 63 pixels, −71.43 to −70.69° E, 40.77 to 41.40° N). Grid cells
+with no effort are **0**. Pixels outside the grid are **NA**.
+
+| File | Contents |
+|---|---|
+| `{vp,afe}_primary_hours_{stage,month}.tif` | Hours (Float64), one layer per gear × stage or month |
+| `{vp,afe}_primary_nmmsi_{stage,month}.tif` | Distinct MMSIs (Int32), same layers |
+| `{vp,afe}_primary_{stage,month}.nc` | Variables `hours_{gear}` and `n_mmsi_{gear}` on lon × lat × time |
+| `cell_covariates.tif`, `cell_covariates.nc` | Static covariates, one layer or variable each |
+
+- **Gears:** `all`, `mobile`, `fixed`, `pole_and_line`. `UNRESOLVED` holds no
+  Primary hours and is not written.
+- **GeoTIFF layer names:** `{gear}_{time}`, with time `stage1`–`stage3` or
+  `YYYY-MM` (128 months, 2016-01 to 2026-08), e.g. `mobile_2023-04`.
+- **NetCDF time:** days since 1970-01-01, each layer's first day. Stage
+  files use the stage start dates. Their global attributes `stage_names`,
+  `stage_start` and `stage_end` give the stage definitions.
+- **`n_mmsi` does not add.** It counts distinct vessels within one cell, gear
+  and time window, so summing it across pixels, gears or time counts a
+  vessel more than once. The `all` layer is an all-gear distinct count, not
+  a sum of the gear layers. The NetCDF count variables carry
+  `additive = "false"`. For a count over any other area or window, recompute
+  it from `gfw_{vp,afe}_id_classified.csv`. Hours do add: the gear layers
+  sum to `all`.
+- **Covariates:** `area_km2`, `aoi_frac`, `aoi_class`, `dist_lease_km`,
+  `nearest_project`, `depth_m`, `depth_sd_m`, `slope_deg`, `bpi_broad`,
+  `d_found_final_km`, `d_cable_km` and the six `domain_*` flags, as in
+  `cells.gpkg`. Coded as integers: `aoi_class` 1 = inside, 2 = edge,
+  3 = outside; `nearest_project` 1 = SFW, 2 = RWF, 3 = SRW; `domain_*`
+  0 = inactive, 1 = active. The NetCDF holds the codes in `flag_values` and
+  `flag_meanings`. `dist_band`, `x_km` and `y_km` are not written.
+
+Every file has a `<file>.json` provenance sidecar (inputs' SHA-256, git
+commit, `renv.lock` hash, layer names, extent, `pull_date`). The NetCDF files
+also carry their source, set, pipeline and licence (GFW data CC BY-SA 4.0)
+as global attributes.
+
 ---
 
 ## Provenance

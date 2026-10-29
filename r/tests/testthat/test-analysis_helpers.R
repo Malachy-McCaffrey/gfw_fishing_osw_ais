@@ -87,6 +87,55 @@ test_that("lattice_nb() matches poly2nb() on unit squares", {
     check.attributes = FALSE)))
 })
 
+# a small AOI in the study area's corner, as an sf polygon in EPSG:4326
+test_aoi <- function(xmin = -71.4126, xmax = -71.385, ymin = 40.7804, ymax = 40.795) {
+  sf::st_as_sf(sf::st_as_sfc(sf::st_bbox(c(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+                                         crs = sf::st_crs(4326))))
+}
+
+test_that("lattice_template() snaps the AOI box outward to the 0.01° lattice and pads it", {
+  tpl <- lattice_template(test_aoi())
+  # indices: floor(-7141.26) - 1 = -7143, ceiling(-7138.5) + 1 = -7137,
+  # floor(4078.04) - 1 = 4077, ceiling(4079.5) + 1 = 4081
+  expect_equal(as.vector(terra::ext(tpl)), c(xmin = -71.43, xmax = -71.37, ymin = 40.77, ymax = 40.81))
+  expect_equal(terra::res(tpl), c(0.01, 0.01))
+  expect_equal(c(terra::ncol(tpl), terra::nrow(tpl)), c(6, 4))
+  expect_equal(terra::crs(tpl, describe = TRUE)$code, "4326")
+  # the same box in another CRS gives the same template
+  tpl_utm <- lattice_template(sf::st_transform(test_aoi(), 32619))
+  expect_equal(as.vector(terra::ext(tpl_utm)), as.vector(terra::ext(tpl)), tolerance = 0.011)
+})
+
+test_that("cells_to_raster() puts each cell in its own pixel and keeps 0 apart from NA", {
+  tpl <- lattice_template(test_aoi())
+  # two cells, negative longitudes; one holds a zero, as a zero-filled table would
+  d <- tibble(ix = c(-7142L, -7138L, -7142L, -7138L), iy = c(4078L, 4080L, 4078L, 4080L),
+              layer = c("a", "a", "b", "b"), value = c(1.5, 0, 2.25, 7))
+  r <- cells_to_raster(d$ix, d$iy, d$layer, d$value, tpl)
+  expect_equal(names(r), c("a", "b"))
+  # read back at each cell's centre: the value written, not a neighbour's
+  at <- terra::extract(r, cbind((d$ix[1:2] + 0.5) / 100, (d$iy[1:2] + 0.5) / 100))
+  expect_equal(at$a, c(1.5, 0))
+  expect_equal(at$b, c(2.25, 7))
+  # every other pixel is NA, and the zero is not
+  expect_equal(colSums(!is.na(terra::values(r))), c(a = 2, b = 2))
+  # `layers` sets the order, and a layer with no rows is all NA
+  r2 <- cells_to_raster(d$ix, d$iy, d$layer, d$value, tpl, layers = c("c", "b", "a"))
+  expect_equal(names(r2), c("c", "b", "a"))
+  expect_true(all(is.na(terra::values(r2)[, "c"])))
+})
+
+test_that("cells_to_raster() refuses duplicates, unknown layers and cells off the template", {
+  tpl <- lattice_template(test_aoi())
+  expect_error(cells_to_raster(c(-7142L, -7142L), c(4078L, 4078L), c("a", "a"), c(1, 2), tpl),
+               "duplicate")
+  expect_error(cells_to_raster(-7142L, 4078L, "a", 1, tpl, layers = "b"), "not in `layers`")
+  # -7143 is the template's left edge index, so -7144 lies one cell outside;
+  # 4081 is the top edge, so a cell with iy = 4081 lies above it
+  expect_error(cells_to_raster(-7144L, 4078L, "a", 1, tpl), "outside the raster template")
+  expect_error(cells_to_raster(-7142L, 4081L, "a", 1, tpl), "outside the raster template")
+})
+
 test_that("transform_scale() reproduces y_vst and rejects unknown scales", {
   d <- c(0, 0.04, 1)
   expect_equal(transform_scale(d, "raw"), d)

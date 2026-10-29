@@ -8,7 +8,7 @@ Geospatial analysis and statistical modeling workflows to quantify AIS vessel pr
 
 ## The R workflow
 
-Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order, so `quarto render r/` runs 02 → 02a → 03 → 04 → 05 → 06 → 07 → 08 → 10. Steps 00–04 prepare and classify the data; 05 onward are the analysis phases of [`planning/gfw_analysis_plan.qmd`](planning/gfw_analysis_plan.qmd), where each phase's method and gate are written down.
+Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order, so `quarto render r/` runs 02 → 02a → 03 → 04 → 05 → 05a → 06 → 07 → 08 → 10. Steps 00–04 prepare and classify the data; 05 onward are the analysis phases of [`planning/gfw_analysis_plan.qmd`](planning/gfw_analysis_plan.qmd), where each phase's method and gate are written down.
 
 | Step | File | What it does | Needs |
 |---|---|---|---|
@@ -19,6 +19,7 @@ Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order,
 | 03 | `03_review_vessels.qmd` | The analyst's vessel review. Screens for misclassified vessels, gathers evidence (GARFO permits, GFW identity API, USCG PSIX), writes review sheets, and turns decisions into `references/vessel_crosswalk_{pipeline}.csv` and `references/vessel_permit_groups_{pipeline}.csv`. The only step that writes to `references/`. | Raw pull, GARFO permit lists, API caches |
 | 04 | `04_classify_aggregate.qmd` | Applies the crosswalk and gear corrections to every record, builds the **Strict** (GFW's `FISHING` label) and **Primary** (verified) analysis sets, and writes the classified records and zero-filled cell × stage / cell × month tables, with and without gear class. Stops if the crosswalk is out of date. | Raw pull, grid, `references/` |
 | 05 | `05_prepare_analysis.qmd` | **Phase 0.** Builds the analysis tables, bathymetry covariates (NCEI CRM, fetched here), exposure weights and spatial weights, and joins 02a's infrastructure covariates. Ends with a gate that stops the render if a check fails. | 04, 02a |
+| 05a | `05a_export_rasters.qmd` | Writes the Primary set's VP and AFE hours, vessel counts and static cell covariates as GeoTIFF and NetCDF on GFW's 0.01° grid (EPSG:4326), for overlay with other gridded fisheries data (D-067). An output only: nothing downstream reads it. Ends with a read-back gate. | 04, 05 |
 | 06 | `06_explore.qmd` | **Phase 1.** Exploratory analysis: data structure, zeros, transforms, parallel-trends tests and the gate decisions for the models. | 05 |
 | 07 | `07_spatial_global.qmd` | **Phase 2.** Global Moran's I, General G and correlograms; writes the practical range (*ρ*₀) used for later weights and priors. | 05 |
 | 08 | `08_spatial_local.qmd` | **Phase 3.** Local Moran's I vs Getis-Ord Gi\*: change maps, comparison criteria and the power simulation. | 05, 07 |
@@ -58,7 +59,7 @@ The pull runs to 2026-09-30, but the window ends on 2026-08-31, the last day Ør
 ### Layout
 
 ```
-r/                          workflow qmds in run order (00–10, with 02a), shared *_helpers.R, paths.R
+r/                          workflow qmds in run order (00–10, with 02a and 05a), shared *_helpers.R, paths.R
   tests/testthat/           tests for the shared code; schema checks on references/
 references/                 tracked: hand-made decision files, Ørsted dates, GARFO codes,
                             generated *_{pipeline}.csv crosswalk, permit groups and roster,
@@ -72,7 +73,7 @@ reports/                    gitignored: figures and tables from 06 onward, by pi
 archive/                    frozen Python implementation and its written output
 ```
 
-Data flows one way: the pull (01) → grid (02) → infrastructure covariates (02a) → vessel review (03, writes `references/`) → classification (04) → analysis tables (05) → the analysis phases (06–10) → `reports/`. Everything made from a pull is filed under its GFW pipeline version (`v4` today).
+Data flows one way: the pull (01) → grid (02) → infrastructure covariates (02a) → vessel review (03, writes `references/`) → classification (04) → analysis tables (05) → rasters for other GIS work (05a, an output only) → the analysis phases (06–10) → `reports/`. Everything made from a pull is filed under its GFW pipeline version (`v4` today).
 
 `planning/post_filter_review.qmd`, `planning/work-plan-appendices.md` and `planning/gridcell_decision.R` are earlier working notes, kept for the record.
 

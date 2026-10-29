@@ -30,6 +30,12 @@ Phase 4, frequentist models 5, INLA-SPDE 6, sensitivity 7 and synthesis 8.
 
 ---
 
+### 2026-10-29, raster export
+
+| ID | Topic | Decision | Consequence | Status |
+|---|---|---|---|---|
+| D-067 | Raster export | **A new output step, `r/05a_export_rasters.qmd`, writes the Primary set's per-cell effort and the static cell covariates as GeoTIFF and NetCDF** in `data/processed/rasters/{pipeline}/`, so they can be overlaid with other gridded fisheries data (NOAA fishing footprints, VMS and VTR products). **Primary only** (the user, 2026-10-29); Strict is not exported. **Grid:** GFW's own 0.01° lattice in EPSG:4326, so each cell is one pixel and nothing is resampled. A UTM raster was rejected because the cells are not square in UTM (about 0.84 × 1.11 km), so it would need resampling. **Extent:** the AOI's bounding box snapped outward to the lattice and padded by one cell (`lattice_template()`), not each version's grid, so v4 and v5 rasters line up pixel for pixel; pixels off the grid are NA, grid cells with no effort 0. **Gears:** `all` plus the three analysis gears; Primary `UNRESOLVED` is checked to be 0 h and not written. **Vessel counts are distinct counts and do not add** across cells, gears or time, so the `all` layers come from 04's all-gear tables, never from summing the gear layers, and every count file is marked non-additive. **New dependency:** ncdf4 1.24, added to `renv.lock` for terra's `writeCDF()` and the NetCDF attributes | Output only: nothing in 06 onward reads it, and no analysis table changes. Gate: every pixel read back from disk equals its table value exactly; off-grid pixels are NA; each NetCDF matches its GeoTIFF; gear hours sum to `all`. Checked on v4 in a sandbox render: the gate passed, and the AFE stage totals match `afe_stage_gear.csv`. The v5 rasters wait for 02 → 05 on v5 (v5 plan, step 8): the v5 raw pull has 4 cells that v4 lacks and lacks 4 of v4's (union 3,380), and both fit the AOI extent | |
+
 ### 2026-10-29, infrastructure exposure radii
 
 | ID | Topic | Decision | Consequence | Status |

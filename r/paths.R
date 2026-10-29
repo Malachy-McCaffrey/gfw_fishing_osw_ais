@@ -74,6 +74,7 @@ make_gfw_paths <- function(pipeline = gfw_pipeline_default) {
     # analysis tables, covariates and weights (05_prepare_analysis.qmd onward)
     analysis      = v("data/processed/analysis"),
     bathy         = "data/sf/bathy/crm_vol1_2023_aoi.tif", # NCEI CRM Vol. 1 AOI subset, fetched by 05
+    rasters       = v("data/processed/rasters"),  # 05a: Primary effort and covariates as GeoTIFF + NetCDF (D-067)
     models        = v("data/processed/models"),   # fitted models, cached by fit_cached() (10 onward)
     explore       = v("reports/explore"),         # 06 figures/ and tables/ (gitignored)
     spatial       = v("reports/spatial"),         # 07 onward: figures/ and tables/ (gitignored)

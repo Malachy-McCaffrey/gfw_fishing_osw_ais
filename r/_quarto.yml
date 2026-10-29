@@ -23,6 +23,7 @@ project:
     - 03_review_vessels.qmd
     - 04_classify_aggregate.qmd
     - 05_prepare_analysis.qmd
+    - 05a_export_rasters.qmd
     - 06_explore.qmd
     - 07_spatial_global.qmd
     - 08_spatial_local.qmd

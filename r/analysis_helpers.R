@@ -157,6 +157,68 @@ lattice_nb <- function(ix, iy, ids) {
   structure(nb, class = "nb", region.id = ids, type = "queen", sym = TRUE)
 }
 
+# Raster export (05a, D-067) ----------------------------------------------
+# GFW's 4Wings grid is a regular 0.01° lattice in EPSG:4326: cell (ix, iy)
+# spans lon [ix, ix + 1] / 100 and lat [iy, iy + 1] / 100 (02 snaps every
+# record to these lower-left indices). A raster on that same lattice holds
+# each cell in exactly one pixel, so the export involves no resampling. The
+# arithmetic is done on the integer indices, never on degrees, so no
+# floating-point error can move a cell into the next pixel.
+
+# The empty template every export is written on: the AOI's bounding box,
+# snapped outward to whole lattice indices and padded by `pad` cells. It is
+# built from the AOI, not from a version's grid, so the v4 and v5 rasters
+# share one extent and line up pixel for pixel whatever cells each pull has.
+# Pixels the grid does not cover stay NA. `aoi`: an sf object in any CRS.
+lattice_template <- function(aoi, pad = 1L) {
+  bb <- sf::st_bbox(sf::st_transform(aoi, 4326))
+  # bounding box in lattice indices (hundredths of a degree), outward + pad
+  i <- c(xmin = floor(bb[["xmin"]] * 100) - pad,
+         xmax = ceiling(bb[["xmax"]] * 100) + pad,
+         ymin = floor(bb[["ymin"]] * 100) - pad,
+         ymax = ceiling(bb[["ymax"]] * 100) + pad)
+  terra::rast(ncols = i[["xmax"]] - i[["xmin"]], nrows = i[["ymax"]] - i[["ymin"]],
+              xmin = i[["xmin"]] / 100, xmax = i[["xmax"]] / 100,
+              ymin = i[["ymin"]] / 100, ymax = i[["ymax"]] / 100,
+              crs = "EPSG:4326")
+}
+
+# The template's pixel number for each cell (ix, iy). terra numbers pixels
+# row by row from the top-left, so row 1 holds the northernmost cells: a
+# cell's row is the template's top edge index minus its iy. Stops if a cell
+# falls outside the template, rather than silently dropping it.
+raster_cells <- function(ix, iy, template) {
+  x0 <- round(terra::xmin(template) * 100) # left edge, as a lattice index
+  y1 <- round(terra::ymax(template) * 100) # top edge, as a lattice index
+  col <- ix - x0 + 1L
+  row <- y1 - iy
+  stopifnot("cell outside the raster template" =
+              all(col >= 1 & col <= terra::ncol(template) &
+                    row >= 1 & row <= terra::nrow(template)))
+  terra::cellFromRowCol(template, row, col)
+}
+
+# A multi-layer raster from a long cell table: one layer per value of
+# `layer`, in the order of `layers`, and each (ix, iy, layer) row's `value`
+# in its pixel. Pixels with no row stay NA, so a zero-filled table gives 0
+# on every grid cell and NA only off the grid. Stops on a duplicate row (two
+# values for one pixel would otherwise overwrite silently) or a layer name
+# missing from `layers`.
+cells_to_raster <- function(ix, iy, layer, value, template, layers = unique(layer)) {
+  stopifnot("ix, iy, layer and value must be the same length" =
+              length(unique(lengths(list(ix, iy, layer, value)))) == 1,
+            "a layer is not in `layers`" = all(layer %in% layers),
+            "duplicate cell × layer rows" = !anyDuplicated(data.frame(ix, iy, layer)))
+  # one column per layer; NA of the value's own type keeps integer counts integer
+  m <- matrix(if (is.integer(value)) NA_integer_ else NA_real_,
+              nrow = terra::ncell(template), ncol = length(layers))
+  m[cbind(raster_cells(ix, iy, template), match(layer, layers))] <- value
+  r <- terra::rast(template, nlyrs = length(layers))
+  terra::values(r) <- m
+  names(r) <- layers
+  r
+}
+
 # Model cache ---------------------------------------------------------------
 # Plan, "Runtime and caching": the BAG and Phase 5–6 models can take minutes
 # to hours, and R renders are not frozen. fit_cached() saves each fit under a

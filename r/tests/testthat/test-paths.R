@@ -3,7 +3,7 @@
 # entries that hold a version's own outputs (planning/gfw_pipeline_v5_plan.qmd, 3.1)
 versioned <- c("raw_gfw", "raw_vp", "raw_afe", "pull_info", "processed_gfw",
                "interim_gfw", "fishnet", "grid", "evidence", "review",
-               "crosswalk", "permit_groups", "analysis", "models",
+               "crosswalk", "permit_groups", "analysis", "rasters", "models",
                "explore", "spatial", "bag")
 
 test_that("make_gfw_paths() puts each version's outputs in its own place", {

@@ -8,16 +8,17 @@ Geospatial analysis and statistical modeling workflows to quantify AIS vessel pr
 
 ## The R workflow
 
-Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order, so `quarto render r/` runs 02 → 03 → 04 → 05 → 06 → 07 → 08 → 10. Steps 00–04 prepare and classify the data; 05 onward are the analysis phases of [`planning/gfw_analysis_plan.qmd`](planning/gfw_analysis_plan.qmd), where each phase's method and gate are written down.
+Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order, so `quarto render r/` runs 02 → 02a → 03 → 04 → 05 → 06 → 07 → 08 → 10. Steps 00–04 prepare and classify the data; 05 onward are the analysis phases of [`planning/gfw_analysis_plan.qmd`](planning/gfw_analysis_plan.qmd), where each phase's method and gate are written down.
 
 | Step | File | What it does | Needs |
 |---|---|---|---|
 | 00 | `00_setup.R` | Restores the R environment and stores the GFW token. Run once per machine. | — |
-| 01 | `01_pull_gfw.qmd` | Pulls daily 0.01° vessel presence (VP) and apparent fishing effort (AFE) for the AOI from the GFW 4Wings API, one calendar year per request, and writes the raw extracts and `pull_info.csv`. Not in the default render: it overwrites the raw data. | GFW token |
+| 01 | `01_pull_gfw.qmd` | Pulls daily 0.01° vessel presence (VP) and apparent fishing effort (AFE) for the AOI from the GFW 4Wings API, one calendar year per request, at a named dataset version (`gfw_4wings_pinned()`; gfwr itself always requests `:latest`), and writes the raw extracts and `pull_info.csv` to `data/raw/gfw/{pipeline}/`. Refuses to overwrite an existing pull. Not in the default render. | GFW token |
 | 02 | `02_build_grid.qmd` | Rebuilds GFW's 0.01° grid from the lower-left cell corners, reprojects it to UTM 19N, flags cells against the AOI, builds queen-contiguity neighbours, and writes raw-data (all vessel types) cell tables. | Raw pull |
+| 02a | `02a_infrastructure.qmd` | Builds the Ørsted foundation and cable layers (`data/sf/infra/infrastructure.gpkg`) and their per-cell distance, construction, safety-zone and timing covariates (`infra_cell_*.csv`), with its own gate. Needs only the grid, so it runs straight after 02. | Grid, Ørsted files |
 | 03 | `03_review_vessels.qmd` | The analyst's vessel review. Screens for misclassified vessels, gathers evidence (GARFO permits, GFW identity API, USCG PSIX), writes review sheets, and turns decisions into `references/vessel_crosswalk_{pipeline}.csv` and `references/vessel_permit_groups_{pipeline}.csv`. The only step that writes to `references/`. | Raw pull, GARFO permit lists, API caches |
 | 04 | `04_classify_aggregate.qmd` | Applies the crosswalk and gear corrections to every record, builds the **Strict** (GFW's `FISHING` label) and **Primary** (verified) analysis sets, and writes the classified records and zero-filled cell × stage / cell × month tables, with and without gear class. Stops if the crosswalk is out of date. | Raw pull, grid, `references/` |
-| 05 | `05_prepare_analysis.qmd` | **Phase 0.** Builds the analysis tables, bathymetry covariates (NCEI CRM, fetched here), exposure weights and spatial weights, and (step 8) the Ørsted foundation and cable layers in `data/sf/infra/infrastructure.gpkg` with their distance and timing covariates. Ends with a gate that stops the render if a check fails. | 04, grid, Ørsted files |
+| 05 | `05_prepare_analysis.qmd` | **Phase 0.** Builds the analysis tables, bathymetry covariates (NCEI CRM, fetched here), exposure weights and spatial weights, and joins 02a's infrastructure covariates. Ends with a gate that stops the render if a check fails. | 04, 02a |
 | 06 | `06_explore.qmd` | **Phase 1.** Exploratory analysis: data structure, zeros, transforms, parallel-trends tests and the gate decisions for the models. | 05 |
 | 07 | `07_spatial_global.qmd` | **Phase 2.** Global Moran's I, General G and correlograms; writes the practical range (*ρ*₀) used for later weights and priors. | 05 |
 | 08 | `08_spatial_local.qmd` | **Phase 3.** Local Moran's I vs Getis-Ord Gi\*: change maps, comparison criteria and the power simulation. | 05, 07 |
@@ -26,7 +27,7 @@ Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order,
 
 There is no 09. A planned `01a_compare_pipelines.qmd` will compare GFW pipeline versions ([`planning/gfw_pipeline_v5_plan.qmd`](planning/gfw_pipeline_v5_plan.qmd)).
 
-Shared code, sourced by the qmds: `paths.R` (every path; each can be overridden with a Quarto parameter), `gfw_helpers.R` (development stages, analysis window, `read_gfw()`, gear classes), `vessel_helpers.R` (crosswalk build and validation, `classify()`, the fishing roster), `analysis_helpers.R` (seasons, transforms, lease distances, lattice neighbours, `fit_cached()`, provenance sidecars), `infra_helpers.R` (reading Ørsted foundation files and building exposure covariates), `spatial_helpers.R` (global and local statistics) and `bag_helpers.R` (BAG models).
+Shared code, sourced by the qmds: `paths.R` (every path; each can be overridden with a Quarto parameter), `gfw_helpers.R` (development stages, analysis window, `read_gfw()`, gear classes), `vessel_helpers.R` (crosswalk build and validation, `classify()`, the fishing roster), `review_helpers.R` (03's screen, GARFO matching, and GFW identity and PSIX evidence), `analysis_helpers.R` (seasons, transforms, lease distances, lattice neighbours, `fit_cached()`, provenance sidecars), `infra_helpers.R` (reading Ørsted foundation files and building exposure covariates), `spatial_helpers.R` (global and local statistics) and `bag_helpers.R` (BAG models).
 
 **Analysis window:** 2016-01-01 to 2026-08-31, in three development stages (`dev_stages` in `r/gfw_helpers.R`):
 
@@ -57,7 +58,7 @@ The pull runs to 2026-09-30, but the window ends on 2026-08-31, the last day Ør
 ### Layout
 
 ```
-r/                          workflow qmds in run order (00–10), shared *_helpers.R, paths.R
+r/                          workflow qmds in run order (00–10, with 02a), shared *_helpers.R, paths.R
   tests/testthat/           tests for the shared code; schema checks on references/
 references/                 tracked: hand-made decision files, Ørsted dates, GARFO codes,
                             generated *_{pipeline}.csv crosswalk, permit groups and roster,
@@ -71,7 +72,7 @@ reports/                    gitignored: figures and tables from 06 onward, by pi
 archive/                    frozen Python implementation and its written output
 ```
 
-Data flows one way: the pull (01) → grid (02) → vessel review (03, writes `references/`) → classification (04) → analysis tables (05) → the analysis phases (06–10) → `reports/`. Everything made from a pull is filed under its GFW pipeline version (`v4` today).
+Data flows one way: the pull (01) → grid (02) → infrastructure covariates (02a) → vessel review (03, writes `references/`) → classification (04) → analysis tables (05) → the analysis phases (06–10) → `reports/`. Everything made from a pull is filed under its GFW pipeline version (`v4` today).
 
 `planning/post_filter_review.qmd`, `planning/work-plan-appendices.md` and `planning/gridcell_decision.R` are earlier working notes, kept for the record.
 
@@ -108,12 +109,13 @@ From the repository root:
 
    `renv` activates itself through the committed `.Rprofile`, so opening the project in R, RStudio or Positron picks it up.
 
-2. **Get the raw pull.** Either copy the 2026-10-06 extracts into `data/raw/gfw/`, or make a new pull with `quarto render r/01_pull_gfw.qmd`.
+2. **Get the raw pull.** Either copy the 2026-10-06 extracts into `data/raw/gfw/v4/`, or make a new pull, naming its folder and GFW dataset version: `quarto render r/01_pull_gfw.qmd -P pipeline:v5 -P dataset_version:v5.0`.
 
 3. **Render the workflow.** `quarto render r/` runs 02 to 10 in order. Without the GARFO files and caches, skip 03; 04 uses the crosswalk committed in `references/`:
 
    ```sh
    quarto render r/02_build_grid.qmd
+   quarto render r/02a_infrastructure.qmd
    quarto render r/04_classify_aggregate.qmd
    ```
 

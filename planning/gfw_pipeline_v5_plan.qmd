@@ -444,6 +444,15 @@ in one commit together with the `paths.R` change, so `quarto render r/` with
 
 ### 3.2 Pin the dataset version in the pull
 
+**Status (2026-10-28, D-062): implemented.** `gfw_dataset_id()`,
+`gfw_4wings_request()` and `gfw_4wings_pinned()` are in `r/gfw_helpers.R`.
+Their tests check the built request against `gfwr:::gfw_endpoint()` (URL),
+`gfwr:::sf_to_geojson()` (body) and gfwr's user agent, offline. `01` now takes
+`-P dataset_version:` (required, `vN.N`) and writes the four new `pull_info`
+columns. Live check done: June 2024 at `:v4.0` matched the 2026-10-06 pull
+record for record and hour for hour (six MMSIs relabelled; D-063). The v4
+`pull_info.csv` is backfilled. The sketch below is the original proposal.
+
 gfwr has no version argument, so add a thin wrapper to `r/gfw_helpers.R`. It
 builds the same request as `gfwr:::gfw_4wings()` but with an explicit
 `datasets[0]`. It uses gfwr's own exported/internal pieces where possible, so
@@ -499,6 +508,12 @@ Backfill the v4 `pull_info.csv` **(you)** with `pipeline = v4`,
 `*_dataset = …:latest (resolved to v4)`.
 
 ### 3.3 Re-pull v4.0 pinned (reproducibility check)
+
+**Status (2026-10-28): dropped (D-063).** The v4 data stay a snapshot of
+`:latest` pulled on 2026-10-06, reproduced by archiving the raw pull with a
+DOI rather than by re-pulling. The pinned wrapper's live check (June 2024)
+is the only comparison with frozen `:v4.0`; see D-063. The original step is
+kept below.
 
 Before April 2027, pull `:v4.0` with the same query into
 `data/raw/gfw/v4_repull/`. Between 2026-10-06 and 2026-10-21 v4 was still
@@ -751,7 +766,7 @@ report v4 as a sensitivity. If it is not, report the affected dataset × gear
 | 1b | Snapshot the v4 fishing roster (Section 3.6, Part A); commit `references/fishing_roster_v4.csv` | Claude (code) + you (render) | `quarto render r/03_review_vessels.qmd -P write_roster:true` |
 | 2 | Add the version parameter to `paths.R` (+ tests) and move existing data into `v4/` folders | Claude (code) + you (data move) | `quarto render r/ -P pipeline:v4` must reproduce current outputs |
 | 3 | Add `gfw_4wings_pinned()` and the `pull_info` columns; parameterise `01` | Claude | — |
-| 4 | Pull `:v5.0` → `data/raw/gfw/v5/`; pull `:v4.0` → `v4_repull/` | you (API token) | `quarto render r/01_pull_gfw.qmd -P pipeline:v5` |
+| 4 | Pull `:v5.0` → `data/raw/gfw/v5/` (the `:v4.0` re-pull was dropped, D-063) | you (API token) | `quarto render r/01_pull_gfw.qmd -P pipeline:v5 -P dataset_version:v5.0` |
 | 5 | Version-aware identity cache, extended `parse_identity()`, 03 screen tweaks, roster check (Section 3.6, Part B) | Claude | — |
 | 6 | Render `01a_compare_pipelines.qmd`, sections 4.1–4.2 (raw only) | Claude | update `gear_class_map` from the real label set |
 | 7 | Run 03 on v5 with APIs on; auto-resolve gear; review list 5 (v4 label changes), the gear residual and the v5-triggered sample | you | review session |
@@ -760,8 +775,8 @@ report v4 as a sensitivity. If it is not, report the affected dataset × gear
 | 10 | Decide the primary version from the decision rule; refit 10 on v5 (and v4 if needed) | you decide | long refit |
 | 11 | Docs: data dictionary, analysis plan, CITATION/README | Claude | — |
 
-Steps 1–4 are time-sensitive. `:v4.0` must still be reachable for step 4's
-re-pull, so finish them well before April 2027.
+With the `:v4.0` re-pull dropped (D-063), no step depends on `:v4.0` staying
+reachable after April 2027.
 
 ## 6. Open questions for you
 

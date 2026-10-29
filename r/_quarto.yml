@@ -19,6 +19,7 @@ project:
   type: default
   render:
     - 02_build_grid.qmd
+    - 02a_infrastructure.qmd
     - 03_review_vessels.qmd
     - 04_classify_aggregate.qmd
     - 05_prepare_analysis.qmd

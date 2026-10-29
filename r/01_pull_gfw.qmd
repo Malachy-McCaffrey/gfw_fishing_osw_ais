@@ -4,10 +4,14 @@ author: "Malachy McCaffrey"
 date: today
 format: html
 params:
-  # GFW pipeline version the pull is filed under (r/paths.R), e.g. v5. Required:
-  # gfwr requests ":latest", so the version cannot be read from the request
-  # (see planning/gfw_pipeline_v5_plan.qmd).
+  # GFW pipeline version folder the pull is filed under (r/paths.R), e.g. v5.
+  # Required.
   pipeline: ""
+  # GFW dataset version requested, e.g. v5.0: both 4Wings datasets are pulled
+  # at exactly this version ("public-global-presence:v5.0" and
+  # "public-global-fishing-effort:v5.0"), never ":latest". Required
+  # (planning/gfw_pipeline_v5_plan.qmd, Section 3.2).
+  dataset_version: ""
 ---
 
 ```{r setup, include=FALSE}
@@ -29,31 +33,46 @@ is done by `03_review_vessels.qmd` and `04_classify_aggregate.qmd`.
 GFW reprocesses its data and relabels vessels between pipeline versions, so a
 new pull will not reproduce the 2026-10-06 one (pipeline v4). Each pull is
 filed under its version, `data/raw/gfw/<pipeline>/`, and this file **refuses
-to overwrite** extracts already in that folder. It is left out of the project
-render list in `r/_quarto.yml`. Render it on its own, only when a new pull is
-intended, and name the version:
+to overwrite** extracts already in that folder.
+
+gfwr's own pull functions always request a dataset's `:latest` version, which
+moves when GFW releases a new pipeline. So this file pulls through
+`gfw_4wings_pinned()` (`r/gfw_helpers.R`), which sends the same request with
+the dataset version named, and records the dataset IDs in `pull_info.csv`.
+The 2026-10-06 pull predates it and was made at `:latest`, which was then v4.
+
+It is left out of the project render list in `r/_quarto.yml`. Render it on its
+own, only when a new pull is intended, naming the folder and the version:
 
 ```sh
-quarto render r/01_pull_gfw.qmd -P pipeline:v5
+quarto render r/01_pull_gfw.qmd -P pipeline:v5 -P dataset_version:v5.0
 ```
 
 ## Libraries
 
 ```{r}
-library(gfwr)
 library(tidyverse)
 library(sf)
 
-# shared paths
+# shared paths, and the pinned 4Wings pull (gfw_4wings_pinned())
 source("r/paths.R")
+source("r/gfw_helpers.R")
 
-# The version must be named: gfwr always requests ":latest", so a default
-# would file a pull under whatever version this repo last analysed, not the
-# one GFW served. Run chunk by chunk, set `params <- list(pipeline = "v5")`.
-stopifnot("set the GFW pipeline version: quarto render r/01_pull_gfw.qmd -P pipeline:v5" =
-            exists("params") && !identical(params$pipeline, "") && !is.null(params$pipeline))
+# Both must be named: a default folder would file a pull under whatever
+# version this repo last analysed, and a default dataset version would pull
+# whatever GFW serves now. Run chunk by chunk, set
+# `params <- list(pipeline = "v5", dataset_version = "v5.0")`.
+named <- \(p) exists("params") && !is.null(params[[p]]) && !identical(params[[p]], "")
+stopifnot(
+  "set the version folder: -P pipeline:v5" = named("pipeline"),
+  "set the GFW dataset version: -P dataset_version:v5.0" = named("dataset_version"))
 paths <- gfw_paths_with(params)
-message("Filing this pull under pipeline ", paths$pipeline, ": ", paths$raw_gfw)
+
+# the exact dataset IDs requested (gfw_dataset_id() refuses ":latest")
+datasets <- c(vp  = gfw_dataset_id("presence", params$dataset_version),
+              afe = gfw_dataset_id("fishing-effort", params$dataset_version))
+message("Pulling ", paste(datasets, collapse = " and "),
+        "; filing under pipeline ", paths$pipeline, ": ", paths$raw_gfw)
 
 # never replace a pull: every later step and decision was made against it
 existing <- Filter(file.exists, c(paths$raw_vp, paths$raw_afe, paths$pull_info))
@@ -67,7 +86,7 @@ if (length(existing) > 0) {
 ## Query window and spatial extent
 
 ```{r}
-# gfwr reads the token from GFW_TOKEN (project .Renviron; see r/00_setup.R)
+# the pull reads the token from GFW_TOKEN (project .Renviron; see r/00_setup.R)
 stopifnot("GFW_TOKEN is not set; see r/00_setup.R" = Sys.getenv("GFW_TOKEN") != "")
 
 # start included, end excluded (the pull of 2026-10-06 ran to 2026-09-30). The
@@ -94,29 +113,31 @@ ggplot(orsted_aoi) + geom_sf()
 
 ## Pull by year
 
-Both datasets use the same arguments: 0.01° cells (`HIGH`, about 1 km), daily,
-grouped by Vessel ID. A Vessel ID belongs to a single MMSI for a period of
-time, so one vessel can have several IDs over time. No `filter_by` is applied,
-so GFW does no server-side filtering by flag, gear or vessel type.
+Both datasets use the same arguments as the 2026-10-06 pull: 0.01° cells
+(`HIGH`, about 1 km), daily, grouped by Vessel ID, over the AOI polygon. A
+Vessel ID belongs to a single MMSI for a period of time, so one vessel can
+have several IDs over time. No filter is applied, so GFW does no server-side
+filtering by flag, gear or vessel type. Every column is read as text, so the
+raw values are written back exactly as GFW sent them.
 
 ```{r}
-pull_by_year <- function(pull_fun, label) {
+pull_by_year <- function(dataset, label) {
   map2(year_starts, year_ends, \(s, e) {
-    d <- pull_fun(spatial_resolution  = "HIGH",
-                  temporal_resolution = "DAILY",
-                  group_by            = "VESSEL_ID",
-                  start_date          = format(s),
-                  end_date            = format(e),
-                  region_source       = "USER_SHAPEFILE",
-                  region              = orsted_aoi)
+    d <- gfw_4wings_pinned(dataset,
+                           start_date          = format(s),
+                           end_date            = format(e),
+                           region              = orsted_aoi,
+                           spatial_resolution  = "HIGH",
+                           temporal_resolution = "DAILY",
+                           group_by            = "VESSEL_ID")
     message(label, " ", format(s), " to ", format(e - 1), ": ", nrow(d), " records")
     d
   }) |>
     list_rbind()
 }
 
-gfw_vp_id  <- pull_by_year(gfw_ais_presence,      "VP")
-gfw_afe_id <- pull_by_year(gfw_ais_fishing_hours, "AFE")
+gfw_vp_id  <- pull_by_year(datasets[["vp"]],  "VP")
+gfw_afe_id <- pull_by_year(datasets[["afe"]], "AFE")
 ```
 
 ## Data summary
@@ -148,13 +169,17 @@ dir.create(paths$raw_gfw, recursive = TRUE, showWarnings = FALSE)
 write_csv(gfw_vp_id,  paths$raw_vp)
 write_csv(gfw_afe_id, paths$raw_afe)
 
-# record when this pull was made; 03 and 04 read pull_date from it
-write_csv(tibble(pull_date   = Sys.Date(),
-                 pipeline    = paths$pipeline, # the version folder it is filed under
-                 query_start = query_start,
-                 query_end   = query_end,
-                 vp_rows     = nrow(gfw_vp_id),
-                 afe_rows    = nrow(gfw_afe_id)),
+# record when and how this pull was made; 03 and 04 read pull_date from it
+write_csv(tibble(pull_date    = Sys.Date(),
+                 pipeline     = paths$pipeline, # the version folder it is filed under
+                 query_start  = query_start,
+                 query_end    = query_end,
+                 vp_rows      = nrow(gfw_vp_id),
+                 afe_rows     = nrow(gfw_afe_id),
+                 vp_dataset   = datasets[["vp"]],  # exact dataset IDs requested
+                 afe_dataset  = datasets[["afe"]],
+                 gfwr_version = as.character(packageVersion("gfwr")), # request mirrors this gfwr
+                 api_base     = gfw_api_base),
           paths$pull_info)
 ```
 

@@ -31,7 +31,7 @@ As of 2026-10-28. Decision IDs refer to [`planning/decisions.md`](decisions.md).
 
 | Phase | Notebook | Status | Outcome recorded in |
 |---|---|---|---|
-| 0: analysis tables, covariates, weights; Ørsted infrastructure (step 8) | `05_prepare_analysis.qmd` | **Done** (2026-10-19; infrastructure revised 2026-10-20) | Its gate; D-021 to D-026, D-032 to D-035 |
+| 0: analysis tables, covariates, weights; Ørsted infrastructure | `02a_infrastructure.qmd`, `05_prepare_analysis.qmd` | **Done** (2026-10-19; infrastructure revised 2026-10-20) | Its gate; D-021 to D-026, D-032 to D-035 |
 | 1: exploratory analysis | `06_explore.qmd` | **Done**, gate passed 2026-10-19 | D-016 to D-018 |
 | 2: global spatial autocorrelation | `07_spatial_global.qmd` | **Done** (2026-10-20) | D-027 to D-031 |
 | 3: Local Moran's I vs Gi\* | `08_spatial_local.qmd` | **Done** (2026-10-20), except criterion 6, deferred to Phase 4; the primary method stays provisional | D-036 to D-041 |
@@ -685,7 +685,7 @@ for spatial statistics.
 - **What season-year costs:** exposure onset is blurred by up to five months.
   The time-varying covariates for season-year models are the mean over the
   season's months (distances, counts) and the share of months (construction
-  and cable-works flags), written by `05` to `infra_cell_season_year.csv`
+  and cable-works flags), written by `02a` to `infra_cell_season_year.csv`
   and the season-year tables (@sec-infra). The blur matters most for SRW,
   whose foundations went in over Jun–Oct 2025, across both seasons.
 - **Pole-and-line AFE** is limited by vessels, not by the time step: 162
@@ -748,16 +748,17 @@ place:
 
 | Step | File | Phase | Writes (gitignored) |
 |---|---|---|---|
-| 05 | `05_prepare_analysis.qmd` | 0: analysis tables, covariates, weights; Ørsted turbines and cables → time-varying covariates | `data/processed/analysis/`, `data/sf/infra/` |
+| 02a | `02a_infrastructure.qmd` | 0: Ørsted turbines and cables → time-varying covariates (split out of `05`, decision 2026-10-28, D-060) | `data/sf/infra/`, `data/processed/analysis/infra_cell_*.csv` |
+| 05 | `05_prepare_analysis.qmd` | 0: analysis tables, covariates, weights; joins 02a's covariates | `data/processed/analysis/` |
 | 06 | `06_explore.qmd` | 1: EDA | figures, tables |
 | 07 | `07_spatial_global.qmd` | 2: Global Moran's I, General G, correlograms | `spatial/global_*.csv` |
 | 08 | `08_spatial_local.qmd` | 3: Local Moran's I vs Gi\*, change classes | `spatial/local_*.gpkg` |
-| 09 | — | *Folded into `05` step 8 (decision 2026-10-19, D-021); the number is left unused so the later files keep theirs* | — |
-| 10 | `10_bag.qmd` | 5: BAG models | `models/bag_*.rds` |
-| 11 | `11_models_frequentist.qmd` | 6: Tweedie and hurdle GLMMs (`glmmTMB`, `sdmTMB`) | `models/freq_*.rds` |
-| 12 | `12_models_inla.qmd` | 7: INLA-SPDE | `models/inla_*.rds` |
-| 13 | `13_sensitivity.qmd` | 8: sensitivity grid | `sensitivity/*.csv` |
-| 14 | `14_synthesis.qmd` | 9: results and figures for the thesis | `reports/figures/` |
+| 09 | — | *Unused: the infrastructure step was folded into `05` (decision 2026-10-19, D-021), then split out as `02a` (D-060); the number is left unused so the later files keep theirs* | — |
+| 10 | `10_bag.qmd` | 4: BAG models | `models/bag_*.rds` |
+| 11 | `11_models_frequentist.qmd` | 5: Tweedie and hurdle GLMMs (`glmmTMB`, `sdmTMB`) | `models/freq_*.rds` |
+| 12 | `12_models_inla.qmd` | 6: INLA-SPDE | `models/inla_*.rds` |
+| 13 | `13_sensitivity.qmd` | 7: sensitivity grid | `sensitivity/*.csv` |
+| 14 | `14_synthesis.qmd` | 8: results and figures for the thesis | `reports/figures/` |
 
 Shared code: `r/analysis_helpers.R` (derived fields, weights, transforms,
 domain flags, the model cache), `r/infra_helpers.R` (foundation CSVs,
@@ -1026,7 +1027,7 @@ assumptions the later phases rest on.
    season-years / 22). This confirms the model time steps in
    @sec-time-steps: monthly for VP and mobile AFE, season-year for fixed AFE.
 10. **Construction exposure and event time** (descriptive groundwork for
-    Phase 4 steps 1–2, needs the `05` step 8 covariates):
+    Phase 4 steps 1–2, needs the `02a` covariates):
     - a map of every foundation coloured by installation quarter, with the
       cable routes by type;
     - cells per month reached by each covariate (`n_found_2km > 0`,
@@ -1289,11 +1290,12 @@ cube is dense enough: **mobile VP** (40% of domain cell-season-years active)
 and, as exploratory, mobile AFE (17%). Report the other gears as too sparse,
 not as "no trend".
 
-## Phase 4: Infrastructure data and BAG models (`05` step 8, `10_bag.qmd`) {#sec-bag}
+## Phase 4: Infrastructure data and BAG models (`02a_infrastructure.qmd`, `10_bag.qmd`) {#sec-bag}
 
 ### Ørsted turbine and cable data {#sec-infra}
 
-**Received October 2026** and built in `05` (Phase 0, step 8) into
+**Received October 2026** and built in `02a_infrastructure.qmd` (`05` step 8
+until 2026-10-28; D-060) into
 `data/sf/infra/infrastructure.gpkg` (EPSG:32619), layers `foundations` and
 `cables`. The source files under `data/sf/owf/*/turbines/` are read only.
 
@@ -1872,7 +1874,7 @@ m_vp <- sdmTMB(vp_hours ~ 0 + phase * dist_band + s(moy, bs = "cc", k = 8) + s(y
 # `afe_sy_fixed` and `mesh_f` are built like `d` and `mesh`, from
 # afe_season_year_gear.csv and the fixed-gear domain. `phase` (the modal
 # phase) and the foundation covariates (season means and shares of the
-# monthly values) are already columns of that table (05, step 8).
+# monthly values) are already columns of that table (02a).
 m_fx <- sdmTMB(afe_hours ~ 0 + phase * dist_band + season + s(season_year, k = 5) +
                  s(depth_m, k = 4) + slope_z + bpi_z,
                data = afe_sy_fixed, mesh = mesh_f, family = delta_gamma(),
@@ -2073,7 +2075,7 @@ write_provenance <- function(out_path, inputs, extra = list()) {
 | 2–3 | 1: EDA (gate: parallel trends, PROVIDER) | 0 |
 | 3–4 | 2: Global statistics, correlograms (*ρ*₀) | 0 |
 | 4–6 | 3: Local Moran's I vs Gi\* (needs the base model from 5 for the power simulation; run criteria 1–4 first and 5 later) | 2 |
-| done | 4a: Ørsted infrastructure ingest and covariates (`05` step 8, 2026-10-19) | Ørsted data |
+| done | 4a: Ørsted infrastructure ingest and covariates (`02a`; built 2026-10-19) | Ørsted data |
 | When received | Ørsted habitat ingest: coverage check, per-cell shares, refit the affected models | Ørsted habitat |
 | 6–9 | 4b: Stage × season BAG (no Ørsted data needed), then the timing BAG models | 1, 4a |
 | 8–12 | 5: `sdmTMB` / `glmmTMB` Tweedie vs hurdle, CV, diagnostics | 2, 4 |
@@ -2084,12 +2086,12 @@ write_provenance <- function(out_path, inputs, extra = list()) {
 The Ørsted foundation and cable data arrived in October 2026, so nothing in
 the timeline now waits on them. Later Ørsted deliveries (turbine erection,
 first power, per-route cable dates, the remaining SRW foundations) update
-`05` step 8 and the timing models only.
+`02a` and the timing models only.
 
 ## Open items
 
-- [x] Ørsted turbine and cable data: received and built in `05` step 8,
-      2026-10-19 (@sec-infra).
+- [x] Ørsted turbine and cable data: received and built 2026-10-19
+      (@sec-infra), now in `02a_infrastructure.qmd`.
 - [ ] Sharing terms for the Ørsted foundation data, noted in
       `references/`.
 - [x] SFW crosswalk from the PSO ids (A01–A15) to layout positions:

@@ -78,8 +78,13 @@ one Vessel ID × one 0.01° cell × one day.
 
 Written by the pull alongside the raw files: `pull_date` (the day the pull
 ran), `pipeline` (the version folder it is filed under; pulls from 2026-10-28
-on), `query_start` / `query_end` (the date range requested, end excluded) and
-`vp_rows` / `afe_rows`. 03 and 04 read `pull_date` from it and record it in
+on), `query_start` / `query_end` (the date range requested, end excluded),
+`vp_rows` / `afe_rows`, and, for pulls made through `gfw_4wings_pinned()`
+(from 2026-10-28 on), `vp_dataset` / `afe_dataset` (the exact GFW dataset IDs
+requested, e.g. `public-global-presence:v5.0`), `gfwr_version` (the gfwr
+release whose request the pull mirrors) and `api_base`. The 2026-10-06 pull
+was made through gfwr at `:latest`, which then resolved to v4. 03 and 04 read
+`pull_date` from it and record it in
 the crosswalk; for pulls made before the file existed they fall back to the
 raw VP file's modification date, with a warning.
 
@@ -453,11 +458,13 @@ derived field is computed before rounding; `cells.gpkg` keeps full precision.
 
 ### `data/processed/analysis/{pipeline}/infra_cell_*.csv`
 
-Infrastructure exposure per cell, without gear, written by 05 step 8 from
-`data/sf/infra/infrastructure.gpkg`. Distances are from the cell centroid.
+Infrastructure exposure per cell, without gear, written by
+`r/02a_infrastructure.qmd` from `data/sf/infra/infrastructure.gpkg`; 05
+joins them into the analysis tables. Distances are from the cell centroid.
 
 | File | One row per |
 |---|---|
+| `infra_cell_static.csv` | cell: `d_found_final_km`, `d_cable_km`, at full precision (05 copies them into `cells.gpkg` and every table) |
 | `infra_cell_month.csv` | cell × month |
 | `infra_cell_season_year.csv` | cell × season-year |
 | `infra_cell_month_srw_planned.csv` | cell × month; sensitivity with SRW's 40 unrecorded positions installed in May 2026 |
@@ -495,7 +502,7 @@ One row per grid cell, EPSG:32619, with the static covariates.
 
 ### `data/sf/infra/infrastructure.gpkg`
 
-Ørsted foundations and cable routes, EPSG:32619, written by 05 step 8 from
+Ørsted foundations and cable routes, EPSG:32619, written by `r/02a_infrastructure.qmd` from
 the files in `data/sf/owf/*/turbines/` and the two `references/` tables
 below. Layer `foundations`, one row per foundation (166):
 

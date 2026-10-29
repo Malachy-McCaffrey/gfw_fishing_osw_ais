@@ -150,7 +150,7 @@ rec_check <- records |> count(dataset, wt = hours, name = "records") |>
 rec_check
 stopifnot("records and Phase 0 tables disagree" = isTRUE(all.equal(rec_check$records, rec_check$tables)))
 
-# Ørsted infrastructure (05, step 8): foundations and cable routes, and the
+# Ørsted infrastructure (02a): foundations and cable routes, and the
 # per cell × month exposure covariates
 foundations <- st_read(paths$infra, layer = "foundations", quiet = TRUE)
 cables <- st_read(paths$infra, layer = "cables", quiet = TRUE)
@@ -497,7 +497,7 @@ p
 ## Step 4: time series
 
 Monthly Primary hours by gear and distance band, with the stage boundaries
-and each project's foundation window shaded (05, step 8), and an STL
+and each project's foundation window shaded (02a), and an STL
 decomposition (periodic season) of each AOI series on the log scale.
 
 ```{r}
@@ -778,7 +778,7 @@ grid" cannot be confused:
 
 The lease outlines are drawn as a black line over a white halo, so they stay
 visible over both the darkest and lightest colours of every scale. The
-foundation positions go on top (05, step 8): filled for those installed by
+foundation positions go on top (02a): filled for those installed by
 August 2026, hollow for SRW's 40 planned positions. They are drawn on every
 stage panel, including Stages 1–2 before any were built, as a fixed
 reference for where the structures stand.
@@ -918,7 +918,7 @@ p
 ## Step 10: construction exposure and event time
 
 Descriptive groundwork for the timing BAG (plan, Phase 4 steps 1–2), from the
-Ørsted foundations and cables (05, step 8):
+Ørsted foundations and cables (02a):
 
 1. **Infrastructure map:** every foundation coloured by when it went in
    (hollow: SRW planned), and the cable routes by type.
@@ -968,7 +968,7 @@ exposure <- infra_month |>
   summarise(`installed foundation within 2 km` = sum(n_found_2km > 0),
             `foundation going in within 5 km` = sum(active_construction),
             `cable works within 2 km` = sum(cable_works),
-            # USCG 500 m safety zones (05, step 8): cells with any area inside one
+            # USCG 500 m safety zones (02a): cells with any area inside one
             `inside a 500 m safety zone` = sum(sz_share > 0), .groups = "drop") |>
   pivot_longer(-c(year_month, nearest_project), names_to = "exposure", values_to = "cells")
 save_tab(exposure, "exposure_cells_by_month")

@@ -119,6 +119,7 @@ library(gfwr)
 source("r/paths.R")
 source("r/gfw_helpers.R")
 source("r/vessel_helpers.R")
+source("r/review_helpers.R") # the review's own functions
 
 # Quarto parameters (header); `params` is read-only while rendering. Run chunk
 # by chunk (Positron, RStudio), `params` is missing or left over from another
@@ -250,46 +251,6 @@ Gear is not part of the crosswalk. It is corrected separately in
 `references/vessel_gear.csv` (see *Gear corrections* below), so fixing a
 vessel's gear never touches its hull or charter treatment.
 
-```{r}
-# Copies rows marked accept/reject in a generated review sheet into its input
-# file, skipping MMSIs the input file already has, and returns the input file.
-# A sheet written before the gfw_pipeline column existed was generated from
-# this version's pull (the sheets live in a version folder), so its rows get
-# `pipeline`.
-collect_marked <- function(sheet, input, cols, pipeline) {
-  current <- if (file.exists(input)) read_chr(input) else empty_tbl(cols)
-  stopifnot("input file is missing columns" = all(cols %in% names(current)))
-
-  marked <- if (file.exists(sheet)) {
-    s <- read_chr(sheet)
-    if (!"gfw_pipeline" %in% names(s)) s$gfw_pipeline <- pipeline
-    s |>
-      filter(decision %in% c("accept", "reject")) |>
-      mutate(decided_on = coalesce(decided_on, as.character(Sys.Date()))) |>
-      select(all_of(cols))
-  } else {
-    current[0, ]
-  }
-
-  skipped <- semi_join(marked, current, by = "MMSI")
-  if (nrow(skipped) > 0) {
-    warning(nrow(skipped), " rows in ", sheet, " were skipped because their MMSI ",
-            "is already in ", input, "; edit that file to change them", call. = FALSE)
-  }
-
-  new_rows <- anti_join(marked, current, by = "MMSI")
-  if (nrow(new_rows) > 0) {
-    current <- bind_rows(current, new_rows) |> select(all_of(cols))
-    write_csv(current, input, na = "")
-    message("Added ", nrow(new_rows), " rows to ", input)
-  }
-
-  stopifnot("decision must be accept or reject" =
-              all(current$decision %in% c("accept", "reject")))
-  current
-}
-```
-
 ### Collect decisions from the last review sheets
 
 ```{r}
@@ -330,7 +291,6 @@ gear class is then the accepted correction if there is one, otherwise GFW's
 ```{r}
 gear <- validate_gear(gear_inputs, source = paths$gear)
 
-
 count(gear, gear_class, basis)
 ```
 
@@ -339,52 +299,7 @@ count(gear, gear_class, basis)
 ### Per-MMSI profile
 
 ```{r}
-profile_mmsi <- function(vp, afe, cell_lease) {
-  v <- vp |> filter(!is.na(MMSI)) |> left_join(cell_lease, by = "cell_id")
-  a <- afe |> filter(!is.na(MMSI))
-
-  stage_hours <- function(h, stage, s) sum(h[stage == s])
-
-  pv <- v |>
-    group_by(MMSI) |>
-    summarise(
-      names     = paste(sort(unique(na.omit(`Vessel Name`))), collapse = " / "),
-      flag      = first(na.omit(Flag)),
-      call_sign = first(na.omit(CallSign)),
-      vp_hours  = sum(hours),
-      s1 = stage_hours(hours, `Development Stage`, "Stage 1"),
-      s2 = stage_hours(hours, `Development Stage`, "Stage 2"),
-      s3 = stage_hours(hours, `Development Stage`, "Stage 3"),
-      days  = n_distinct(date),
-      h_day = vp_hours / days,
-      lease_share     = sum(hours[in_lease]) / vp_hours,
-      lease_share_s12 = if (s1 + s2 > 0)
-        sum(hours[in_lease & `Development Stage` != "Stage 3"]) / (s1 + s2) else NA_real_,
-      lease_share_s3  = if (s3 > 0)
-        sum(hours[in_lease & `Development Stage` == "Stage 3"]) / s3 else NA_real_,
-      s3_lease_first = suppressWarnings(min(date[in_lease & `Development Stage` == "Stage 3"])),
-      s3_lease_last  = suppressWarnings(max(date[in_lease & `Development Stage` == "Stage 3"])),
-      first = min(date),
-      last  = max(date),
-      .groups = "drop") |>
-    mutate(across(c(s3_lease_first, s3_lease_last), \(x) if_else(is.finite(x), x, NA)))
-
-  pa <- a |>
-    group_by(MMSI) |>
-    summarise(afe_hours = sum(hours),
-              afe_s3 = sum(hours[`Development Stage` == "Stage 3"]),
-              .groups = "drop")
-
-  pv |>
-    left_join(pa, by = "MMSI") |>
-    left_join(gfw_labels, by = "MMSI") |>
-    mutate(afe_hours = coalesce(afe_hours, 0),
-           afe_s3    = coalesce(afe_s3, 0),
-           mmsi_valid = grepl("^[0-9]{9}$", MMSI),
-           battery_call_sign = str_detect(coalesce(call_sign, ""), "%"))
-}
-
-profiles <- profile_mmsi(vp, afe, cell_lease)
+profiles <- profile_mmsi(vp, afe, cell_lease, gfw_labels)
 
 nrow(profiles)
 ```
@@ -416,72 +331,6 @@ Only vessel fields are read; owner names, telephone numbers and addresses are
 never loaded.
 
 ```{r}
-garfo_personal <- c("OWNER NAME", "TELEPHONE", "ADDRESS LINE 1", "ADDRESS LINE 2",
-                    "CITY", "STATE", "ZIP CODE", "HOME PORT CITY",
-                    "PRINCIPAL PORT CITY")
-
-garfo_vessel_cols <- c("PERMIT", "HMS PERMIT", "PERMIT YEAR", "VESSEL NAME",
-                       "HULL ID", "HOME PORT STATE", "PRINCIPAL PORT STATE",
-                       "LENGTH", "GROSS TONS", "HORSEPOWER", "MAX TRAP LIMIT",
-                       "CATEGORY", "CML CHB ENDORSEMENT", "ISSUEDDATE")
-
-placeholder_names <- c("UNNAMED", "NONAME", "NONE", "NA", "SKIFF", "UNKNOWN")
-
-norm_name <- function(x) {
-  x |>
-    toupper() |>
-    str_replace_all("&", " AND ") |>
-    str_remove("^[[:space:]]*(F[[:space:]]*/[[:space:]]*V|F[.]V[.]|FV)[[:space:]]+") |>
-    str_remove_all("[^A-Z0-9]")
-}
-
-col_or_na <- function(d, col) if (col %in% names(d)) d[[col]] else rep(NA_character_, nrow(d))
-
-read_garfo <- function(f) {
-  d <- read_csv(f, col_types = cols(.default = col_character()),
-                col_select = !any_of(garfo_personal),
-                na = c("", " ", "NA", "None"), show_col_types = FALSE)
-  names(d) <- str_remove(names(d), paste0("^", intToUtf8(0xFEFF))) # byte-order mark
-
-  hms <- "HMS PERMIT" %in% names(d)
-
-  permits <- tibble(
-    file        = basename(f),
-    source      = if (hms) "garfo_hms" else "garfo_permits",
-    permit      = coalesce(col_or_na(d, "PERMIT"), col_or_na(d, "HMS PERMIT")),
-    permit_year = suppressWarnings(as.integer(col_or_na(d, "PERMIT YEAR"))),
-    vessel_name = col_or_na(d, "VESSEL NAME"),
-    hull_id     = col_or_na(d, "HULL ID"),
-    home_port_state = col_or_na(d, "HOME PORT STATE"),
-    length_ft   = suppressWarnings(as.numeric(col_or_na(d, "LENGTH"))),
-    trap_limit  = suppressWarnings(as.numeric(col_or_na(d, "MAX TRAP LIMIT"))))
-
-  # one row per permit-year x fishery x code. Annual files hold one column
-  # per fishery with comma-separated codes; the HMS file has a CATEGORY.
-  fishery <- setdiff(names(d), garfo_vessel_cols)
-  codes <- if (hms) {
-    # a charter/headboat permit endorsed for commercial sale is a second,
-    # commercial code for the same permit
-    bind_rows(
-      tibble(permit = permits$permit, permit_year = permits$permit_year,
-             fishery = "HMS", code = col_or_na(d, "CATEGORY")),
-      tibble(permit = permits$permit, permit_year = permits$permit_year,
-             fishery = "HMS",
-             code = if_else(col_or_na(d, "CML CHB ENDORSEMENT") %in% "Y",
-                            "CHB COMMERCIAL SALE ENDORSEMENT", NA_character_)))
-  } else {
-    bind_cols(select(permits, permit, permit_year), d[fishery]) |>
-      pivot_longer(all_of(fishery), names_to = "fishery", values_to = "code",
-                   values_drop_na = TRUE) |>
-      separate_longer_delim(code, ",")
-  }
-  codes <- codes |>
-    mutate(file = basename(f), code = str_trim(code)) |>
-    filter(!is.na(code), code != "")
-
-  list(permits = permits, codes = codes)
-}
-
 garfo_files <- list.files(paths$registries,
                           pattern = "^garfo.*[.]csv$", full.names = TRUE)
 
@@ -598,71 +447,8 @@ garfo_matches <- ais_names |>
   left_join(name_counts, by = "nkey") |>
   left_join(select(profiles, MMSI, first, last), by = "MMSI")
 
-# Summarise grouped matches: per MMSI (garfo_by_mmsi), and per MMSI and GARFO
-# hull (garfo_by_hull), which Phase 4 uses when a registry length singles out
-# one hull of an ambiguous name
-summarise_garfo <- function(m) {
-  m |>
-    summarise(
-      garfo_hulls = n_distinct(hull_id),
-      garfo_max_hulls_with_name = max(hulls_with_name),
-      garfo_max_mmsi_with_name  = max(mmsi_with_name),
-      garfo_mmsi_overlap  = any(mmsi_with_name > 1 & mmsi_overlap),
-      garfo_mmsi_sequence = any(mmsi_with_name > 1 & !mmsi_overlap),
-      year_overlap     = any(permit_year >= year(first) & permit_year <= year(last)),
-      garfo_years      = paste(sort(unique(permit_year)), collapse = ","),
-      garfo_hull_id    = paste(sort(unique(hull_id)), collapse = "|"),
-      hull_is_uscg     = all(hull_is_uscg),
-      garfo_permits    = paste(sort(unique(permit)), collapse = "|"),
-      garfo_sources    = paste(sort(unique(source)), collapse = "|"),
-      garfo_length_ft  = median(length_ft, na.rm = TRUE),
-      garfo_home_port  = paste(sort(unique(na.omit(home_port_state))), collapse = "|"),
-      garfo_categories = str_trunc(paste(unique(na.omit(categories)), collapse = " / "), 300),
-      any_commercial_la = any(commercial_la),
-      any_commercial_oa = any(commercial_oa),
-      any_for_hire      = any(for_hire),
-      any_recreational  = any(recreational),
-      any_fixed         = any(fixed_hint),
-      any_mobile        = any(mobile_hint),
-      garfo_oa_permits  = paste(sort(unique(unlist(str_split(oa_permits, fixed("|"))))) |>
-                                 setdiff(""), collapse = "|"),
-      garfo_oa_directed = paste(sort(unique(unlist(str_split(oa_directed_permits, fixed("|"))))) |>
-                                 setdiff(""), collapse = "|"),
-      .groups = "drop") |>
-    mutate(garfo_length_ft = if_else(is.nan(garfo_length_ft), NA_real_, garfo_length_ft),
-           garfo_match = case_when(
-             garfo_hulls > 1 | garfo_mmsi_overlap ~ "ambiguous",
-             !year_overlap                        ~ "unique_no_year_overlap",
-             TRUE                                 ~ "unique_years"),
-           garfo_n_oa = if_else(garfo_oa_permits == "", 0L,
-                                str_count(garfo_oa_permits, fixed("|")) + 1L),
-           # Open-access commercial permits are easy to obtain, so for-hire
-           # vessels often hold them without fishing commercially. Keep that
-           # combination as its own type rather than folding it into either
-           # "for-hire" or "commercial + for-hire".
-           garfo_permit_type = case_when(
-             any_commercial_la & any_for_hire ~ "commercial + for-hire",
-             any_commercial_oa & any_for_hire ~ "for-hire + open-access commercial",
-             any_for_hire                     ~ "for-hire",
-             any_commercial_la | any_commercial_oa ~ "commercial",
-             any_recreational                 ~ "recreational only",
-             TRUE                             ~ "unmapped codes only"),
-           garfo_oa_bundle = garfo_permit_type == "for-hire + open-access commercial" &
-                             garfo_n_oa >= screen$oa_bundle_min,
-           # gear hint only when it is unambiguous; a for-hire vessel with a
-           # small set of open-access commercial permits may fish commercially
-           garfo_gear_hint = case_when(
-             garfo_permit_type == "for-hire"           ~ "POLE_AND_LINE",
-             garfo_oa_bundle                           ~ "POLE_AND_LINE",
-             any_for_hire                              ~ NA_character_,
-             any_fixed & !any_mobile                   ~ "FIXED",
-             any_mobile & !any_fixed                   ~ "MOBILE",
-             TRUE                                      ~ NA_character_)) |>
-    select(-starts_with("any_"))
-}
-
-garfo_by_mmsi <- garfo_matches |> group_by(MMSI) |> summarise_garfo()
-garfo_by_hull <- garfo_matches |> group_by(MMSI, hull_id) |> summarise_garfo() |>
+garfo_by_mmsi <- garfo_matches |> group_by(MMSI) |> summarise_garfo(screen$oa_bundle_min)
+garfo_by_hull <- garfo_matches |> group_by(MMSI, hull_id) |> summarise_garfo(screen$oa_bundle_min) |>
   select(-hull_id)
 
 # drop any GARFO columns from an earlier run of this chunk, so re-running it
@@ -712,15 +498,6 @@ Each list excludes vessels already in the crosswalk or in the decisions file.
    WDD3653, so these are suggested as `unknown` for review).
 
 ```{r}
-charter_screen <- function(p) {
-  p |>
-    mutate(burst = s1 + s2 <= screen$max_prior_hours &
-                   lease_share >= screen$min_lease_share,
-           shift = !is.na(lease_share_s12) & !is.na(lease_share_s3) &
-                   lease_share_s3 - lease_share_s12 >= screen$min_lease_shift,
-           charter_flag = s3 >= screen$min_s3_hours & (burst | shift))
-}
-
 open_profiles <- profiles |> filter(!MMSI %in% c(cw$MMSI, decisions$MMSI))
 
 cand_missed <- open_profiles |>
@@ -732,7 +509,7 @@ cand_missed <- open_profiles |>
            !is.na(call_sign)             ~ "typed non-FISHING; US flag with call sign",
            TRUE                          ~ "typed non-FISHING; US flag, no call sign"))
 
-cand_charter <- charter_screen(open_profiles) |>
+cand_charter <- charter_screen(open_profiles, screen) |>
   filter(gfw_vessel_type %in% "FISHING", charter_flag) |>
   mutate(list = "2_charter_activity",
          reason = case_when(
@@ -784,7 +561,7 @@ orsted_charters <- cw |>
          activity_excluded) |>
   distinct(MMSI)
 
-screen_recall <- charter_screen(profiles) |>
+screen_recall <- charter_screen(profiles, screen) |>
   inner_join(orsted_charters, by = "MMSI")
 
 screen_recall |>
@@ -856,75 +633,8 @@ ev_paths <- list(
   queried  = file.path(evid_dir, "gfw_identity_queried.csv"),
   registry = file.path(evid_dir, "gfw_identity_registry.csv"),
   combined = file.path(evid_dir, "gfw_identity_combined.csv"))
-
-append_csv <- function(df, path) {
-  if (nrow(df) > 0) write_csv(df, path, append = file.exists(path), na = "")
-}
-
-read_ev <- function(path, cols) {
-  if (file.exists(path)) {
-    read_chr(path)
-  } else {
-    as_tibble(set_names(rep(list(character()), length(cols)), cols))
-  }
-}
-
-# character column from an API data frame; list columns collapsed with "|"
-col_chr <- function(df, col) {
-  if (!col %in% names(df)) return(rep(NA_character_, nrow(df)))
-  x <- df[[col]]
-  if (is.list(x)) map_chr(x, \(v) paste(unique(unlist(v)), collapse = "|"))
-  else as.character(x)
-}
-
-queried_cols  <- c("vessel_id", "queried_on", "status", "dataset")
-registry_cols <- c("MMSI", "source", "reg_mmsi", "reg_shipname", "reg_callsign",
-                   "reg_gear", "reg_length_m", "reg_from", "reg_to", "reg_extra")
-combined_cols <- c("MMSI", "vessel_id", "gear", "ship", "year_from", "year_to")
-
-# Each API entry has an index; selfReportedInfo maps it to the MMSI(s) queried.
-parse_identity <- function(r) {
-  sr  <- r$selfReportedInfo
-  idx <- tibble(index = as.numeric(sr$index), MMSI = col_chr(sr, "ssvid")) |>
-    distinct()
-
-  reg <- r$registryInfo
-  registry <- if (is.data.frame(reg) && nrow(reg) > 0) {
-    tibble(index        = as.numeric(reg$index),
-           source       = col_chr(reg, "sourceCode"),
-           reg_mmsi     = col_chr(reg, "ssvid"),
-           reg_shipname = col_chr(reg, "shipname"),
-           reg_callsign = col_chr(reg, "callsign"),
-           reg_gear     = col_chr(reg, "geartypes"),
-           reg_length_m = col_chr(reg, "lengthM"),
-           reg_from     = col_chr(reg, "transmissionDateFrom"),
-           reg_to       = col_chr(reg, "transmissionDateTo"),
-           reg_extra    = col_chr(reg, "extraFields")) |>
-      inner_join(idx, by = "index", relationship = "many-to-many") |>
-      select(all_of(registry_cols)) |>
-      distinct()
-  } else {
-    read_ev("", registry_cols)
-  }
-
-  cmb <- r$combinedSourcesInfo
-  combined <- if (is.data.frame(cmb) && nrow(cmb) > 0) {
-    tibble(index     = as.numeric(cmb$index),
-           vessel_id = col_chr(cmb, "vesselId"),
-           gear      = col_chr(cmb, "geartypes_name"),
-           ship      = col_chr(cmb, "shiptypes_name"),
-           year_from = col_chr(cmb, "shiptypes_yearFrom"),
-           year_to   = col_chr(cmb, "shiptypes_yearTo")) |>
-      inner_join(idx, by = "index", relationship = "many-to-many") |>
-      select(all_of(combined_cols)) |>
-      distinct()
-  } else {
-    read_ev("", combined_cols)
-  }
-
-  list(registry = registry, combined = combined,
-       dataset = paste(unique(col_chr(r$dataset, "dataset")), collapse = "|"))
-}
+# the caches' columns (queried_cols, registry_cols, combined_cols) and the API
+# parsing are in r/review_helpers.R
 ```
 
 ```{r}
@@ -978,21 +688,6 @@ count(queried, status, dataset)
 queried_mmsi <- id_lookup |>
   filter(vessel_id %in% queried$vessel_id[queried$status %in% c("ok", "not_found")]) |>
   distinct(MMSI)
-
-has_fishing_gear <- function(g) {
-  map_lgl(str_split(coalesce(g, ""), fixed("|")), \(x) any(x %in% fishing_gear_codes))
-}
-
-# Regional fisheries management organisation (RFMO) vessel lists. A listing
-# (e.g. ICCAT, for tunas and other highly migratory species) means the vessel
-# is authorised to fish, whatever gear or ship type the record carries: US
-# sport fishing boats of 20 m or more are listed by ICCAT but typed PASSENGER.
-rfmo_sources <- c("ICCAT", "IATTC", "WCPFC", "IOTC", "CCSBT", "NAFO", "NEAFC",
-                  "SPRFMO", "CCAMLR", "SIOFA", "GFCM", "NPFC")
-
-has_rfmo_source <- function(s) {
-  map_lgl(str_split(coalesce(s, ""), fixed("|")), \(x) any(x %in% rfmo_sources))
-}
 
 # A registry record is matched to an MMSI by vessel identity, so it can belong
 # to another hull: its own MMSI or call sign must agree with AIS for its gear
@@ -1079,12 +774,6 @@ evidence_cols <- c("list", "reason", "names", "flag", "call_sign", "vp_hours",
                    "garfo_max_hulls_with_name", "garfo_max_mmsi_with_name",
                    "psix_link", "psix_hull", "psix_ais_call_sign")
 
-# GARFO length (ft) agrees with the GFW registry length (m)
-length_agrees <- function(garfo_ft, reg_m) {
-  !is.na(garfo_ft) & !is.na(reg_m) &
-    abs(garfo_ft * 0.3048 - reg_m) <= screen$length_tolerance * reg_m
-}
-
 # Ambiguous GARFO names resolved by length: exactly one of the hulls sharing
 # the name agrees with the registry length, and its permit years overlap the
 # MMSI's AIS activity. Common names (more than screen$max_resolve_hulls hulls)
@@ -1094,7 +783,7 @@ garfo_resolved <- garfo_by_hull |>
                                    profiles$garfo_hulls <= screen$max_resolve_hulls]) |>
   inner_join(gfw_evidence |> filter(!is.na(reg_length_m)) |> select(MMSI, reg_length_m),
              by = "MMSI") |>
-  mutate(agree = length_agrees(garfo_length_ft, reg_length_m)) |>
+  mutate(agree = length_agrees(garfo_length_ft, reg_length_m, screen$length_tolerance)) |>
   group_by(MMSI) |>
   filter(sum(agree) == 1, agree, year_overlap) |>
   ungroup() |>
@@ -1120,7 +809,7 @@ assessed <- candidates |>
     garfo_match = coalesce(garfo_match, "none"),
 
     length_known = !is.na(reg_length_m) & !is.na(garfo_length_ft),
-    length_agree = length_agrees(garfo_length_ft, reg_length_m),
+    length_agree = length_agrees(garfo_length_ft, reg_length_m, screen$length_tolerance),
     garfo_class = case_when(
       garfo_match == "unique_years" & length_agree ~ "unique_years_length",
       garfo_match == "unique_years" & length_known ~ "length_conflict",
@@ -1168,60 +857,6 @@ when the AIS vessel's PSIX name differs from its AIS name.
 
 ```{r}
 psix_path <- paths$psix # shared by every pipeline version: PSIX is USCG, not GFW
-psix_cols <- c("key_type", "key", "queried_on", "status", "psix_official_no",
-               "psix_name", "psix_call_sign", "psix_service", "psix_status")
-
-# One PSIX vessel-summary query by call sign or official number (the service's
-# VIN field). Returns NULL when PSIX has no match.
-psix_query <- function(call_sign = "", official_no = "") {
-  body <- paste0(
-    '<?xml version="1.0" encoding="utf-8"?>',
-    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>',
-    '<getVesselSummaryXMLString xmlns="https://cgmix.uscg.mil">',
-    '<VesselID></VesselID><VesselName></VesselName>',
-    '<CallSign>', call_sign, '</CallSign><VIN>', official_no, '</VIN>',
-    '<HIN></HIN><Flag></Flag><Service></Service><BuildYear></BuildYear>',
-    '</getVesselSummaryXMLString></soap:Body></soap:Envelope>')
-
-  resp <- httr2::request("https://cgmix.uscg.mil/xml/PSIXData.asmx") |>
-    httr2::req_headers(SOAPAction = '"https://cgmix.uscg.mil/getVesselSummaryXMLString"') |>
-    httr2::req_body_raw(body, type = "text/xml; charset=utf-8") |>
-    httr2::req_timeout(60) |>
-    httr2::req_retry(max_tries = 3) |>
-    httr2::req_perform()
-
-  # the result is an XML document escaped inside the SOAP response
-  inner <- xml2::xml_text(xml2::xml_find_first(
-    xml2::read_xml(httr2::resp_body_string(resp)),
-    "//*[local-name()='getVesselSummaryXMLStringResult']"))
-  if (is.na(inner) || inner == "") return(NULL)
-  v <- xml2::xml_find_all(xml2::read_xml(inner), "//VesselSummary")
-  if (length(v) == 0) return(NULL)
-
-  field <- \(f) xml2::xml_text(xml2::xml_find_first(v, f))
-  tibble(psix_official_no = field("Identification"),
-         psix_name        = field("VesselName"),
-         psix_call_sign   = field("VesselCallSign"),
-         psix_service     = field("ServiceType"),
-         psix_status      = field("StatusLookupName"))
-}
-
-# AIS call signs in US format (K, N, W or AA-AL prefix); others are not looked up
-us_call_sign <- function(cs) {
-  x <- str_remove_all(toupper(coalesce(cs, "")), "\\s")
-  if_else(str_detect(x, "^(K|N|W|A[A-L])[A-Z0-9]{2,6}$"), x, NA_character_)
-}
-
-# what to look up per MMSI: the AIS call sign, and a single GARFO hull ID that
-# is a USCG official number
-psix_keys <- function(df) {
-  df |>
-    transmute(MMSI,
-              ais_cs = if_else(flag %in% "USA", us_call_sign(call_sign), NA_character_),
-              hull   = if_else(garfo_match %in% c("unique_years", "ambiguous_length_resolved") &
-                                 str_detect(coalesce(garfo_hull_id, ""), "^[0-9]+$"),
-                               garfo_hull_id, NA_character_))
-}
 
 psix_targets <- assessed |>
   filter((list == "1_missed_fishing" & has_evidence) | list == "3_nonfishing_typed_fishing") |>
@@ -1261,85 +896,6 @@ count(psix, key_type, status)
 ```
 
 ```{r}
-# Compares the cached PSIX records with each MMSI's call sign and GARFO hull
-# (from psix_keys); also used, cache only, for the gear review sheet
-psix_evaluate <- function(targets, psix) {
-  psix_done <- psix |> filter(status %in% c("ok", "not_found")) |> distinct(key_type, key)
-
-  # PSIX returns partial matches too; keep exact ones. "N/A" = no call sign
-  psix_ok <- psix |>
-    filter(status == "ok") |>
-    mutate(psix_call_sign = na_if(psix_call_sign, "N/A"),
-           desc = paste0("official no. ", psix_official_no, " ", psix_name,
-                         ", call sign ", coalesce(psix_call_sign, "none"),
-                         ", ", psix_service))
-
-  collapse <- \(x) na_if(paste(sort(unique(na.omit(x))), collapse = "|"), "")
-
-  by_hull <- psix_ok |>
-    filter(key_type == "official_no", psix_official_no == key) |>
-    group_by(hull = key) |>
-    summarise(hull_cs = collapse(psix_call_sign), hull_service = collapse(psix_service),
-              psix_hull = paste(unique(desc), collapse = "; "), .groups = "drop")
-
-  by_cs <- psix_ok |>
-    filter(key_type == "call_sign", psix_call_sign == key) |>
-    group_by(ais_cs = key) |>
-    summarise(cs_official_no = collapse(psix_official_no),
-              psix_ais_call_sign = paste(unique(desc), collapse = "; "), .groups = "drop")
-
-  in_list <- \(x, s) map2_lgl(x, s, \(a, b) !is.na(a) && a %in% str_split_1(coalesce(b, ""), fixed("|")))
-  not_fishing_service <- \(s) !is.na(s) & !str_detect(s, regex("fish|passenger|recreational", ignore_case = TRUE))
-
-  targets |>
-    left_join(by_hull, by = "hull") |>
-    left_join(by_cs, by = "ais_cs") |>
-    mutate(
-      hull_done = is.na(hull) | hull %in% psix_done$key[psix_done$key_type == "official_no"],
-      cs_done   = is.na(ais_cs) | ais_cs %in% psix_done$key[psix_done$key_type == "call_sign"],
-      cs_match  = in_list(ais_cs, hull_cs) | in_list(hull, cs_official_no),
-      psix_link = case_when(
-        is.na(hull)                         ~ NA_character_,
-        !hull_done | !cs_done               ~ "not_queried",
-        cs_match                            ~ "match",
-        !is.na(cs_official_no)              ~ "ais_is_other_hull",
-        !is.na(ais_cs) & !is.na(hull_cs)    ~ "call_sign_differs",
-        is.na(ais_cs) & !is.na(hull_cs)     ~ "hull_has_cs_ais_none",
-        is.na(psix_hull)                    ~ "hull_not_found",
-        TRUE                                ~ "no_link"),
-      # a call sign can change when a licence is reissued, so a differing one
-      # is only noted
-      psix_contradicts = psix_link %in% "ais_is_other_hull" |
-        (psix_link %in% "match" & not_fishing_service(hull_service)),
-      psix_ais_call_sign = case_when(
-        !is.na(psix_ais_call_sign) ~ psix_ais_call_sign,
-        !is.na(ais_cs) & cs_done   ~ "not in PSIX",
-        TRUE                       ~ NA_character_),
-      psix_note = case_when(
-        psix_link %in% "not_queried" ~
-          "PSIX not yet looked up (run with run_psix_api: true)",
-        psix_contradicts & psix_link %in% "match" ~ paste0(
-          "PSIX: AIS call sign matches GARFO hull ", hull, " (", psix_hull,
-          "), but its service type is not fishing; GARFO match not used"),
-        psix_link %in% "match" ~ paste0(
-          "PSIX: AIS call sign matches GARFO hull ", hull, " (", psix_hull, ")"),
-        psix_link %in% "ais_is_other_hull" ~ paste0(
-          "PSIX: AIS call sign ", ais_cs, " is ", psix_ais_call_sign, ", not GARFO hull ",
-          hull, " (", coalesce(psix_hull, "not in PSIX"), "); GARFO match not used"),
-        psix_link %in% "call_sign_differs" ~ paste0(
-          "PSIX: GARFO hull ", hull, " has call sign ", hull_cs, ", AIS broadcasts ",
-          ais_cs, "; check that this MMSI is that hull (the call sign may have changed)"),
-        psix_link %in% "hull_has_cs_ais_none" ~ paste0(
-          "PSIX: GARFO hull ", hull, " (", psix_hull, ") has a call sign but AIS ",
-          "broadcasts none; check that this MMSI is that hull"),
-        psix_link %in% "hull_not_found" ~ paste0("PSIX: GARFO hull ", hull, " not found"),
-        psix_link %in% "no_link" ~ paste0(
-          "PSIX: GARFO hull ", hull, " (", psix_hull, ") has no call sign to compare"),
-        !is.na(psix_ais_call_sign) ~ paste0("PSIX: AIS call sign ", ais_cs, " is ",
-                                            psix_ais_call_sign),
-        TRUE ~ NA_character_))
-}
-
 psix_checks <- psix_evaluate(psix_targets, psix)
 
 count(psix_checks, psix_link, psix_contradicts)
@@ -1525,14 +1081,6 @@ misclassified for some of its trips whichever class is chosen; Phase 6
 reports these vessels as a separate group.
 
 ```{r}
-# a single analysis gear class from the GFW registry gear codes, if they agree
-reg_gear_class <- function(g) {
-  map_chr(str_split(coalesce(g, ""), fixed("|")), \(x) {
-    cls <- setdiff(unique(gear_class_of(x[x != ""])), "UNRESOLVED")
-    if (length(cls) == 1) cls else NA_character_
-  })
-}
-
 gear_evidence_cols <- c("gear_reason", "gfw_class", "garfo_match", "garfo_gear_hint",
                         "garfo_permit_type", "garfo_mmsi_sequence", "garfo_categories",
                         "garfo_hull_id", "reg_records", "reg_gear", "names",

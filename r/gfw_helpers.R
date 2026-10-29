@@ -88,3 +88,81 @@ gear_class_of <- function(g) dplyr::coalesce(unname(gear_class_map[g]), "UNRESOL
 # gear codes that mark a fishing vessel; OTHER_FISHING appears in GFW registry
 # records (e.g. ICCAT) but not in the AIS Gear Type field
 fishing_gear_codes <- c(names(gear_class_map), "FISHING", "INCONCLUSIVE", "OTHER_FISHING")
+
+# Pinned 4Wings pulls --------------------------------------------------------
+# gfwr 3.0's gfw_ais_presence() and gfw_ais_fishing_hours() always request a
+# dataset's ":latest" version, so the pipeline version a pull came from cannot
+# be chosen or read back (planning/gfw_pipeline_v5_plan.qmd, Section 3.2).
+# These functions send the same 4Wings report request with the dataset ID
+# given explicitly, e.g. "public-global-presence:v5.0". The request mirrors
+# gfwr:::gfw_4wings() and gfwr:::gfw_endpoint() for a user-shapefile region;
+# r/tests/testthat/test-gfw_helpers.R checks it against gfwr's own URL and
+# body, so a gfwr change that alters the request shows up as a failing test.
+# Only the region encoding (gfwr:::sf_to_geojson()) is borrowed from gfwr's
+# internals; renv pins gfwr, so it changes only with a deliberate upgrade.
+
+gfw_api_base <- "https://gateway.api.globalfishingwatch.org/v3/"
+
+# 4Wings dataset ID at a pinned version: gfw_dataset_id("presence", "v5.0")
+# -> "public-global-presence:v5.0". `version` must name a release (vN.N);
+# ":latest" is refused, since it is what pinning replaces.
+gfw_dataset_id <- function(dataset = c("presence", "fishing-effort"), version) {
+  dataset <- match.arg(dataset)
+  if (!grepl("^v[0-9]+\\.[0-9]+$", version)) {
+    stop("dataset version must look like v5.0, not '", version, "'", call. = FALSE)
+  }
+  sprintf("public-global-%s:%s", dataset, version)
+}
+
+# The httr2 request for one 4Wings report, built but not sent. `region` is an
+# sf polygon (the AOI); dates are "YYYY-MM-DD", start included and end
+# excluded, at most 366 days apart (the API's limit, checked as gfwr does).
+gfw_4wings_request <- function(dataset, start_date, end_date, region,
+                               spatial_resolution = "HIGH",
+                               temporal_resolution = "DAILY",
+                               group_by = "VESSEL_ID",
+                               key = Sys.getenv("GFW_TOKEN")) {
+  if (as.numeric(as.Date(end_date) - as.Date(start_date)) > 366) {
+    stop("the start and end dates should be apart 366 days or less", call. = FALSE)
+  }
+  if (!inherits(region, "sf") ||
+      !inherits(sf::st_geometry(region), c("sfc_POLYGON", "sfc_MULTIPOLYGON"))) {
+    stop("region must be an sf polygon", call. = FALSE)
+  }
+  httr2::request(gfw_api_base) |>
+    httr2::req_url_path_append("4wings/report") |>
+    # same query parameters, in the same order, as gfwr:::gfw_endpoint()
+    httr2::req_url_query(`datasets[0]` = dataset,
+                         `spatial-resolution` = spatial_resolution,
+                         `temporal-resolution` = temporal_resolution,
+                         `group-by` = group_by,
+                         `date-range` = paste(start_date, end_date, sep = ","),
+                         format = "CSV") |>
+    httr2::req_headers(Authorization = paste("Bearer", key),
+                       `Content-Type` = "application/json") |>
+    # the AOI as {"geojson": ...}; a body makes the request a POST, as in gfwr
+    httr2::req_body_raw(gfwr:::sf_to_geojson(region, endpoint = "raster")) |>
+    httr2::req_user_agent(gfwr::gfw_user_agent())
+}
+
+# Send one pinned 4Wings report request and return its records. The response
+# is a zip holding one CSV, as for gfwr. Every column is read as character, so
+# the raw text (MMSI, IMO, timestamps) is written back unchanged; read_gfw()
+# types the columns later. Transient failures (HTTP 429/503) are retried, and
+# an API error stops with GFW's own message.
+gfw_4wings_pinned <- function(dataset, start_date, end_date, region, ...) {
+  resp <- gfw_4wings_request(dataset, start_date, end_date, region, ...) |>
+    httr2::req_retry(max_tries = 3) |>
+    httr2::req_error(body = \(resp) tryCatch(
+      paste(unlist(httr2::resp_body_json(resp)$messages), collapse = "; "),
+      error = \(e) NULL)) |>
+    httr2::req_perform()
+
+  zip <- tempfile(fileext = ".zip")
+  on.exit(unlink(zip), add = TRUE)
+  writeBin(httr2::resp_body_raw(resp), zip)
+  csv <- grep("\\.csv$", utils::unzip(zip, list = TRUE)$Name, value = TRUE)
+  stopifnot("expected one CSV in the 4Wings response" = length(csv) == 1)
+  readr::read_csv(unz(zip, csv), show_col_types = FALSE,
+                  col_types = readr::cols(.default = readr::col_character()))
+}

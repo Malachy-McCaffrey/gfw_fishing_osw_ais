@@ -1,4 +1,4 @@
-# Tests for r/infra_helpers.R (Ørsted foundations and cables, 05 step 8).
+# Tests for r/infra_helpers.R (Ørsted foundations and cables, 02a).
 # The date and coordinate examples are copied from the supplied foundation files.
 
 test_that("parse_install_dates() reads every date form in the foundation files", {

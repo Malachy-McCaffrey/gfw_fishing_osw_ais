@@ -60,3 +60,47 @@ test_that("gear_class_of() maps GFW gear and leaves the rest unresolved", {
                                "FISHING", "INCONCLUSIVE", NA)),
                c("MOBILE", "FIXED", "POLE_AND_LINE", "UNRESOLVED", "UNRESOLVED", "UNRESOLVED"))
 })
+
+# Pinned 4Wings pulls: built requests only, nothing is sent ------------------
+
+# a small AOI-like polygon in WGS 84, as 01 passes the Ørsted AOI
+test_region <- function() {
+  sf::st_sf(geometry = sf::st_sfc(sf::st_polygon(list(rbind(
+    c(-71.5, 41.0), c(-71.0, 41.0), c(-71.0, 41.3), c(-71.5, 41.3), c(-71.5, 41.0)))),
+    crs = 4326))
+}
+
+test_that("gfw_dataset_id() pins a release and refuses latest", {
+  expect_equal(gfw_dataset_id("presence", "v5.0"), "public-global-presence:v5.0")
+  expect_equal(gfw_dataset_id("fishing-effort", "v4.0"), "public-global-fishing-effort:v4.0")
+  expect_error(gfw_dataset_id("presence", "latest"), "must look like v5.0")
+  expect_error(gfw_dataset_id("presence", "v5"), "must look like v5.0")
+  expect_error(gfw_dataset_id("events", "v5.0"))
+})
+
+test_that("gfw_4wings_request() sends what gfwr sends, with the dataset version pinned", {
+  args <- list(`spatial-resolution` = "HIGH", `temporal-resolution` = "DAILY",
+               `filters[0]` = NULL, `group-by` = "VESSEL_ID",
+               `date-range` = "2020-01-01,2021-01-01", format = "CSV")
+  # gfwr's internal dataset type for each 4Wings dataset
+  types <- c(presence = "raster-pres", `fishing-effort` = "raster")
+  for (ds in names(types)) {
+    # gfwr builds the URL for ":latest"; ours, asked for ":latest", must equal it
+    theirs <- do.call(gfwr:::gfw_endpoint, c(list(dataset_type = types[[ds]]), args))
+    latest <- sprintf("public-global-%s:latest", ds)
+    ours <- gfw_4wings_request(latest, "2020-01-01", "2021-01-01", test_region(), key = "k")
+    expect_equal(ours$url, theirs$url)
+  }
+  pinned <- gfw_4wings_request(gfw_dataset_id("presence", "v5.0"), "2020-01-01", "2021-01-01",
+                               test_region(), key = "k")
+  expect_match(pinned$url, "datasets%5B0%5D=public-global-presence%3Av5.0", fixed = TRUE)
+  expect_equal(pinned$body$data, gfwr:::sf_to_geojson(test_region(), endpoint = "raster"))
+  expect_equal(pinned$options$useragent, gfwr::gfw_user_agent())
+})
+
+test_that("gfw_4wings_request() keeps gfwr's checks on dates and region", {
+  expect_error(gfw_4wings_request("public-global-presence:v5.0", "2020-01-01", "2021-01-03",
+                                  test_region(), key = "k"), "366 days or less")
+  expect_error(gfw_4wings_request("public-global-presence:v5.0", "2020-01-01", "2021-01-01",
+                                  sf::st_centroid(test_region()), key = "k"), "sf polygon")
+})

@@ -774,7 +774,7 @@ diag |> kable_round(4)
 ## Step 6: timing BAG
 
 Stages are replaced by each cell's own exposure, from the Ørsted dates
-(`05` step 8):
+(`02a`):
 
 - `phase`: the nearest project's pre / construction / post-construction,
   coded as a construction indicator plus construction × band terms (the BAG

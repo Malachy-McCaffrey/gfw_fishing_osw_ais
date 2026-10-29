@@ -81,7 +81,7 @@ make_gfw_paths <- function(pipeline = gfw_pipeline_default) {
     compare       = "reports/pipeline_compare",   # v4 vs v5 comparison (gitignored)
     basemap       = "references/basemap/aoi_ocean_utm19n.tif", # map background, EPSG:32619
 
-    # Ørsted foundations and cables (05, step 8). The foundation CSVs and GeoJSON
+    # Ørsted foundations and cables (02a). The foundation CSVs and GeoJSON
     # layouts are as supplied (read only); the references/ tables are
     # transcribed from published sources, each row citing its source. SFW's
     # Ørsted CSV is the primary source; the PSO report's Table 3, transcribed,
@@ -95,7 +95,7 @@ make_gfw_paths <- function(pipeline = gfw_pipeline_default) {
     sfw_pso_dates = "references/sfw_foundation_dates.csv",    # PSO report Table 3 (check)
     cable_windows = "references/infra_cable_windows.csv",     # project × cable type works windows
     safety_zones  = "references/infra_safety_zones.csv",      # USCG 500 m zones: rule window per project
-    infra         = "data/sf/infra/infrastructure.gpkg"       # written by 05: foundations + cables
+    infra         = "data/sf/infra/infrastructure.gpkg"       # written by 02a: foundations + cables
   )
 }
 

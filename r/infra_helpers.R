@@ -1,5 +1,6 @@
-# Helpers for the Ørsted foundation and cable data (05_prepare_analysis.qmd,
-# step 8). Source after the tidyverse, sf and r/analysis_helpers.R:
+# Helpers for the Ørsted foundation and cable data (02a_infrastructure.qmd;
+# step 8 of 05_prepare_analysis.qmd until 2026-10-28). Source after the
+# tidyverse, sf and r/analysis_helpers.R:
 #   source("r/analysis_helpers.R"); source("r/infra_helpers.R")
 #
 # The foundation tables (one CSV per project, from the Ørsted spreadsheets)
@@ -15,6 +16,22 @@
 # read a file) is a
 # pure function of its arguments, unit-tested in
 # r/tests/testthat/test-infra_helpers.R.
+
+# Written precision ---------------------------------------------------------
+
+# Decimals the infrastructure covariates are rounded to when written: by 02a
+# in its infra_cell_*.csv tables, and by 05 in the analysis tables those
+# columns are joined into, so both write the same values. Each is far below
+# what the data resolve. The count column n_found_<r>km also takes 3; its name
+# depends on 02a's r_count_km, so the caller adds it.
+infra_write_digits <- c(
+  d_found_km = 3, d_found_final_km = 3, d_cable_km = 3,  # 1 m
+  # season-year means and shares (integers and flags in the monthly table are
+  # unchanged by rounding)
+  active_construction_share = 3, cable_works_share = 3,
+  months_since_first_found = 3,
+  # area shares inside safety zones: 1e-4 of a cell is ~93 m²
+  sz_share = 4, sz_share_install = 4)
 
 # Dates ---------------------------------------------------------------------
 

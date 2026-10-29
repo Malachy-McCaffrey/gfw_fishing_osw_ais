@@ -30,6 +30,15 @@ Phase 4, frequentist models 5, INLA-SPDE 6, sensitivity 7 and synthesis 8.
 
 ---
 
+### 2026-10-28, workflow structure
+
+| ID | Topic | Decision | Consequence | Status |
+|---|---|---|---|---|
+| D-063 | v4 data source | **The v4 data are a snapshot of `:latest` pulled on 2026-10-06, and `:v4.0` is not re-pulled** (v5 plan, Section 3.3 dropped). v4 was still updating daily until its 2026-10-21 freeze, so the snapshot cannot be requested from GFW again. It is reproduced by archiving the raw v4 pull in a repository with a DOI, not by re-pulling. `data/raw/gfw/v4/pull_info.csv` records it as `:latest (resolved to v4)` | No `data/raw/gfw/v4_repull/`. The only check against frozen `:v4.0` is the live check of the pinned wrapper (D-062) on June 2024: vessel presence and fishing effort matched record for record and hour for hour (7,452 and 1,191 records). Six MMSIs had different labels in `:v4.0`, four of them on the roster. EAGLE-EYE (368055000) went from SET_LONGLINES to DRIFTING_LONGLINES (FIXED to MOBILE), the FRANCES boats (367155670, 366940990) from POLE_AND_LINE to INCONCLUSIVE, and SUSAN L (366211560) from INCONCLUSIVE to TRAWLERS (already covered by a MOBILE gear correction). The analysis keeps the 2026-10-06 labels. Methods should cite the snapshot date and the DOI | |
+| D-062 | Pinned pulls | **New pulls request an explicit GFW dataset version**, never `:latest`: `gfw_4wings_pinned()` in `r/gfw_helpers.R` sends gfwr's 4Wings request with the dataset ID named, and `01` requires `-P dataset_version:vN.N`. `pull_info.csv` records `vp_dataset`, `afe_dataset`, `gfwr_version` and `api_base`. Raw columns are kept as text | A pull's version is now a fact of the request, not only of its folder name, and `:v4.0` can be re-pulled for the reproducibility check (v5 plan, Section 3.3) while it is served. Offline tests tie the request to gfwr 3.0's | |
+| D-061 | Vessel review code | **03's functions moved to `r/review_helpers.R`** (27 functions and constants), unchanged except that the screening thresholds they read from 03's `screen` list are now arguments. 03 keeps the thresholds and the review's narrative; its split into 03a–d is deferred | 03 went from 1,704 to about 1,250 lines; the functions gained tests (`test-review_helpers.R`). Rendered on v4 with outputs redirected, 03 reproduced the crosswalk, permit groups, decision files and both review sheets byte for byte | |
+| D-060 | Infrastructure step | **Ørsted infrastructure moved out of `05` (step 8) into `r/02a_infrastructure.qmd`**, which runs after 02 and writes `infrastructure.gpkg`, `infra_cell_static.csv` and the `infra_cell_*.csv` tables. 05 reads and joins them in step 9, unchanged; its exposure parameters moved to 02a. Reverses D-021 | 02a needs only the grid, leases and Ørsted files, so an infrastructure update re-renders 02a and 05 without the vessel workflow. 05's analysis tables are unchanged (see the verification in the commit) | |
+
 ### 2026-10-28, decision log and planning documents
 
 | ID | Topic | Decision | Consequence | Status |
@@ -112,7 +121,7 @@ Phase 4, frequentist models 5, INLA-SPDE 6, sensitivity 7 and synthesis 8.
 
 | ID | Topic | Decision | Consequence | Status |
 |---|---|---|---|---|
-| D-021 | Where it is built | **In `05` (Phase 0, step 8)**, not a separate `09`. Layers in `data/sf/infra/infrastructure.gpkg` (writing to `data/sf/infra/` approved) | The exposure covariates sit in the month and season-year analysis tables from the start, so Phases 1 and 5 read one table ([plan: Ørsted infrastructure](gfw_analysis_plan.qmd#sec-infra)) |  |
+| D-021 | Where it is built | **In `05` (Phase 0, step 8)**, not a separate `09`. Layers in `data/sf/infra/infrastructure.gpkg` (writing to `data/sf/infra/` approved) | The exposure covariates sit in the month and season-year analysis tables from the start, so Phases 1 and 5 read one table ([plan: Ørsted infrastructure](gfw_analysis_plan.qmd#sec-infra)) | Superseded by D-060 |
 | D-022 | Multi-day installations | The foundation CSVs (which replaced the Excel files) give **one row per installation day**: first day = `foundation_installed`, last = `foundation_end`; repeated rows must agree on position, structure and depth | Multi-day installs (e.g. RWF Z01a, 17 days) count as under construction for every day they span |  |
 | D-023 | SFW turbine ids | *Superseded 2026-10-20 (see "SFW crosswalk" above).* The PSO report's A01–A15 had no published crosswalk to the layout positions; Z01 was placed on AP06 and the 12 turbines shared the turbine window, 2023-07-02 to 2023-08-07 | — | Superseded by D-032 |
 | D-024 | SRW's 40 unrecorded positions | **Planned, not installed.** Sensitivity: installed from May 2026 | The primary covariates count 45 SRW foundations at the end of the window. A second table (`infra_cell_month_srw_planned.csv`) gives the upper-bound exposure |  |

@@ -1,0 +1,586 @@
+---
+title: "MM GFW Ørsted Infrastructure and Exposure Covariates"
+author: "Malachy McCaffrey"
+date: today
+format: html
+params:
+  # GFW pipeline version to render against (r/paths.R); blank = the default.
+  # Only the grid and the output folder depend on it.
+  pipeline: ""
+  # Path overrides (see r/paths.R); leave blank to use the project paths.
+  grid: ""
+  analysis: ""
+  infra: ""
+  # Infrastructure exposure radii (km)
+  r_count_km: 2       # n_found_<r>km: installed foundations within this distance
+  r_active_km: 5      # active_construction: a foundation going in this month within this distance
+  r_cable_km: 2       # cable_works: a cable route with works this month within this distance
+  # SRW sensitivity: month the 40 positions with no installation record are
+  # assumed installed (decision 2026-10-19, D-024)
+  srw_planned_from: "2026-05-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# run from the repo root (the folder holding renv.lock) so the relative paths
+# in r/paths.R resolve whether the qmd is rendered or run chunk by chunk
+root <- getwd()
+while (!file.exists(file.path(root, "renv.lock")) && dirname(root) != root) root <- dirname(root)
+knitr::opts_knit$set(root.dir = root)
+```
+
+## Objective
+
+Build the Ørsted foundation and cable layers for SFW, RWF and SRW, and their
+per-cell exposure covariates, for Phase 0 (`05_prepare_analysis.qmd`) to join
+into the analysis tables and for the later phases to read on their own.
+
+This was step 8 of `05` until 2026-10-28 (decision D-060). It needs only the
+grid from `02_build_grid.qmd`, the leases and the Ørsted files: not the vessel
+review (03) or the classified records (04). So it runs straight after 02, and
+a change to the infrastructure data re-renders this notebook and 05 without
+touching the vessel workflow.
+
+| Output | One row per |
+|---|---|
+| `data/sf/infra/infrastructure.gpkg`, layers `foundations` and `cables` | foundation / cable route (EPSG:32619) |
+| `data/processed/analysis/{pipeline}/infra_cell_static.csv` | cell: distance to the nearest eventual foundation and cable route (full precision) |
+| `.../infra_cell_month.csv`, `.../infra_cell_season_year.csv` | cell × month / season-year: exposure covariates |
+| `.../infra_cell_month_srw_planned.csv` | cell × month: the same, with SRW's 40 unrecorded positions installed (sensitivity) |
+
+Every output has a `<file>.json` provenance sidecar. The source files under
+`data/sf/owf/*/turbines/` are read only. Fields are defined in
+`references/data_dictionary.md`.
+
+The **gate** at the end collects every check; the notebook passes only if all
+of them hold.
+
+## Libraries and shared code
+
+```{r}
+library(tidyverse)
+library(sf)
+
+source("r/paths.R")
+source("r/gfw_helpers.R")
+source("r/analysis_helpers.R")
+source("r/infra_helpers.R")
+
+# Quarto parameters (header); `params` is read-only while rendering. Run chunk
+# by chunk, `params` is missing or left over from another session, so the
+# header is read from this file directly instead
+qparams <- if (isTRUE(getOption("knitr.in.progress"))) params else {
+  hdr <- knitr::knit_params(readLines(
+    file.path(root, "r/02a_infrastructure.qmd"), warn = FALSE))
+  lapply(hdr, function(p) p$value)
+}
+paths <- gfw_paths_with(qparams)
+
+crs_utm <- 32619 # WGS 84 / UTM zone 19N, the grid's CRS
+
+# every check the gate needs, filled in as the steps run
+gate <- tibble(check = character(), pass = logical())
+check <- function(name, ok) {
+  gate <<- add_row(gate, check = name, pass = isTRUE(ok))
+  invisible(ok)
+}
+```
+
+## Grid, calendar and nearest project
+
+The three things the covariates need from the analysis setup, built the same
+way as in `05` (steps 2 and 4): the grid, the months of the analysis window
+with their season labels, and each cell's nearest project, whose timeline
+sets the cell's `phase`.
+
+```{r}
+grid <- st_read(paths$grid, quiet = TRUE)
+stopifnot("grid is not in EPSG:32619" = st_crs(grid)$epsg == crs_utm)
+
+# one row per month of the analysis window, with the labels the season-year
+# table is grouped by
+calendar <- tibble(year_month = seq(analysis_start, analysis_end, by = "month")) |>
+  mutate(season      = season_of(year_month),
+         season_year = season_year_of(year_month))
+
+# The leases are stored in EPSG:3857 and reprojected first
+leases <- map_dfr(paths$leases, \(f) st_read(f, quiet = TRUE) |>
+  st_transform(crs_utm) |>
+  summarise(geometry = st_union(geometry)) |>
+  mutate(project = tools::file_path_sans_ext(basename(f))))
+
+# nearest project per cell centroid (the containing lease inside one)
+cell_dist <- lease_distance(st_centroid(st_geometry(grid)) |> st_sf(), leases) |>
+  mutate(cell_id = grid$cell_id, .before = 1)
+count(cell_dist, nearest_project)
+```
+
+## Data and rules
+
+The Ørsted turbine and cable data (plan, "Ørsted turbine and cable data")
+come from three kinds of source, all read only:
+
+| Project | Positions | Installation dates | Cables |
+|---|---|---|---|
+| SFW | layout GeoJSON (13 points) | Ørsted CSV (12 WTG + OSS Z01, one row per installation day), checked against PSO report Table 3 (`references/sfw_foundation_dates.csv`) | layout routes; works window from the PSO report |
+| RWF | layout GeoJSON (67 points) | Ørsted foundation CSV (65 WTG + 3 OSS foundations) | layout routes; inter-array works from 2025-11 (open) |
+| SRW | preliminary layout GeoJSON (85 points) | Ørsted foundation CSV (44 WTG + the OCS-DC jacket's 8 pin piles) | layout routes; no works dates |
+
+Rules, each decided on 2026-10-19 unless dated otherwise (`planning/decisions.md`, D-022 to D-026):
+
+- **Multi-day installations.** The foundation CSVs give one row per
+  installation day, repeating the foundation's other fields. A foundation's
+  `foundation_installed` is its first day and `foundation_end` its last, and
+  its repeated rows must agree on structure, position and depth.
+- **SFW** (decision 2026-10-20, D-032): Ørsted's `sfw_monopile_install_orsted.csv`
+  ties each PSO monopile id (A01–A15, Z01) to its layout position and its
+  installation days, so every SFW foundation has exact dates
+  (`date_basis = "exact"`). It replaces the shared turbine window
+  (2023-07-02 to 2023-08-07) used before this crosswalk existed. Its dates
+  must equal PSO Table 3 (`references/sfw_foundation_dates.csv`), an
+  independent source; the substation Z01 is on **AP06**, as inferred
+  earlier from the export cable's landing point.
+- **SRW's 40 layout positions with no installation record** are `planned`:
+  work stopped in December 2025 and the January–April piling moratorium
+  followed, so they never count as installed here. A sensitivity table
+  treats them as installed in `srw_planned_from` (May 2026).
+- **Cables** are static routes, plus coarse project × cable-type works
+  windows from `references/infra_cable_windows.csv`. A window with no start
+  (`complete_by`, `unknown`) never switches `cable_works` on.
+- RWF, SRW and SFW positions take the CSV (as-installed) coordinates,
+  checked against the layout points. SRW's layout names are truncated, so
+  SRW positions are matched by distance. SFW positions are matched by
+  distance too, and every SFW `USCG_ID` must then name its matched position
+  (A01's, delivered as "AM0", was corrected to AM05 in the file on
+  2026-10-20; the distance match is kept so a future truncation cannot
+  misplace a foundation).
+- **Safety zones** (decision 2026-10-20, D-034): the U.S. Coast Guard set a 500 m
+  safety zone around every SFW, RWF and SRW foundation
+  (`references/infra_safety_zones.csv`, one rule per project). A zone is
+  active from its foundation's installation to its project's rule end: SFW
+  2024-05-31; RWF 2027-05-31 and SRW 2028-05-31, so both stay on to the end
+  of the window (turbine-erection dates were not supplied). Inside a zone,
+  non-construction vessels are excluded by regulation, so lost effort there is
+  mandated, not avoidance. The rules enforce the zones only during active
+  construction, so an enforcement-only variant (installation days only) is
+  kept for the Phase 7 sensitivity run.
+
+Per cell × month covariates, from cell centroids (the safety-zone shares
+from the cell polygons):
+
+| Covariate | Definition |
+|---|---|
+| `sz_share` | share of the cell's area inside an active 500 m safety zone (installation to rule end) |
+| `sz_share_install` | the same, counting a zone only on its foundation's installation days (enforcement-only sensitivity) |
+| `d_found_km` | distance to the nearest foundation (turbine or substation) installed by the end of the month; NA before the first |
+| `n_found_2km` | installed foundations within `r_count_km` |
+| `active_construction` | a foundation's installation days overlap the month within `r_active_km` |
+| `cable_works` | a cable route whose works window overlaps the month lies within `r_cable_km` |
+| `phase` | the nearest project's `pre` / `construction` / `post_construction` |
+| `months_since_first_found` | months from the nearest project's first foundation (event time) |
+
+Substations count with turbines because a jacket or monopile is the same
+seabed obstruction to gear. Two static covariates join `cells.gpkg` and every
+table: `d_found_final_km` (nearest eventual foundation, planned included) and
+`d_cable_km` (nearest cable route). The season-year table averages the
+distances and counts over the season's months, gives the flags as shares of
+months, and takes the phase held in most months.
+
+## Sources
+
+```{r}
+# Foundation CSVs (RWF, SRW): one row per installation day, collapsed to one
+# row per foundation spanning its first to last day (read_foundation_csv())
+rwf_sheet <- read_foundation_csv(paths$rwf_foundations)
+srw_sheet <- read_foundation_csv(paths$srw_foundations)
+
+# SFW: Ørsted's monopile CSV (PSO id × position × installation day), the
+# primary source, and the PSO report's Table 3 dates, transcribed, to check it
+sfw_sheet <- read_sfw_csv(paths$sfw_foundations)
+sfw_pso <- read_csv(paths$sfw_pso_dates, col_types = cols(.default = "c")) |>
+  mutate(across(ends_with("_date"), as.Date))
+
+# Layout files: every planned or built position (points) and cable route
+# (lines). The 2-letter + 2-digit grid name (e.g. AM06) is the position key.
+read_layout <- function(f, prj, type) {
+  g <- st_read(f, quiet = TRUE)
+  g[st_geometry_type(g) == type, ] |>
+    transmute(project = prj, layout_name = str_squish(name), description) |>
+    st_transform(crs_utm)
+}
+layout_pts <- imap_dfr(paths$layouts, \(f, prj) read_layout(f, prj, "POINT")) |>
+  mutate(grid_pos = str_extract(layout_name, "^[A-Z]{2}\\d{2}"))
+layout_lines <- imap_dfr(paths$layouts, \(f, prj) read_layout(f, prj, "LINESTRING"))
+# version date of each layout file, from its name (e.g. ..._26-01-19.geojson)
+layout_version <- map_chr(paths$layouts, \(f) format(as.Date(
+  str_extract(basename(f), "\\d{2}-\\d{2}-\\d{2}(?=\\.geojson$)"), format = "%y-%m-%d")))
+
+cable_windows <- read_csv(paths$cable_windows, col_types = cols(.default = "c")) |>
+  mutate(across(c(lay_start, lay_end), as.Date))
+
+count(st_drop_geometry(layout_pts), project, name = "positions")
+check("layout grid names parse and are unique within each project",
+      !anyNA(layout_pts$grid_pos) && !anyDuplicated(paste(layout_pts$project, layout_pts$grid_pos)))
+```
+
+## Foundations and cables
+
+```{r}
+# CSV coordinates (WGS 84) -> UTM points
+sheet_sf <- \(d) st_as_sf(d, coords = c("lon", "lat"), crs = 4326) |> st_transform(crs_utm)
+
+# RWF: "B47/AK12" carries both the internal id and the grid position
+rwf <- rwf_sheet |>
+  mutate(internal_id = str_extract(foundation_id, "^[^/]+"),
+         grid_pos = str_extract(foundation_id, "(?<=/)[A-Z]{2}\\d{2}"),
+         asset_type = if_else(str_detect(structure, "OSS"), "oss", "wtg")) |>
+  sheet_sf()
+rwf_lay <- filter(layout_pts, project == "RWF")
+rwf$layout_offset_m <- as.numeric(st_distance(
+  rwf, rwf_lay[match(rwf$grid_pos, rwf_lay$grid_pos), ], by_element = TRUE))
+
+# SRW: the converter station's 8 jacket pin piles become one foundation
+srw_pins <- filter(srw_sheet, str_detect(foundation_id, "Pin Pile"))
+srw <- srw_sheet |>
+  filter(!str_detect(foundation_id, "Pin Pile")) |>
+  mutate(asset_type = "wtg") |>
+  bind_rows(srw_pins |> summarise(
+    foundation_id = "OCS-DC", structure = "OCS-DC jacket (8 pin piles)",
+    foundation_installed = min(foundation_installed), foundation_end = max(foundation_end),
+    n_date_rows = sum(n_date_rows), lat = mean(lat), lon = mean(lon),
+    depth_m = mean(depth_m), asset_type = "oss")) |>
+  mutate(internal_id = foundation_id) |>
+  sheet_sf()
+# SRW layout names are truncated ("AS03 (C0"), so positions match by distance
+srw_lay <- filter(layout_pts, project == "SRW")
+srw_nn <- nearest_point(srw, srw_lay)
+srw <- mutate(srw, grid_pos = srw_lay$grid_pos[srw_nn$b_row], layout_offset_m = srw_nn$dist_m)
+
+# SFW: one row per monopile from Ørsted's CSV, with exact dates. Positions
+# match the layout by distance, and a complete USCG_ID must then name the
+# position it matched. (A01's id was delivered truncated as "AM0" and
+# corrected to AM05 on 2026-10-20; matching by distance keeps any future
+# truncation from misplacing a foundation, and lists it below.)
+sfw <- sfw_sheet |>
+  mutate(internal_id = foundation_id,
+         asset_type = if_else(structure == "OSS", "oss", "wtg")) |>
+  sheet_sf()
+sfw_lay <- filter(layout_pts, project == "SFW")
+sfw_nn <- nearest_point(sfw, sfw_lay)
+sfw <- mutate(sfw, grid_pos = sfw_lay$grid_pos[sfw_nn$b_row], layout_offset_m = sfw_nn$dist_m)
+
+sfw_id_complete <- str_detect(sfw$uscg_id, "^[A-Z]{2}\\d{2}$")
+sfw |> st_drop_geometry() |> filter(!sfw_id_complete) |>
+  select(internal_id, uscg_id, matched_position = grid_pos, layout_offset_m)
+check("SFW: one CSV foundation per layout position, and every complete USCG_ID names its match",
+      !anyDuplicated(sfw$grid_pos) && nrow(sfw) == nrow(sfw_lay) &&
+        all(sfw$uscg_id[sfw_id_complete] == sfw$grid_pos[sfw_id_complete]))
+check("SFW: the substation (Z01) is on AP06, where the export cable lands",
+      identical(sfw$grid_pos[sfw$internal_id == "Z01"], "AP06"))
+# two independent sources for every SFW date: Ørsted's CSV and PSO Table 3
+sfw_vs_pso <- st_drop_geometry(sfw) |>
+  full_join(sfw_pso, by = c("internal_id" = "pso_id"))
+check("SFW: installation dates equal PSO report Table 3 for all 13 monopiles",
+      nrow(sfw_vs_pso) == 13 &&
+        isTRUE(all(sfw_vs_pso$foundation_installed == sfw_vs_pso$first_date &
+                     sfw_vs_pso$foundation_end == sfw_vs_pso$last_date)))
+
+# SRW positions with no installation record: planned (decision 2026-10-19, D-024)
+srw_planned <- srw_lay |> filter(!grid_pos %in% srw$grid_pos) |>
+  mutate(asset_type = "wtg", layout_offset_m = 0)
+
+foundations <- bind_rows(
+  rwf |> mutate(project = "RWF", date_basis = "exact", source = basename(paths$rwf_foundations),
+                version_date = layout_version[["RWF"]]),
+  srw |> mutate(project = "SRW", date_basis = "exact", source = basename(paths$srw_foundations),
+                version_date = layout_version[["SRW"]]),
+  sfw |> mutate(project = "SFW", date_basis = "exact", source = basename(paths$sfw_foundations),
+                version_date = layout_version[["SFW"]]),
+  srw_planned |> mutate(date_basis = "planned", source = basename(paths$layouts[["SRW"]]),
+                        version_date = layout_version[["SRW"]])) |>
+  mutate(asset_id = paste(project, coalesce(internal_id, grid_pos), sep = "-"),
+         status = if_else(is.na(foundation_end), "planned", "installed"),
+         # not supplied by Ørsted yet; kept so the layer has the plan's schema
+         wtg_installed = as.Date(NA), first_power = as.Date(NA)) |>
+  select(asset_id, project, asset_type, grid_pos, internal_id, status, date_basis,
+         foundation_installed, foundation_end, n_date_rows, wtg_installed, first_power,
+         depth_m, layout_offset_m, source, version_date)
+
+foundations |> st_drop_geometry() |> count(project, asset_type, status)
+
+# Cable routes as drawn in the layout files, with their project × type works
+# window. An open window runs to the end of the analysis window.
+cables <- layout_lines |>
+  mutate(asset_type = if_else(str_detect(description, "Export"), "export_cable", "iac")) |>
+  left_join(cable_windows, by = c("project", "asset_type")) |>
+  mutate(asset_id = paste(project, asset_type, layout_name, sep = "-"),
+         lay_end = if_else(date_basis == "open_window", analysis_end, lay_end),
+         burial_complete = as.Date(NA),
+         version_date = layout_version[project]) |>
+  select(asset_id, project, asset_type, route_name = layout_name, lay_start, lay_end,
+         burial_complete, date_basis, source, version_date)
+
+st_drop_geometry(cables) |> count(project, asset_type, date_basis)
+
+dated <- filter(foundations, status == "installed")
+exact <- filter(dated, date_basis == "exact")
+check("foundation counts: SFW 13, RWF 68 (65 WTG + 3 OSS), SRW 85 positions",
+      identical(as.integer(table(foundations$project)[c("SFW", "RWF", "SRW")]), c(13L, 68L, 85L)))
+check("SRW: 45 dated foundations (44 WTG + OCS-DC), each on its own layout position",
+      sum(dated$project == "SRW") == 45 && !anyDuplicated(srw$grid_pos))
+check("every CSV foundation within 100 m of its layout position",
+      all(foundations$layout_offset_m < 100))
+check("asset ids unique (foundations and cables)",
+      !anyDuplicated(foundations$asset_id) && !anyDuplicated(cables$asset_id))
+check("installation dates inside the analysis window, first <= last",
+      all(dated$foundation_installed >= analysis_start & dated$foundation_end <= analysis_end &
+            dated$foundation_installed <= dated$foundation_end))
+check("exactly dated foundations installed within 31 days",
+      all(exact$foundation_end - exact$foundation_installed <= 31))
+# each foundation inside its own project's lease, with 100 m tolerance for
+# as-built offsets at the lease edge
+in_own_lease <- map2_lgl(st_geometry(foundations), foundations$project, \(g, prj)
+  as.numeric(st_distance(st_sfc(g, crs = crs_utm), filter(leases, project == prj))) <= 100)
+check("every foundation inside its own project's lease", all(in_own_lease))
+
+dir.create(dirname(paths$infra), recursive = TRUE, showWarnings = FALSE)
+st_write(foundations, paths$infra, layer = "foundations", delete_dsn = TRUE, quiet = TRUE)
+st_write(cables, paths$infra, layer = "cables", quiet = TRUE)
+infra_inputs <- c(paths$rwf_foundations, paths$srw_foundations, paths$sfw_foundations,
+                  paths$sfw_pso_dates, paths$cable_windows, paths$safety_zones,
+                  unname(paths$layouts))
+write_provenance(paths$infra, infra_inputs, extra = list(
+  layers = c("foundations", "cables"), crs = "EPSG:32619",
+  foundations = nrow(foundations), cables = nrow(cables),
+  srw_planned = sum(foundations$status == "planned")))
+```
+
+## Exposure covariates
+
+```{r}
+ctr_pts <- st_centroid(st_geometry(grid))
+d_fdn <- units::drop_units(st_distance(ctr_pts, foundations)) / 1000  # cells × foundations, km
+d_cab <- units::drop_units(st_distance(ctr_pts, cables)) / 1000       # cells × routes, km
+months <- calendar$year_month
+
+# static: distance to the nearest eventual foundation (all positions, planned
+# included) and to the nearest cable route of any project
+infra_static <- tibble(cell_id = grid$cell_id,
+                       d_found_final_km = apply(d_fdn, 1, min),
+                       d_cable_km = apply(d_cab, 1, min))
+
+# Project timeline. Works start on the first foundation or cable-lay day.
+# They end on the last one only if every foundation is installed and every
+# cable window is closed; otherwise the project is still in construction at
+# the end of the window. min/max of no dates give ±Inf, reset to NA.
+finite_or_na <- \(d) if_else(is.finite(d), d, as.Date(NA))
+cw_tl <- cable_windows |> group_by(project) |>
+  summarise(first_cable = finite_or_na(suppressWarnings(min(lay_start, na.rm = TRUE))),
+            last_cable = finite_or_na(suppressWarnings(
+              max(lay_end[date_basis == "project_window"], na.rm = TRUE))),
+            cable_open = any(date_basis %in% c("open_window", "unknown")), .groups = "drop")
+project_tl <- st_drop_geometry(foundations) |> group_by(project) |>
+  summarise(first_found = min(foundation_installed, na.rm = TRUE),
+            last_found = max(foundation_end, na.rm = TRUE),
+            complete = all(status == "installed"), .groups = "drop") |>
+  left_join(cw_tl, by = "project") |>
+  mutate(works_start = pmin(first_found, first_cable, na.rm = TRUE),
+         works_end = if_else(complete & !cable_open,
+                             pmax(last_found, last_cable, na.rm = TRUE), as.Date(NA)))
+project_tl
+
+# phase and event time follow each cell's nearest project (step 4)
+cell_phase <- cell_dist |> select(cell_id, nearest_project) |>
+  left_join(project_tl, by = c("nearest_project" = "project")) |>
+  cross_join(tibble(year_month = months)) |>
+  mutate(phase = project_phase(year_month, works_start, works_end),
+         months_since_first_found = months_between(year_month, first_found)) |>
+  select(cell_id, year_month, phase, months_since_first_found)
+
+# per cell × month foundation exposure, for one set of installation dates
+build_exposure <- function(installed, end) {
+  foundation_exposure(d_fdn, installed, end, months,
+                      r_count_km = qparams$r_count_km, r_active_km = qparams$r_active_km) |>
+    mutate(cell_id = grid$cell_id[cell], .keep = "unused", .before = 1)
+}
+cable_works <- cable_works_exposure(d_cab, cables$lay_start, cables$lay_end, months,
+                                    r_km = qparams$r_cable_km)
+# cells × months matrix -> long, column-major so cells vary fastest
+cable_long <- tibble(cell_id = rep(grid$cell_id, length(months)),
+                     year_month = rep(months, each = nrow(grid)),
+                     cable_works = c(cable_works))
+
+# USCG 500 m safety zones (decision 2026-10-20, D-034): one rule per project. A zone
+# is active from its foundation's installation to its project's rule end;
+# a planned foundation has none
+sz_rules <- read_csv(paths$safety_zones, col_types = cols(.default = "c")) |>
+  mutate(across(c(rule_start, rule_end), as.Date), radius_m = as.numeric(radius_m))
+check("one 500 m safety-zone rule per project",
+      setequal(sz_rules$project, c("SFW", "RWF", "SRW")) && all(sz_rules$radius_m == 500))
+sz_rule <- sz_rules[match(foundations$project, sz_rules$project), ]
+check("no foundation installed before its project's safety-zone rule took effect",
+      all(is.na(foundations$foundation_installed) |
+            foundations$foundation_installed >= sz_rule$rule_start))
+sz_start <- foundations$foundation_installed
+sz_end <- if_else(is.na(sz_start), as.Date(NA), sz_rule$rule_end)
+
+# per cell × month area share inside active zones, under one set of zone dates
+build_zones <- function(start, end, col) {
+  safety_zone_share(grid, foundations, start, end, months, radius_m = unique(sz_rules$radius_m)) |>
+    transmute(cell_id = grid$cell_id[cell], year_month, "{col}" := sz_share)
+}
+# main: installation to rule end; enforcement-only: installation days
+sz_main <- build_zones(sz_start, sz_end, "sz_share")
+sz_install <- build_zones(foundations$foundation_installed, foundations$foundation_end,
+                          "sz_share_install")
+
+infra_month <- build_exposure(foundations$foundation_installed, foundations$foundation_end) |>
+  left_join(cable_long, by = c("cell_id", "year_month")) |>
+  left_join(cell_phase, by = c("cell_id", "year_month")) |>
+  left_join(sz_main, by = c("cell_id", "year_month")) |>
+  left_join(sz_install, by = c("cell_id", "year_month"))
+
+# sensitivity: the 40 planned SRW positions installed in `srw_planned_from`,
+# each with its safety zone from then to the SRW rule's end
+planned <- foundations$status == "planned"
+sens_from <- as.Date(qparams$srw_planned_from)
+infra_month_srw <- build_exposure(
+  replace(foundations$foundation_installed, planned, sens_from),
+  replace(foundations$foundation_end, planned, month_end(sens_from))) |>
+  left_join(cable_long, by = c("cell_id", "year_month")) |>
+  left_join(cell_phase, by = c("cell_id", "year_month")) |>
+  left_join(build_zones(replace(sz_start, planned, sens_from),
+                        replace(sz_end, planned, sz_rule$rule_end[planned]), "sz_share"),
+            by = c("cell_id", "year_month")) |>
+  left_join(build_zones(replace(foundations$foundation_installed, planned, sens_from),
+                        replace(foundations$foundation_end, planned, month_end(sens_from)),
+                        "sz_share_install"),
+            by = c("cell_id", "year_month"))
+
+n_col <- sprintf("n_found_%gkm", qparams$r_count_km)
+
+# season-year: means of distances and counts, share of months for the flags
+# (plan, @sec-infra); the phase held in most months, ties to the later phase
+phase_levels <- c("pre", "construction", "post_construction")
+modal_phase <- \(p) { tab <- table(factor(p, phase_levels)); phase_levels[max(which(tab == max(tab)))] }
+infra_season_year <- infra_month |>
+  left_join(select(calendar, year_month, season, season_year), by = "year_month") |>
+  group_by(cell_id, season, season_year) |>
+  summarise(d_found_km = if (all(is.na(d_found_km))) NA_real_ else mean(d_found_km, na.rm = TRUE),
+            across(all_of(n_col), mean),
+            active_construction_share = mean(active_construction),
+            cable_works_share = mean(cable_works),
+            # mean monthly area share inside active safety zones
+            sz_share = mean(sz_share), sz_share_install = mean(sz_share_install),
+            phase = modal_phase(phase),
+            months_since_first_found = mean(months_since_first_found), .groups = "drop")
+
+# cells exposed per month, by covariate
+infra_month |> group_by(year_month) |>
+  summarise(installed_nearby = sum(.data[[n_col]] > 0), active_construction = sum(active_construction),
+            cable_works = sum(cable_works), safety_zone = sum(sz_share > 0),
+            safety_zone_km2 = round(sum(sz_share * grid$area_km2[match(cell_id, grid$cell_id)]), 1),
+            .groups = "drop") |>
+  filter(installed_nearby + active_construction + cable_works + safety_zone > 0) |>
+  mutate(year_month = format(year_month, "%Y-%m")) |> knitr::kable()
+
+# exposure only ever grows: once a foundation is in, it stays in
+mono <- infra_month |> arrange(cell_id, year_month) |> group_by(cell_id) |>
+  summarise(na_first = all(diff(is.na(d_found_km)) <= 0),
+            d_ok = all(diff(d_found_km[!is.na(d_found_km)]) <= 1e-9),
+            n_ok = all(diff(.data[[n_col]]) >= 0), .groups = "drop")
+check("infrastructure covariates: one row per cell × month, no gaps but d_found_km",
+      nrow(infra_month) == nrow(grid) * length(months) && !anyNA(select(infra_month, -d_found_km)))
+check("d_found_km never increases or returns to NA; n_found never decreases",
+      all(mono$na_first & mono$d_ok & mono$n_ok))
+check("installed by August 2026: SFW 13, RWF 68, SRW 45",
+      identical(as.integer(table(dated$project)[c("SFW", "RWF", "SRW")]), c(13L, 68L, 45L)))
+check("no exposure before SFW's first works (cable lay from 2023-03)",
+      !any(infra_month$active_construction[infra_month$year_month < as.Date("2023-03-01")]) &&
+        all(is.na(infra_month$d_found_km[infra_month$year_month < as.Date("2023-06-01")])))
+
+# safety zones: shares in [0, 1]; none before the first foundation (June
+# 2023); SFW's zones lapse after 2024-05-31. The lapse is checked on cells
+# touched only by SFW zones, since a cell can also lie in an RWF zone
+zone_cells <- \(prj) grid$cell_id[lengths(st_intersects(
+  grid, st_buffer(filter(foundations, project %in% prj, status == "installed"), 500))) > 0]
+sfw_only <- setdiff(zone_cells("SFW"), zone_cells(c("RWF", "SRW")))
+sz_sfw <- filter(infra_month, cell_id %in% sfw_only)
+check("safety-zone shares lie in [0, 1], for both definitions",
+      all(between(infra_month$sz_share, 0, 1)) && all(between(infra_month$sz_share_install, 0, 1)))
+check("no safety zone before the first foundation (June 2023)",
+      all(infra_month$sz_share[infra_month$year_month < as.Date("2023-06-01")] == 0))
+check("SFW safety zones active through May 2024 and lapsed from June 2024",
+      length(sfw_only) > 0 &&
+        sum(sz_sfw$sz_share[sz_sfw$year_month == as.Date("2024-05-01")]) > 0 &&
+        all(sz_sfw$sz_share[sz_sfw$year_month >= as.Date("2024-06-01")] == 0))
+check("the enforcement-only zones never exceed the main ones",
+      all(infra_month$sz_share_install <= infra_month$sz_share + 1e-9))
+```
+
+## Write the outputs
+
+The covariate tables are rounded when written, to the decimals in
+`infra_write_digits` (`r/infra_helpers.R`), which `05` applies to the same
+columns of the analysis tables. `infra_cell_static.csv` is written at full
+precision (17 significant digits), because `05` copies it into `cells.gpkg`,
+which keeps full precision.
+
+```{r}
+dir.create(paths$analysis, recursive = TRUE, showWarnings = FALSE)
+
+write_digits <- c(infra_write_digits, set_names(3, n_col))
+round_written <- \(t) mutate(t, across(any_of(names(write_digits)),
+                                       \(x) round(x, write_digits[[cur_column()]])))
+
+# The static distances must reach cells.gpkg unchanged. readr writes and parses
+# doubles inexactly (last-digit differences, ~1e-15 km), so they are written
+# with 17 significant digits, which identify a double exactly; 05 parses them
+# with as.numeric(), which is exact.
+exact_chr <- \(x) sprintf("%.17g", x)
+stopifnot("static distances have no gaps" = !anyNA(infra_static))
+
+infra_out <- list(
+  infra_cell_static = mutate(infra_static, across(where(is.double), exact_chr)),
+  infra_cell_month = round_written(infra_month),
+  infra_cell_season_year = round_written(infra_season_year),
+  infra_cell_month_srw_planned = round_written(infra_month_srw))
+
+written <- tibble(file = character(), rows = integer())
+for (nm in names(infra_out)) {
+  f <- file.path(paths$analysis, paste0(nm, ".csv"))
+  write_csv(infra_out[[nm]], f, na = "")
+  write_provenance(f, c(paths$infra, infra_inputs, paths$grid, paths$leases), extra = list(
+    rows = nrow(infra_out[[nm]]), r_count_km = qparams$r_count_km,
+    r_active_km = qparams$r_active_km, r_cable_km = qparams$r_cable_km,
+    srw_planned = if (nm == "infra_cell_month_srw_planned")
+      paste("40 unrecorded SRW positions installed", qparams$srw_planned_from) else "planned, never installed"))
+  written <- add_row(written, file = basename(f), rows = nrow(infra_out[[nm]]))
+}
+written
+```
+
+## Gate
+
+The infrastructure layers match their sources (counts, positions within
+100 m, dates in the window, every foundation in its own lease), the safety
+zones follow their rules, and exposure only grows as foundations go in.
+
+```{r}
+gate |> mutate(pass = if_else(pass, "pass", "FAIL")) |> knitr::kable()
+
+stopifnot("infrastructure gate failed; see the table above" = all(gate$pass))
+```
+
+## Session info
+
+The R and package versions this render ran with, and renv's report on the
+project library against `renv.lock`.
+
+```{r}
+sessionInfo()
+```
+
+```{r}
+renv::diagnostics()
+```

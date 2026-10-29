@@ -131,3 +131,9 @@ reports/spatial/
 # Derived GFW products, reproducible from the qmd, so not tracked. The fitted
 # models themselves are cached under data/processed/models/.
 reports/bag/
+
+# GFW pipeline v4 vs v5 comparison (reports/pipeline_compare/). The report's
+# qmd is tracked; its rendered HTML, tables and figures are derived GFW
+# products, reproducible from the qmd, so not tracked.
+reports/pipeline_compare/*
+!reports/pipeline_compare/*.qmd

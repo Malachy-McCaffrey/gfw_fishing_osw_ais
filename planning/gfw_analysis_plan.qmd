@@ -40,7 +40,7 @@ As of 2026-10-28. Decision IDs refer to [`planning/decisions.md`](decisions.md).
 | 6: INLA-SPDE | `12_models_inla.qmd` | Not started | @sec-models |
 | 7: sensitivity | `13_sensitivity.qmd` | Not started | @sec-sensitivity |
 | 8: synthesis | `14_synthesis.qmd` | Not started | @sec-synthesis |
-| Data: GFW pipeline v5 | `01`, then `01a_compare_pipelines.qmd` | **In progress**: versioned layout and v4 roster done; v5 pull and comparison next | `planning/gfw_pipeline_v5_plan.qmd`; D-053 to D-057 |
+| Data: GFW pipeline v5 | `01`, then `01a_compare_pipelines.qmd` | **In progress**: versioned layout, v4 roster and the v5 pull (2026-10-28) done; raw-data comparison report for GFW written (`reports/pipeline_compare/`); v5 review session, 02 → 05 on v5 and the adoption decision next | `planning/gfw_pipeline_v5_plan.qmd`; D-053 to D-057, D-062 to D-064, D-068 |
 
 Every number typed in this plan was measured on the 2026-10-06 pull, which
 is GFW pipeline **v4**. If v5 is adopted (D-053), they are re-measured. The

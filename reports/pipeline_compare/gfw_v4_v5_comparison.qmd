@@ -1,0 +1,1332 @@
+---
+title: "GFW Pipeline v4 vs v5 in Southern New England Offshore Wind Lease Areas"
+subtitle: "Vessel presence, apparent fishing hours, vessel and gear relabelling, and validated false positives and negatives"
+author: "Malachy McCaffrey"
+date: today
+date-format: "D MMMM YYYY"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    number-sections: true
+    theme: cosmo
+    embed-resources: true
+    fig-width: 9
+    fig-height: 5
+    df-print: kable
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  # the two GFW pipeline versions compared (r/paths.R folder names)
+  old: "v4"
+  new: "v5"
+---
+
+```{r setup, include=FALSE}
+# GFW-facing comparison of the two pulls of the same AOI and window: the
+# 2026-10-06 pull (pipeline v4, via ":latest") and the 2026-10-28 pinned pull
+# (":v5.0"). Decision D-068; design in planning/gfw_pipeline_v5_plan.qmd,
+# Section 4. Reads the raw pulls and the hand-made decision files in
+# references/ (read only); writes its tables to reports/pipeline_compare/tables/
+# (gitignored: derived GFW products). Nothing in data/ or references/ is
+# written.
+#
+# Render from the repo root:
+#   quarto render reports/pipeline_compare/gfw_v4_v5_comparison.qmd
+#
+# Code is hidden (echo: false) because the readers are Global Fishing Watch
+# staff, not this project's analysts; the code is in the repository.
+
+# run from the repo root (the folder holding renv.lock) so the relative paths
+# in r/paths.R resolve however the qmd is run
+root <- getwd()
+while (!file.exists(file.path(root, "renv.lock")) && dirname(root) != root) root <- dirname(root)
+knitr::opts_knit$set(root.dir = root)
+```
+
+```{r libraries, include=FALSE}
+library(tidyverse)
+library(sf)
+library(knitr)
+
+source("r/paths.R")
+source("r/gfw_helpers.R")
+source("r/vessel_helpers.R")
+source("r/analysis_helpers.R")   # lease_distance(), dist_band_of()
+source("r/compare_helpers.R")
+
+# Quarto parameters; run chunk by chunk, `params` may be missing, so fall back
+# to the header defaults
+qparams <- if (isTRUE(getOption("knitr.in.progress"))) params else list(old = "v4", new = "v5")
+p_old <- make_gfw_paths(qparams$old)
+p_new <- make_gfw_paths(qparams$new)
+v_old <- qparams$old
+v_new <- qparams$new
+
+tab_dir <- file.path(p_old$compare, "tables")
+fig_dir <- file.path(p_old$compare, "figures")
+dir.create(tab_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(fig_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Display helpers ------------------------------------------------------------
+
+# number formatting for prose and tables
+n0  <- \(x) format(round(x), big.mark = ",", trim = TRUE)
+p1  <- \(x) sprintf("%.1f%%", x)
+sp1 <- \(x) sprintf("%+.1f%%", x)
+
+# a kable with thousands separators; `digits` applies to every numeric column
+kt <- function(d, digits = 0, ...) {
+  kable(d, digits = digits, format.args = list(big.mark = ","), ...)
+}
+
+# Writes `d` to tables/ and returns an HTML link that downloads the same CSV
+# from inside this self-contained page, so the vessel lists travel with the
+# report when it is e-mailed
+csv_link <- function(d, file, label = paste0("Download ", file)) {
+  path <- file.path(tab_dir, file)
+  write_csv(d, path, na = "")
+  b64 <- base64enc::base64encode(path)
+  asis_output(sprintf('<p><a download="%s" href="data:text/csv;base64,%s">&#8595; %s</a> (%s rows)</p>',
+                      file, b64, label, n0(nrow(d))))
+}
+
+# Colours (dataviz reference palette): the two versions take categorical
+# slots 1 and 2, every chart the same way round; diverging maps use the
+# blue <-> red pair around a neutral grey
+col_ver <- setNames(c("#2a78d6", "#eb6834"), c(v_old, v_new))
+col_loss <- "#e34948"; col_gain <- "#2a78d6"; col_mid <- "#f0efec"
+
+theme_report <- theme_minimal(base_size = 12) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(colour = "#e6e5e1", linewidth = 0.3),
+        legend.position = "top", legend.title = element_blank(),
+        plot.title.position = "plot",
+        plot.caption = element_text(colour = "#52514e", hjust = 0))
+```
+
+```{r read, include=FALSE}
+# Both pulls, trimmed to the analysis window (2016-01-01 to 2026-08-31, the
+# last day the Ørsted survey-date files cover). Every comparison below is
+# inside the window, so the stages are defined for every record.
+pull_old <- read_chr(p_old$pull_info)
+pull_new <- read_chr(p_new$pull_info)
+
+vp_old  <- read_gfw(p_old$raw_vp)  |> in_analysis_window()
+afe_old <- read_gfw(p_old$raw_afe) |> in_analysis_window()
+vp_new  <- read_gfw(p_new$raw_vp)  |> in_analysis_window() |>
+  mutate(speed = as.numeric(Speed))   # new in v5: mean speed (kn) of the vessel-cell-day
+afe_new <- read_gfw(p_new$raw_afe) |> in_analysis_window()
+
+# The hand-made review (v4 crosswalk: removal list + Ørsted survey dates +
+# accepted decisions), the decisions themselves, gear corrections and GARFO
+# permit groups. All were made against the v4 labels.
+cw_chr    <- read_chr(p_old$crosswalk)
+decisions <- read_chr(p_old$decisions)
+gear_in   <- read_chr(p_old$gear)
+permits   <- read_chr(p_old$permit_groups) |> select(MMSI, permit_group)
+removals  <- read_chr(p_old$removals)
+
+# Source labels as shown to GFW. The files record a personal e-mail from an
+# Ørsted contact as a source; the report names the contract and the PSO
+# report instead (the user, 2026-10-29). Display only: Identified_By feeds no
+# classification, and the reference files are unchanged.
+source_label <- function(x) {
+  x |>
+    str_replace("Anna Turano \\(Orsted\\) email; (SFW PSO PAM Report 2024 Appendix A)", "\\1") |>
+    str_replace("^Anna Turano \\(Orsted\\) email$", "Ørsted–SSNA safety-vessel contract") |>
+    str_replace("^orsted_survey_dates$|^orsted_fv_survey_dates_aug2026\\.csv$",
+                "Ørsted survey project and date data")
+}
+cw_chr    <- mutate(cw_chr, Identified_By = source_label(Identified_By))
+decisions <- mutate(decisions, Identified_By = source_label(Identified_By))
+removals  <- mutate(removals, Identified_By = source_label(Identified_By))
+roster    <- read_chr(sprintf(p_old$roster, v_old))
+```
+
+```{r cells, include=FALSE}
+# Signed distance from each cell centroid to the nearest lease boundary and
+# its BAG distance band, for every cell in either pull (v5 has cells v4 lacks
+# and vice versa, D-067). GFW's Lat/Lon mark a cell's lower-left corner.
+crs_utm <- 32619
+leases <- map_dfr(p_old$leases, \(f) st_read(f, quiet = TRUE) |>
+  st_transform(crs_utm) |>
+  summarise(geometry = st_union(geometry)) |>
+  mutate(project = tools::file_path_sans_ext(basename(f))))
+
+cells <- bind_rows(vp_old, vp_new, afe_old, afe_new) |>
+  distinct(cell_id, ix, iy) |>
+  mutate(lon = (ix + 0.5) * 0.01, lat = (iy + 0.5) * 0.01)
+cell_pts <- st_as_sf(cells, coords = c("lon", "lat"), crs = 4326, remove = FALSE) |>
+  st_transform(crs_utm)
+cells <- bind_cols(cells, lease_distance(cell_pts, leases)) |>
+  mutate(dist_band = if_else(dist_lease_km <= 15,
+                             as.character(dist_band_of(pmin(dist_lease_km, 15))),
+                             ">15"),
+         dist_band = factor(dist_band, levels = c("inside", "0-2", "2-4", "4-8", "8-15", ">15")))
+```
+
+```{r reconcile, include=FALSE}
+# Section 2: do the two pulls line up? Totals per version, then the share of
+# hours that sits on keys both versions share, at three grains.
+totals <- function(d, ds, ver) {
+  tibble(dataset = ds, version = ver, records = nrow(d),
+         mmsi = n_distinct(d$MMSI), vessel_ids = n_distinct(d$`Vessel ID`),
+         cells = n_distinct(d$cell_id), hours = sum(d$hours))
+}
+tot <- bind_rows(totals(vp_old, "VP", v_old), totals(vp_new, "VP", v_new),
+                 totals(afe_old, "AFE", v_old), totals(afe_new, "AFE", v_new))
+tot_wide <- tot |>
+  pivot_longer(records:hours, names_to = "measure") |>
+  pivot_wider(names_from = version) |>
+  mutate(change = .data[[v_new]] - .data[[v_old]],
+         pct = pct_change(.data[[v_old]], .data[[v_new]]))
+tv <- \(ds, m, v) tot_wide |> filter(dataset == ds, measure == m) |> pull(all_of(v))
+
+grains <- list(
+  "Record (Vessel ID × cell × day)" = c("Vessel ID", "cell_id", "date"),
+  "Vessel-day (Vessel ID × day)"    = c("Vessel ID", "date"),
+  "Cell total (whole window)"       = "cell_id")
+joins <- list(VP = list(vp_old, vp_new), AFE = list(afe_old, afe_new))
+
+grain_tab <- imap_dfr(joins, \(pair, ds) imap_dfr(grains, \(key, g) {
+  s <- summarise_join(join_versions(pair[[1]], pair[[2]], key))
+  tibble(dataset = ds, grain = g,
+         keys_old = sum(s$keys[s$status != "new_only"]),
+         keys_new = sum(s$keys[s$status != "old_only"]),
+         pct_old_matched = 100 - s$pct_h_old[s$status == "old_only"],
+         pct_new_matched = 100 - s$pct_h_new[s$status == "new_only"],
+         pct_old_same    = s$pct_h_old[s$status == "same"])
+}))
+
+# VP: unmatched records within a matched vessel-day. Chebyshev distance (in
+# cells) from each old-only record to the nearest new-only record of the same
+# vessel-day: a systematic lattice shift would put most at distance 1 in one
+# direction; track resampling spreads them out and in every direction.
+vp_rec <- join_versions(vp_old, vp_new, grains[[1]])
+only_old <- vp_rec |> filter(status == "old_only") |>
+  left_join(distinct(cells, cell_id, ix, iy), by = "cell_id") |> mutate(r = row_number())
+only_new <- vp_rec |> filter(status == "new_only") |>
+  left_join(distinct(cells, cell_id, ix, iy), by = "cell_id")
+offsets <- inner_join(select(only_old, r, `Vessel ID`, date, ix, iy),
+                      select(only_new, `Vessel ID`, date, ix2 = ix, iy2 = iy),
+                      by = c("Vessel ID", "date"), relationship = "many-to-many") |>
+  mutate(d = pmax(abs(ix2 - ix), abs(iy2 - iy))) |>
+  group_by(r) |> slice_min(d, n = 1, with_ties = FALSE) |> ungroup()
+offset_tab <- offsets |>
+  mutate(cells_apart = cut(d, c(0, 1, 2, 3, 5, 10, Inf), right = TRUE,
+                           labels = c("1", "2", "3", "4-5", "6-10", ">10"))) |>
+  count(cells_apart) |>
+  mutate(pct = 100 * n / sum(n))
+pct_rec_with_partner <- 100 * nrow(offsets) / nrow(only_old)
+
+# Cell totals agree? Pearson r of per-cell hours (all vessels) across versions
+cell_r <- map_dbl(joins, \(pair) {
+  j <- join_versions(pair[[1]], pair[[2]], "cell_id") |>
+    mutate(across(c(h_old, h_new), \(x) coalesce(x, 0)))
+  cor(j$h_old, j$h_new)
+})
+
+# Hours by year, both datasets, both versions (figure 1)
+by_year <- bind_rows(
+  vp_old  |> mutate(dataset = "VP",  version = v_old),
+  vp_new  |> mutate(dataset = "VP",  version = v_new),
+  afe_old |> mutate(dataset = "AFE", version = v_old),
+  afe_new |> mutate(dataset = "AFE", version = v_new)) |>
+  mutate(year = year(date)) |>
+  group_by(dataset, version, year) |>
+  summarise(hours = sum(hours), mmsi = n_distinct(MMSI), .groups = "drop")
+```
+
+```{r labels, include=FALSE}
+# Section 3: vessel type and gear relabelling, one row per MMSI
+mt <- mmsi_transitions(vp_old, afe_old, vp_new, afe_new) |>
+  left_join(permits, by = "MMSI") |>
+  left_join(bind_rows(vp_old, afe_old, vp_new, afe_new) |>
+              filter(!is.na(`Vessel Name`)) |>
+              count(MMSI, `Vessel Name`) |>
+              slice_max(n, n = 1, with_ties = FALSE, by = MMSI) |>
+              select(MMSI, Vessel_Name = `Vessel Name`), by = "MMSI")
+
+type_tr <- transition_table(mt, "type_old", "type_new", "vp_old") |>
+  left_join(transition_table(mt, "type_old", "type_new", "afe_old") |>
+              select(from, to, afe_hours = hours), by = c("from", "to")) |>
+  rename(vp_hours = hours, pct_vp_of_from = pct_of_from)
+
+# vessel types each version uses, by MMSI and VP hours
+type_sets <- bind_rows(
+  vp_old |> mutate(version = v_old), vp_new |> mutate(version = v_new)) |>
+  group_by(version, type = `Vessel Type`) |>
+  summarise(mmsi = n_distinct(MMSI), vp_hours = sum(hours), .groups = "drop") |>
+  pivot_wider(names_from = version, values_from = c(mmsi, vp_hours), values_fill = 0)
+
+# fishing <-> non-fishing flips
+flips <- mt |>
+  filter(!is.na(type_old), !is.na(type_new), fishing_old != fishing_new) |>
+  mutate(direction = if_else(fishing_old, "FISHING -> non-fishing", "non-fishing -> FISHING"))
+flip_tab <- flips |>
+  group_by(direction, type_new = if_else(fishing_old, type_new, type_old)) |>
+  summarise(mmsi = n(), vp_old = sum(vp_old), afe_old = sum(afe_old),
+            vp_new = sum(vp_new), afe_new = sum(afe_new),
+            with_garfo_permit = sum(!is.na(permit_group)), .groups = "drop") |>
+  arrange(direction, desc(mmsi))
+
+# v4-FISHING vessels v5 no longer types FISHING that hold a GARFO commercial
+# or for-hire permit: the permit is independent evidence they fish, so these
+# are candidate new v5 false negatives (not yet hand-checked; see caveats)
+lost_fishing <- flips |>
+  filter(direction == "FISHING -> non-fishing") |>
+  select(MMSI, Vessel_Name, type_old, gear_old, type_new, gear_new, permit_group,
+         vp_old, vp_new, afe_old, afe_new) |>
+  arrange(desc(afe_old), desc(vp_old))
+# whether the hand review covers each one (hull class and the source of the
+# decision); joined after the truth chunk builds the reviewed set, below
+
+# INSUFFICIENT_DATA: where those vessels came from
+insuff <- mt |> filter(type_new %in% "INSUFFICIENT_DATA")
+insuff_tab <- insuff |>
+  group_by(type_old = coalesce(type_old, "(absent)")) |>
+  summarise(mmsi = n(), vp_new = sum(vp_new), afe_old = sum(afe_old), .groups = "drop") |>
+  arrange(desc(mmsi))
+
+# Gear: codes and analysis classes, among MMSIs typed FISHING in both
+both_fishing <- mt |> filter(fishing_old, fishing_new)
+gear_tr <- transition_table(both_fishing, "gear_old", "gear_new", "afe_old") |>
+  left_join(transition_table(both_fishing, "gear_old", "gear_new", "vp_old") |>
+              select(from, to, vp_hours = hours), by = c("from", "to")) |>
+  rename(afe_hours = hours, pct_afe_of_from = pct_of_from)
+class_tr <- both_fishing |>
+  group_by(class_old, class_new) |>
+  summarise(mmsi = n(), vp_old = sum(vp_old), afe_old = sum(afe_old), .groups = "drop")
+gear_sets <- bind_rows(
+  bind_rows(vp_old, afe_old) |> mutate(version = v_old),
+  bind_rows(vp_new, afe_new) |> mutate(version = v_new)) |>
+  filter(`Vessel Type` == "FISHING") |>
+  group_by(version, gear = `Gear Type`) |>
+  summarise(mmsi = n_distinct(MMSI), .groups = "drop") |>
+  pivot_wider(names_from = version, values_from = mmsi, values_fill = 0) |>
+  arrange(desc(.data[[v_old]] + .data[[v_new]]))
+```
+
+```{r truth, include=FALSE}
+# Section 5: score both versions against the project's hand review.
+# hull_truth(): crosswalk hull classes + rejected decisions (GFW label
+# confirmed). gear_truth(): accepted gear corrections + confirmed GFW gear.
+ht <- hull_truth(cw_chr, decisions) |>
+  left_join(select(mt, MMSI, type_old, type_new, gear_old, gear_new,
+                   vp_old, vp_new, afe_old, afe_new, Vessel_Name_gfw = Vessel_Name),
+            by = "MMSI") |>
+  mutate(Vessel_Name = coalesce(Vessel_Name, Vessel_Name_gfw), .keep = "unused") |>
+  mutate(out_old = hull_outcome(truth_fishing, type_old),
+         out_new = hull_outcome(truth_fishing, type_new),
+         status  = error_status(out_old, out_new)) |>
+  filter(out_old != "absent" | out_new != "absent")   # reviewed, but no records in the window
+
+# confusion counts and hour-weighted shares per version
+confusion <- bind_rows(
+  ht |> transmute(version = v_old, outcome = out_old, vp = vp_old, afe = afe_old),
+  ht |> transmute(version = v_new, outcome = out_new, vp = vp_new, afe = afe_new)) |>
+  filter(outcome != "absent") |>
+  group_by(version, outcome) |>
+  summarise(mmsi = n(), vp_hours = sum(vp), afe_hours = sum(afe), .groups = "drop") |>
+  complete(version, outcome = c("TP", "FP", "FN", "TN"), fill = list(mmsi = 0, vp_hours = 0, afe_hours = 0))
+rates <- confusion |>
+  select(version, outcome, mmsi) |>
+  pivot_wider(names_from = outcome, values_from = mmsi) |>
+  mutate(precision = 100 * TP / (TP + FP), recall = 100 * TP / (TP + FN))
+
+hull_cols <- c("MMSI", "Vessel_Name", "truth_hull", "Identified_By", "evidence_ref",
+               "type_old", "type_new", "gear_old", "gear_new", "status",
+               "vp_old", "vp_new", "afe_old", "afe_new", "Notes")
+fp_old <- ht |> filter(out_old == "FP") |> select(all_of(hull_cols)) |> arrange(status, desc(vp_old))
+fn_old <- ht |> filter(out_old == "FN") |> select(all_of(hull_cols)) |> arrange(status, desc(vp_old))
+new_err <- ht |> filter(status == "new error") |> select(all_of(hull_cols), out_new) |> arrange(desc(vp_old))
+
+# the vessels that left FISHING, with the review's verdict where there is one
+# (NA = not reviewed: a candidate error only)
+lost_fishing <- lost_fishing |>
+  left_join(transmute(ht, MMSI, reviewed_as = truth_hull, review_source = Identified_By,
+                      charter = str_to_title(na_if(Operation, ""))), by = "MMSI") |>
+  relocate(reviewed_as, review_source, charter, .after = permit_group)
+status_tab <- function(d) d |>
+  group_by(status) |>
+  summarise(mmsi = n(), vp_old = sum(vp_old), vp_new = sum(vp_new),
+            afe_old = sum(afe_old), afe_new = sum(afe_new), .groups = "drop")
+# display names for a status_tab() table
+rename_status <- \(d) rename(d, `Status in v5` = status, MMSIs = mmsi,
+                             `VP h v4` = vp_old, `VP h v5` = vp_new,
+                             `AFE h v4` = afe_old, `AFE h v5` = afe_new)
+
+# Gear: reference class vs each version's GFW gear
+gt_ <- gear_truth(gear_in) |>
+  left_join(select(mt, MMSI, type_old, type_new, gear_old, gear_new, vp_old, vp_new, afe_old, afe_new),
+            by = "MMSI") |>
+  mutate(gout_old = gear_outcome(truth_gear, gear_old),
+         gout_new = gear_outcome(truth_gear, gear_new)) |>
+  filter(gout_old != "absent" | gout_new != "absent")
+gear_score <- bind_rows(
+  gt_ |> transmute(version = v_old, truth_gear, outcome = gout_old, afe = afe_old),
+  gt_ |> transmute(version = v_new, truth_gear, outcome = gout_new, afe = afe_new)) |>
+  group_by(truth_gear, version, outcome) |>
+  summarise(mmsi = n(), afe_hours = sum(afe), .groups = "drop") |>
+  pivot_wider(names_from = outcome, values_from = c(mmsi, afe_hours), values_fill = 0)
+gear_move <- gt_ |>
+  count(truth_gear, gout_old, gout_new, name = "mmsi") |>
+  arrange(truth_gear, desc(mmsi))
+gear_cols <- c("MMSI", "Vessel_Name", "truth_gear", "basis", "gear_old", "gear_new",
+               "gout_old", "gout_new", "vp_old", "vp_new", "afe_old", "afe_new")
+
+# The cohort's gear class, held fixed across versions so that model and label
+# effects are not confused: the reference class where reviewed, else the old
+# version's GFW class, else the new one's
+mmsi_gear <- mt |>
+  left_join(select(gt_, MMSI, truth_gear), by = "MMSI") |>
+  transmute(MMSI, cohort_gear = coalesce(truth_gear, class_old, class_new))
+```
+
+```{r activity, include=FALSE}
+# Activity-level false positives: AFE hours GFW gave fishing hulls while they
+# were doing verified non-fishing work (Ørsted survey trips, safety/guard
+# charters, other operator-confirmed windows). classify() with the v4
+# crosswalk flags those records as `excluded` in both versions; it also
+# builds the analysis set each version would deliver under this project's
+# review (fishing-typed or added hulls, minus non-fishing hulls, gear buoys
+# and excluded windows).
+cw   <- type_crosswalk(cw_chr, NULL, source = p_old$crosswalk)
+gear <- validate_gear(gear_in, source = p_old$gear)
+
+cls <- list(
+  vp_old  = classify(vp_old, cw, gear),  vp_new  = classify(vp_new, cw, gear),
+  afe_old = classify(afe_old, cw, gear), afe_new = classify(afe_new, cw, gear))
+
+# operation of each crosswalk window, for the excluded records
+cw_ops <- cw |> filter(activity_excluded) |>
+  transmute(MMSI, w_from = coalesce(valid_from, lo_date), w_to = coalesce(valid_to, hi_date),
+            Operation = str_to_title(coalesce(na_if(Operation, ""), "Other")),
+            Identified_By)
+excl_afe <- function(d, ver) d |>
+  filter(excluded) |>
+  left_join(cw_ops, by = join_by(MMSI, between(date, w_from, w_to))) |>
+  mutate(version = ver)
+act <- bind_rows(excl_afe(cls$afe_old, v_old), excl_afe(cls$afe_new, v_new))
+act_vp <- bind_rows(excl_afe(cls$vp_old, v_old), excl_afe(cls$vp_new, v_new))
+
+act_tab <- act |>
+  group_by(Operation, `Development Stage`, version) |>
+  summarise(afe_hours = sum(hours), .groups = "drop") |>
+  pivot_wider(names_from = version, values_from = afe_hours, values_fill = 0) |>
+  left_join(act_vp |> filter(version == v_new) |>
+              group_by(Operation, `Development Stage`) |>
+              summarise(vp_hours_new = sum(hours), .groups = "drop"),
+            by = c("Operation", "Development Stage")) |>
+  mutate(pct = pct_change(.data[[v_old]], .data[[v_new]]))
+
+act_vessel <- bind_rows(act, act_vp |> mutate(vp = hours, hours = 0)) |>
+  mutate(vp = coalesce(vp, 0)) |>
+  group_by(MMSI, Operation, Identified_By, version) |>
+  summarise(afe = sum(hours), vp = sum(vp), .groups = "drop") |>
+  pivot_wider(names_from = version, values_from = c(afe, vp), values_fill = 0) |>
+  left_join(select(ht, MMSI, Vessel_Name, type_old, type_new), by = "MMSI") |>
+  relocate(Vessel_Name, .after = MMSI) |>
+  arrange(desc(.data[[paste0("afe_", v_old)]]))
+
+# Speed check (v5 only has speed). Each AFE record's vessel-day mean speed,
+# hours-weighted over the vessel's v5 VP records that day, joined by
+# Vessel ID × day (not cell, because cells differ between versions).
+vd_speed <- vp_new |>
+  filter(!is.na(speed)) |>
+  group_by(`Vessel ID`, date) |>
+  summarise(speed = weighted.mean(speed, hours), .groups = "drop")
+speed_bins <- c(0, 2, 4, 6, 8, 10, Inf)
+act_set_label <- "survey trip or safety charter"
+speed_tab <- bind_rows(cls$afe_old |> mutate(version = v_old),
+                       cls$afe_new |> mutate(version = v_new)) |>
+  filter(in_primary | excluded) |>
+  left_join(vd_speed, by = c("Vessel ID", "date")) |>
+  mutate(speed_kn = cut(speed, speed_bins, right = FALSE,
+                        labels = c("<2", "2-4", "4-6", "6-8", "8-10", ">=10")),
+         speed_kn = fct_na_value_to_level(speed_kn, "no v5 VP that day"),
+         set = if_else(excluded, act_set_label, "fishing hulls, other days")) |>
+  group_by(set, speed_kn, version) |>
+  summarise(afe_hours = sum(hours), .groups = "drop") |>
+  pivot_wider(names_from = version, values_from = afe_hours, values_fill = 0) |>
+  mutate(pct = pct_change(.data[[v_old]], .data[[v_new]]))
+```
+
+```{r fixed, include=FALSE}
+# Fishing false negatives: AFE hours of reviewed FIXED-gear hulls (lobster
+# pots, gillnets; reference class from vessel_gear.csv or confirmed GFW
+# gear) outside any verified non-fishing window, v4 vs v5. GFW lists fixed
+# gear, pots and traps and set gillnets among v5's known false negatives.
+fixed_mmsi <- gt_ |> filter(truth_gear == "FIXED") |> pull(MMSI)
+cohort <- function(d, ver) d |>
+  filter(!excluded, !nonfish, !is_marker) |>
+  left_join(mmsi_gear, by = "MMSI") |>
+  mutate(version = ver)
+coh_afe <- bind_rows(cohort(cls$afe_old, v_old), cohort(cls$afe_new, v_new))
+coh_vp  <- bind_rows(cohort(cls$vp_old, v_old), cohort(cls$vp_new, v_new))
+
+# AFE and the AFE/VP ratio by cohort gear class, both versions; VP is the
+# model-free denominator. Only reviewed or GFW-fishing hulls (the analysis set
+# of either version) are counted.
+gear_ratio <- full_join(
+  coh_afe |> filter(in_primary) |> group_by(cohort_gear, version) |>
+    summarise(afe = sum(hours), afe_mmsi = n_distinct(MMSI), .groups = "drop"),
+  coh_vp |> filter(in_primary) |> group_by(cohort_gear, version) |>
+    summarise(vp = sum(hours), vp_mmsi = n_distinct(MMSI), .groups = "drop"),
+  by = c("cohort_gear", "version")) |>
+  mutate(across(c(afe, vp, afe_mmsi), \(x) coalesce(x, 0)), afe_per_100_vp = 100 * afe / vp)
+
+fixed_vessel <- full_join(
+  coh_afe |> filter(MMSI %in% fixed_mmsi) |> group_by(MMSI, version) |>
+    summarise(afe = sum(hours), .groups = "drop") |>
+    pivot_wider(names_from = version, values_from = afe, names_prefix = "afe_"),
+  coh_vp |> filter(MMSI %in% fixed_mmsi) |> group_by(MMSI, version) |>
+    summarise(vp = sum(hours), .groups = "drop") |>
+    pivot_wider(names_from = version, values_from = vp, names_prefix = "vp_"),
+  by = "MMSI") |>
+  mutate(across(starts_with(c("afe_", "vp_")), \(x) coalesce(x, 0))) |>
+  left_join(select(gt_, MMSI, Vessel_Name, basis, gear_old, gear_new), by = "MMSI") |>
+  left_join(select(mt, MMSI, type_old, type_new), by = "MMSI") |>
+  relocate(Vessel_Name, type_old, type_new, gear_old, gear_new, .after = MMSI) |>
+  arrange(desc(.data[[paste0("afe_", v_old)]]))
+fixed_lost <- fixed_vessel |>
+  filter(.data[[paste0("afe_", v_old)]] > 0, .data[[paste0("afe_", v_new)]] == 0)
+
+# Month of year (fixed-gear seasonality)
+fixed_month <- coh_afe |>
+  filter(MMSI %in% fixed_mmsi) |>
+  mutate(month = month(date, label = TRUE)) |>
+  group_by(month, version) |>
+  summarise(afe = sum(hours), .groups = "drop")
+```
+
+```{r bias, include=FALSE}
+# Section 6: does the change differ by stage or by distance from the leases?
+# A change that is uniform cancels out of a Before-After-Gradient contrast;
+# one that differs by stage or band does not. Analysis set of each version
+# (this project's review applied to each version's labels), cohort gear.
+stage_band <- function(d) d |>
+  filter(in_primary) |>
+  left_join(select(cells, cell_id, dist_band), by = "cell_id") |>
+  group_by(version, stage = `Development Stage`, dist_band, cohort_gear) |>
+  summarise(hours = sum(hours), .groups = "drop")
+sb <- bind_rows(stage_band(coh_vp) |> mutate(dataset = "VP"),
+                stage_band(coh_afe) |> mutate(dataset = "AFE"))
+ratio_stage <- sb |>
+  filter(cohort_gear != "UNRESOLVED") |>
+  group_by(dataset, cohort_gear, stage, version) |>
+  summarise(hours = sum(hours), .groups = "drop") |>
+  pivot_wider(names_from = version, values_from = hours, values_fill = 0) |>
+  mutate(pct = pct_change(.data[[v_old]], .data[[v_new]]))
+ratio_band <- sb |>
+  filter(cohort_gear != "UNRESOLVED", dist_band != ">15") |>
+  group_by(dataset, cohort_gear, stage, dist_band, version) |>
+  summarise(hours = sum(hours), .groups = "drop") |>
+  pivot_wider(names_from = version, values_from = hours, values_fill = 0) |>
+  mutate(pct = pct_change(.data[[v_old]], .data[[v_new]]))
+
+# Per-cell AFE change for the map (analysis set, all gears)
+cell_afe <- coh_afe |>
+  filter(in_primary) |>
+  group_by(cell_id, version) |>
+  summarise(hours = sum(hours), .groups = "drop") |>
+  pivot_wider(names_from = version, values_from = hours, values_fill = 0) |>
+  mutate(diff = .data[[v_new]] - .data[[v_old]]) |>
+  left_join(cells, by = "cell_id")
+```
+
+::: {.callout-note appearance="simple"}
+## About this report
+
+This report compares two pulls of Global Fishing Watch (GFW) 4Wings data for
+the same area and period. The first was made on
+`r pull_old$pull_date` from pipeline **`r v_old`**, and the second on
+`r pull_new$pull_date` from pipeline **`r v_new`**. The area is the Ørsted
+area of interest around the South Fork Wind (SFW), Revolution Wind (RWF) and
+Sunrise Wind (SRW) leases off southern New England. The pulls are compared
+with each other and with a vessel-by-vessel review of the `r v_old` data
+made for a study of fishing activity around these wind farms. It is written
+for GFW staff, to report what changed between the two pipelines for a
+small, heavily reviewed fleet, and where the `r v_new` labels and apparent
+fishing hours still disagree with independent evidence.
+:::
+
+# Key findings {#sec-findings}
+
+```{r findings-numbers, include=FALSE}
+# Numbers quoted in the findings, gathered here so the prose stays in step
+# with the data. Inline values never start a line: a number followed by a
+# full stop at the start of a line would make Markdown begin a numbered list.
+fp_status <- status_tab(fp_old); fn_status <- status_tab(fn_old)
+st_n <- \(t, s) sum(t$mmsi[t$status == s])
+fish_mmsi_old <- n_distinct(vp_old$MMSI[vp_old$`Vessel Type` == "FISHING"])
+fish_mmsi_new <- n_distinct(vp_new$MMSI[vp_new$`Vessel Type` == "FISHING"])
+grain_pct <- \(ds, g) grain_tab$pct_old_matched[grain_tab$dataset == ds & grepl(g, grain_tab$grain)]
+
+# analysis-set hours by cohort gear class, old vs new
+gr <- \(g, col) { x <- gear_ratio[gear_ratio$cohort_gear == g, ]
+  pct_change(sum(x[[col]][x$version == v_old]), sum(x[[col]][x$version == v_new])) }
+rs <- \(ds, g, s) ratio_stage$pct[ratio_stage$dataset == ds & ratio_stage$cohort_gear == g &
+                                    ratio_stage$stage == s]
+
+# AFE by year: the largest rise and fall
+afe_year <- by_year |> filter(dataset == "AFE") |> select(year, version, hours) |>
+  pivot_wider(names_from = version, values_from = hours) |>
+  mutate(pct = pct_change(.data[[v_old]], .data[[v_new]]))
+yr_up <- slice_max(afe_year, pct, n = 1); yr_dn <- slice_min(afe_year, pct, n = 1)
+
+# permitted vessels that left FISHING, split by whether the review covers them
+lost_permit <- lost_fishing |> filter(!is.na(permit_group))
+lost_permit_unrev <- lost_permit |> filter(is.na(reviewed_as))
+
+# activity false positives by kind of window
+act_op <- \(op, ver) sum(act$hours[act$Operation == op & act$version == ver])
+# safety vessels' v5 AFE as a share of their v5 VP inside the same windows
+act_share <- 100 * act_op("Safety", v_new) /
+  sum(act_vp$hours[act_vp$Operation == "Safety" & act_vp$version == v_new])
+act_slow <- speed_tab |> filter(set == act_set_label) |>
+  summarise(pct = 100 * sum(.data[[v_new]][speed_kn %in% c("<2", "2-4")]) / sum(.data[[v_new]])) |> pull(pct)
+
+# reviewed gear
+gs <- \(g, ver, col) gear_score[[col]][gear_score$truth_gear == g & gear_score$version == ver]
+n_gear <- \(g) sum(gt_$truth_gear == g)
+
+# % change for one gear × stage × distance band (AFE)
+rb <- \(g, s, b) ratio_band$pct[ratio_band$dataset == "AFE" & ratio_band$cohort_gear == g &
+                                  ratio_band$stage == s & ratio_band$dist_band == b]
+```
+
+1. **AFE fell by `r p1(abs(tv("AFE", "hours", "pct")))` overall, and the
+   change is not the same in every period.** AFE went from
+   `r n0(tv("AFE", "hours", v_old))` to `r n0(tv("AFE", "hours", v_new))` h,
+   and the number of vessels with any AFE fell from
+   `r n0(tv("AFE", "mmsi", v_old))` to `r n0(tv("AFE", "mmsi", v_new))` MMSIs.
+   By year, the change ranges from `r sp1(yr_dn$pct)` in `r yr_dn$year` to
+   `r sp1(yr_up$pct)` in `r yr_up$year`. Mobile-gear AFE for the same
+   vessels changed by `r sp1(rs("AFE", "MOBILE", "Stage 1"))` before
+   offshore wind development (Stage 1), `r sp1(rs("AFE", "MOBILE", "Stage 2"))`
+   in Stage 2 and `r sp1(rs("AFE", "MOBILE", "Stage 3"))` during construction
+   (Stage 3). A change that differs by period biases any before–after
+   comparison (@sec-bias).
+2. **Total vessel presence (VP) hardly changed, but where the hours fall
+   did.** VP hours changed by `r n0(tv("VP", "hours", "change"))` h, which is
+   less than 0.1%. Matched by vessel and day, `r p1(grain_pct("VP", "Vessel-day"))`
+   of v4 VP hours have a v5 counterpart. At the 0.01° cell level, only
+   `r p1(grain_pct("VP", "^Record"))` do. The unmatched hours are scattered
+   along each vessel's track, not shifted by one cell (@sec-recon).
+3. **v5 types far fewer vessels as FISHING, and pole-and-line (for-hire)
+   vessels mostly drop out.** The count of MMSIs typed FISHING went from
+   `r n0(fish_mmsi_old)` to `r n0(fish_mmsi_new)`. Of the
+   `r n0(nrow(lost_fishing))` that left FISHING, most are now PASSENGER, and
+   `r n0(nrow(lost_permit))` hold a federal (GARFO) commercial or for-hire
+   permit. Among the vessels this study counts as fishing, pole-and-line
+   (for-hire) VP falls by `r p1(abs(gr("POLE_AND_LINE", "vp")))` and its AFE
+   by `r p1(abs(gr("POLE_AND_LINE", "afe")))` (@sec-type).
+4. **Non-fishing vessels labelled as fishing are largely fixed.** Of the
+   `r n0(nrow(fp_old))` hulls that our review found were not fishing vessels
+   but v4 typed FISHING, v5 corrects `r n0(st_n(fp_status, "corrected"))`.
+   Most were yachts, sailing vessels and research vessels. The NOAA research
+   trawler *Gloria Michelle* and the hopper dredge *Atchafalaya* are still
+   typed FISHING (@sec-fp).
+5. **Missed fishing vessels are not fixed.** Of the `r n0(nrow(fn_old))`
+   confirmed fishing hulls that v4 typed as non-fishing (mostly PASSENGER or
+   OTHER), v5 types only
+   `r n0(st_n(fn_status, "corrected"))` as FISHING. It also newly mistypes
+   `r n0(nrow(new_err))` reviewed fishing hulls that v4 had right
+   (@sec-fn).
+6. **Gear improves for mobile gear only.** Among `r n0(n_gear("MOBILE"))`
+   reviewed mobile-gear vessels, v5's gear is correct for
+   `r n0(gs("MOBILE", v_new, "mmsi_correct"))`, up from
+   `r n0(gs("MOBILE", v_old, "mmsi_correct"))` in v4. Among
+   `r n0(n_gear("FIXED"))` reviewed fixed-gear vessels it is correct for
+   `r n0(gs("FIXED", v_new, "mmsi_correct"))` and wrong for
+   `r n0(gs("FIXED", v_new, "mmsi_wrong"))`, which v5 gives a mobile or
+   pole-and-line gear. Among
+   `r n0(n_gear("POLE_AND_LINE"))` reviewed pole-and-line vessels it is
+   correct for `r n0(gs("POLE_AND_LINE", v_new, "mmsi_correct"))` (@sec-gearval).
+7. **AFE from fishing vessels chartered for offshore wind work barely
+   changed.** Safety and guard vessels standing by construction log AFE for
+   `r p1(act_share)` of the hours they are present in v5. Their AFE went from
+   `r n0(act_op("Safety", v_old))` to `r n0(act_op("Safety", v_new))` h
+   (`r sp1(pct_change(act_op("Safety", v_old), act_op("Safety", v_new)))`),
+   and `r p1(act_slow)` of the v5 hours are on days with a mean speed under
+   4 kn. AFE on dated survey trips fell further, by
+   `r p1(abs(pct_change(act_op("Survey", v_old), act_op("Survey", v_new))))`
+   (@sec-activity).
+8. **Fixed-gear AFE fell by `r p1(abs(gr("FIXED", "afe")))`, while their VP
+   changed by `r sp1(gr("FIXED", "vp"))`.** These are reviewed and
+   GFW-labelled lobster, crab and gillnet vessels. The fall fits GFW's own
+   list of v5 false negatives. `r n0(nrow(fixed_lost))` reviewed fixed-gear
+   hulls had AFE in v4 and have none in v5 (@sec-fixed).
+
+# Data and methods {#sec-methods}
+
+## The two pulls
+
+```{r pull-table}
+bind_rows(pull_old, pull_new) |>
+  transmute(Pipeline = pipeline, `Pull date` = pull_date,
+            `Query window` = paste(query_start, "to", query_end, "(end excluded)"),
+            `VP dataset` = vp_dataset, `AFE dataset` = afe_dataset,
+            `VP rows (raw)` = as.integer(vp_rows), `AFE rows (raw)` = as.integer(afe_rows)) |>
+  kt()
+```
+
+- **Same request in both.** Both pulls use the same AOI polygon and gfwr
+  `r pull_new$gfwr_version` 4Wings report parameters: 0.01° cells
+  (`spatial_resolution = HIGH`), daily, grouped by `VESSEL_ID`, with the
+  vessel's identity fields. Only the dataset version differs.
+- **How each version was requested.** The `r v_old` pull requested
+  `:latest` on `r pull_old$pull_date`, which then resolved to v4. v4 was
+  still updated daily until it was frozen as `:v4.0` on 2026-10-21. A spot
+  check of June 2024 against `:v4.0` matched record for record. The
+  `r v_new` pull named `:v5.0` explicitly.
+- **Analysis window.** Everything below covers **`r analysis_start` to
+  `r analysis_end`**, the period the study analyses. It is split into three
+  development stages, and the stages appear wherever a change could bias the
+  study:
+
+```{r stages}
+dev_stages |> transmute(Stage = stage, Start = start, End = end, Months = months,
+                        Description = description) |> kt()
+```
+
+- **Joining the two versions.** GFW's `vesselId` is stable between v4 and v5,
+  so records are joined on **Vessel ID × cell × day**. The cell is matched on
+  its lattice index, not on the Lat/Lon text, because the two pulls format
+  coordinates differently: v4 gives `41.25` and v5 gives `41.250000`.
+
+## Reference labels from the hand review
+
+GFW publishes no precision or recall for its vessel classes, so both versions
+are scored against the same independent reference: this study's review of
+`r n0(nrow(ht))` vessels (MMSIs) that have records in the window. Each was
+checked against one or more of the following sources:
+
+- **MarineTraffic** vessel particulars and photographs.
+- **USCG PSIX** (Port State Information Exchange) vessel documentation: service
+  type, length and owner.
+- **NOAA GARFO** (Greater Atlantic Regional Fisheries Office) federal permit
+  lists, 2016–2026. These were matched by vessel name, hull ID and length, and
+  give the permit category (commercial, for-hire, open-access) and the gear
+  each permit allows.
+- **Ørsted records** for the vessels it hired:
+  - survey project and date data that Ørsted provided: trips by commercial
+    fishing vessels, with daily departure and return dates;
+  - safety, guard and scout vessels on the Ørsted–SSNA safety-vessel
+    contract, several of them also named in Appendix A of the SFW
+    protected-species observer and passive acoustic monitoring (PSO/PAM)
+    report for 2024;
+  - a behavioural screen for charter-like vessels, applying the same contract
+    start (2021-05-01).
+- **GFW's own identity and registry records**, including RFMO registries.
+
+The reference has three levels:
+
+| Level | Question | Reference | Count |
+|---|---|---|---|
+| Hull | Is this MMSI a fishing vessel? | Hull class from the review (fishing, non-fishing, gear buoy), plus vessels whose GFW label the reviewer checked and confirmed | `r n0(nrow(ht))` MMSIs |
+| Gear | What gear does it fish? | Gear class from the review (MOBILE, FIXED, POLE_AND_LINE) | `r n0(nrow(gt_))` MMSIs |
+| Activity | Was this fishing hull fishing on this day? | Dated windows of verified non-fishing work: survey trips, safety and guard charters | `r n0(n_distinct(cw$MMSI[cw$activity_excluded]))` MMSIs |
+
+The gear classes group GFW gear codes:
+
+- **MOBILE:** trawlers, dredges, purse seines, trollers and drifting longlines.
+- **FIXED:** set gillnets, pots and traps, set longlines and generic fixed gear.
+- **POLE_AND_LINE:** mostly the recreational for-hire fleet.
+- **UNRESOLVED:** generic `FISHING`, `INCONCLUSIVE` or no gear.
+
+::: {.callout-warning appearance="simple"}
+## The reference favours v5
+
+The vessels were reviewed because **v4** flagged them: screens for missed
+fishing vessels, foreign-flag visits, gear buoys and charter-like behaviour,
+all run on v4 labels. The reference is therefore rich in v4 errors, and it
+says little about vessels v5 newly mislabels. @sec-type shows where those
+are likely, and they have not yet been checked by hand.
+:::
+
+# Reconciliation: do the two pulls line up? {#sec-recon}
+
+## Totals
+
+```{r totals-table}
+tot_wide |>
+  mutate(measure = recode(measure, records = "Records", mmsi = "MMSIs",
+                          vessel_ids = "Vessel IDs", cells = "Cells", hours = "Hours")) |>
+  rename(Dataset = dataset, Measure = measure, Change = change, `% change` = pct) |>
+  kt(digits = c(0, 0, 0, 0, 0, 1))
+```
+
+```{r fig-year, fig.height=4.5}
+#| fig-cap: "Hours per year in each version. VP (left) and AFE (right) have their own y-axis scales."
+ggplot(by_year, aes(year, hours, colour = version)) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2.2) +
+  facet_wrap(~ fct_relevel(dataset, "VP"), scales = "free_y") +
+  scale_colour_manual(values = col_ver) +
+  scale_y_continuous(labels = scales::label_comma()) +
+  scale_x_continuous(breaks = seq(2016, 2026, 2)) +
+  labs(x = NULL, y = "Hours", caption = "2026 runs to 31 August.") +
+  theme_report
+```
+
+AFE by year, with the change from `r v_old` to `r v_new`:
+
+```{r afe-year}
+by_year |>
+  filter(dataset == "AFE") |>
+  select(year, version, hours) |>
+  pivot_wider(names_from = version, values_from = hours) |>
+  mutate(`% change` = pct_change(.data[[v_old]], .data[[v_new]])) |>
+  mutate(year = as.character(year)) |>   # no thousands separator in years
+  rename(Year = year) |>
+  kt(digits = 1)
+```
+
+## How much of each version's hours the other one shares
+
+```{r grain-table}
+grain_tab |>
+  transmute(Dataset = dataset, Grain = grain,
+            !!paste("Keys,", v_old) := keys_old, !!paste("Keys,", v_new) := keys_new,
+            !!paste0("% of ", v_old, " hours on a shared key") := pct_old_matched,
+            !!paste0("% of ", v_new, " hours on a shared key") := pct_new_matched,
+            !!paste0("% of ", v_old, " hours with identical hours") := pct_old_same) |>
+  kt(digits = 1)
+```
+
+The same vessel is present on the same days in both versions. Matched by
+vessel and day, `r p1(grain_tab$pct_old_matched[grain_tab$dataset == "VP" & grepl("Vessel-day", grain_tab$grain)])`
+of `r v_old` VP hours are matched. Within a vessel-day, though, the 0.01°
+cells that receive the hours differ.
+`r p1(100 - grain_tab$pct_old_matched[grain_tab$dataset == "VP" & grepl("^Record", grain_tab$grain)])`
+of `r v_old` VP hours fall in a cell where `r v_new` has no record for that
+vessel on that day. Of those unmatched `r v_old` records,
+`r p1(pct_rec_with_partner)` have an unmatched `r v_new` record for the same
+vessel and day. The distances between them:
+
+```{r offset-table}
+offset_tab |>
+  rename(`Cells apart (nearest unmatched v5 record, same vessel-day)` = cells_apart,
+         Records = n, `%` = pct) |>
+  kt(digits = 1)
+```
+
+A shift of the output grid would put nearly all of these at one cell, in
+one direction. Instead they are spread out and point every way. That fits a
+change in which positions represent the vessel in each hour, such as a
+different thinning or segmentation of the track. **Question for GFW:** is
+this expected, and has the method for assigning presence hours to cells
+changed in v5?
+
+Cell totals over the whole window still agree closely (Pearson r =
+`r sprintf("%.3f", cell_r["VP"])` for VP and `r sprintf("%.3f", cell_r["AFE"])`
+for AFE). Totals over many vessels and days are robust to the change.
+Results for a single vessel-day are not.
+
+# Vessel type relabelling {#sec-type}
+
+## Vessel types in each version
+
+```{r type-sets}
+type_sets |>
+  arrange(desc(.data[[paste0("vp_hours_", v_old)]] + .data[[paste0("vp_hours_", v_new)]])) |>
+  mutate(type = coalesce(type, "(blank)")) |>
+  rename(`Vessel type` = type) |>
+  rename_with(\(n) sub("^mmsi_", "MMSIs ", sub("^vp_hours_", "VP h ", n))) |>
+  kt()
+```
+
+v5 renames `OTHER` to `OTHER_NON_FISHING` and adds `INSUFFICIENT_DATA`
+(`r n0(nrow(insuff))` MMSIs here). `DISCREPANCY`, which v5 removes, did not
+occur in this area in v4. MMSIs typed FISHING fall by a third, while
+PASSENGER and CARGO both gain vessels and hours.
+
+## Transitions
+
+These are the largest type changes per MMSI. Each MMSI takes its most
+frequent label in each version. Hours are `r v_old` hours.
+
+```{r type-transitions}
+type_tr |>
+  filter(from != to) |>
+  slice_max(vp_hours, n = 20) |>
+  transmute(!!paste(v_old, "type") := from, !!paste(v_new, "type") := to, MMSIs = mmsi,
+            `VP hours (v4)` = vp_hours, `AFE hours (v4)` = afe_hours) |>
+  kt()
+```
+
+`r csv_link(type_tr, "type_transitions.csv", "Every type transition")`
+
+## Fishing ↔ non-fishing flips
+
+```{r flips}
+flip_tab |>
+  rename(Direction = direction, `Other type` = type_new, MMSIs = mmsi,
+         `VP h (v4)` = vp_old, `AFE h (v4)` = afe_old,
+         `VP h (v5)` = vp_new, `AFE h (v5)` = afe_new,
+         `With GARFO permit` = with_garfo_permit) |>
+  kt()
+```
+
+Most of the vessels leaving FISHING were seen here only briefly: the median
+is `r n0(median(lost_fishing$vp_old))` VP hours. In v4 they mostly carried a
+weak gear label: POLE_AND_LINE for
+`r n0(sum(lost_fishing$gear_old %in% "POLE_AND_LINE"))`, generic FISHING for
+`r n0(sum(lost_fishing$gear_old %in% "FISHING"))` and INCONCLUSIVE for
+`r n0(sum(lost_fishing$gear_old %in% "INCONCLUSIVE"))`. v5 now types most of
+them PASSENGER. Without a federal permit, many are probably recreational
+boats, so many of these flips may be corrections. However,
+`r n0(nrow(lost_permit))` of these vessels hold a GARFO commercial or
+for-hire fishing permit. They had `r n0(sum(lost_permit$afe_old))` AFE hours
+in v4 and have `r n0(sum(lost_permit$afe_new))` in v5, because v5 computes no
+AFE for vessels it does not type as fishing.
+
+The hand review already covers `r n0(sum(!is.na(lost_permit$reviewed_as)))`
+of the permitted vessels. All of them are fishing hulls, several on survey
+or safety charters (@sec-fn). The other `r n0(nrow(lost_permit_unrev))` have
+not been reviewed. Until they are, they are **candidate** false negatives.
+The full list gives each vessel's labels, permit group, review status and
+hours in both versions:
+
+`r csv_link(lost_fishing, "fishing_to_nonfishing.csv", "Vessels typed FISHING in v4 and not in v5")`
+
+```{r lost-top}
+lost_fishing |>
+  filter(!is.na(permit_group)) |>
+  slice_max(afe_old + vp_old / 100, n = 25) |>
+  transmute(MMSI, Name = Vessel_Name, `v4 type/gear` = paste(type_old, gear_old, sep = " / "),
+            `v5 type` = type_new, `GARFO permit` = permit_group,
+            Reviewed = coalesce(reviewed_as, "not reviewed"), Charter = coalesce(charter, ""),
+            `VP h v4` = vp_old, `AFE h v4` = afe_old, `AFE h v5` = afe_new) |>
+  kt(caption = "The 25 permitted vessels with the most v4 AFE (ties broken by VP)")
+```
+
+## INSUFFICIENT_DATA
+
+```{r insuff}
+insuff_tab |>
+  rename(`v4 type` = type_old, MMSIs = mmsi, `VP h (v5)` = vp_new, `AFE h (v4)` = afe_old) |>
+  kt()
+```
+
+`INSUFFICIENT_DATA` covers vessels with 500 or fewer positions a year, so it
+carries little VP. It also takes in
+`r n0(sum(fn_old$type_new %in% "INSUFFICIENT_DATA"))` vessels this study
+confirmed as fishing hulls (@sec-fn).
+
+# Gear relabelling {#sec-gear}
+
+## Gear codes in each version
+
+For vessels typed FISHING, the number of MMSIs per GFW `Gear Type`:
+
+```{r gear-sets}
+gear_sets |> rename(`Gear Type` = gear) |> kt()
+```
+
+## Transitions among vessels typed FISHING in both versions
+
+```{r gear-transitions}
+gear_tr |>
+  filter(from != to) |>
+  slice_max(afe_hours + vp_hours / 10, n = 20) |>
+  transmute(`v4 gear` = from, `v5 gear` = to, MMSIs = mmsi,
+            `AFE h (v4)` = afe_hours, `VP h (v4)` = vp_hours) |>
+  kt()
+```
+
+The same vessels grouped into this study's gear classes:
+
+```{r class-transitions}
+class_tr |>
+  rename(`v4 class` = class_old, `v5 class` = class_new, MMSIs = mmsi,
+         `VP h (v4)` = vp_old, `AFE h (v4)` = afe_old) |>
+  arrange(desc(`VP h (v4)`)) |>
+  kt()
+```
+
+`r csv_link(gear_tr, "gear_transitions.csv", "Every gear transition (vessels typed FISHING in both)")`
+
+# Validation against the hand review {#sec-validation}
+
+## Hull-level scores in each version
+
+TP is a fishing hull typed FISHING. FP is a non-fishing hull or gear buoy
+typed FISHING. FN is a fishing hull typed as non-fishing. TN is a
+non-fishing hull typed as non-fishing. Each row counts reviewed MMSIs with
+records in that version.
+
+```{r confusion}
+confusion |>
+  mutate(outcome = factor(outcome, c("TP", "FP", "FN", "TN"))) |>
+  arrange(version, outcome) |>
+  rename(Version = version, Outcome = outcome, MMSIs = mmsi,
+         `VP hours` = vp_hours, `AFE hours` = afe_hours) |>
+  kt()
+rates |>
+  transmute(Version = version, `Precision (%)` = precision, `Recall (%)` = recall) |>
+  kt(digits = 1)
+```
+
+These rates hold only for the reviewed set (see the warning in
+@sec-methods). They do **not** estimate GFW's accuracy across the AOI.
+
+## False positives: non-fishing vessels typed FISHING in v4 {#sec-fp}
+
+```{r fp-status}
+status_tab(fp_old) |> rename_status() |> kt()
+```
+
+```{r fp-list}
+fp_old |>
+  transmute(MMSI, Name = Vessel_Name, `Reviewed as` = truth_hull,
+            `v4 type/gear` = paste(type_old, gear_old, sep = " / "),
+            `v5 type/gear` = paste(type_new, gear_new, sep = " / "),
+            `Status` = status, `VP h v4` = vp_old, `VP h v5` = vp_new,
+            `AFE h v4` = afe_old, `AFE h v5` = afe_new,
+            Source = Identified_By, Evidence = evidence_ref) |>
+  kt()
+```
+
+`r csv_link(fp_old, "hull_false_positives_v4.csv")`
+
+## False negatives: fishing vessels v4 typed as non-fishing {#sec-fn}
+
+```{r fn-status}
+status_tab(fn_old) |> rename_status() |> kt()
+fn_old |>
+  count(`v4 type` = type_old, `v5 type` = coalesce(type_new, "(absent)"), name = "MMSIs", sort = TRUE) |>
+  kt()
+```
+
+Most of these hulls were confirmed as fishing vessels by name, hull ID and
+length matches to GARFO commercial or for-hire permits, then checked in
+MarineTraffic and USCG PSIX. The three with the most VP (FLEET QUEEN,
+TRIUNFO and SEA WIND) are fishing hulls on Ørsted safety charters, so their
+work there is not fishing (@sec-activity). The rest fish, and GFW types them
+PASSENGER, OTHER or INSUFFICIENT_DATA. These are the 50 with the most v4 VP
+hours:
+
+```{r fn-list}
+fn_old |>
+  slice_max(vp_old, n = 50, with_ties = FALSE) |>
+  transmute(MMSI, Name = Vessel_Name,
+            `v4 type` = type_old, `v5 type/gear` = paste(type_new, gear_new, sep = " / "),
+            Status = status, `VP h v4` = vp_old, `VP h v5` = vp_new,
+            Source = Identified_By, Evidence = evidence_ref) |>
+  kt()
+```
+
+`r csv_link(fn_old, "hull_false_negatives_v4.csv", "All false negatives in v4, with their v5 labels")`
+
+## New errors in v5 among reviewed vessels
+
+These are vessels whose `r v_old` label the review confirmed, and which
+`r v_new` now labels wrongly. The `OTHER_NON_FISHING` vessels are fishing
+hulls on survey or safety charters. Their v5 type describes their charter
+work, not the hull. Because GFW types the whole vessel and not each day, any
+fishing these vessels do outside their charters gets no AFE in v5. The
+PASSENGER vessels are for-hire boats that the review confirmed as fishing.
+
+```{r new-errors}
+if (nrow(new_err) == 0) asis_output("None.") else
+  new_err |>
+    transmute(MMSI, Name = Vessel_Name, `Reviewed as` = truth_hull,
+              `v4 type/gear` = paste(type_old, gear_old, sep = " / "),
+              `v5 type/gear` = paste(type_new, gear_new, sep = " / "),
+              `v5 outcome` = out_new, `VP h v4` = vp_old, `VP h v5` = vp_new,
+              `AFE h v4` = afe_old, `AFE h v5` = afe_new, Source = Identified_By) |>
+    kt()
+```
+
+## Gear labels {#sec-gearval}
+
+Each reviewed vessel's GFW gear in each version is scored against its
+reviewed gear class. *Unresolved* means GFW gave no specific gear: generic
+`FISHING`, `INCONCLUSIVE`, `INSUFFICIENT_DATA` or a non-fishing type. MMSI
+counts:
+
+```{r gear-score}
+gear_score |>
+  select(`Reviewed class` = truth_gear, Version = version, starts_with("mmsi_")) |>
+  rename_with(\(n) str_to_sentence(sub("mmsi_", "", n)), starts_with("mmsi_")) |>
+  kt()
+```
+
+How each reviewed vessel's gear outcome moved from `r v_old` to `r v_new`:
+
+```{r gear-move}
+gear_move |>
+  rename(`Reviewed class` = truth_gear, `v4` = gout_old, `v5` = gout_new, MMSIs = mmsi) |>
+  kt()
+```
+
+The reviewed fixed-gear vessels and their GFW gear in each version:
+
+```{r gear-fixed-list}
+gt_ |>
+  filter(truth_gear == "FIXED") |>
+  arrange(desc(afe_old + vp_old / 10)) |>
+  transmute(MMSI, Name = Vessel_Name, Basis = basis,
+            `v4 gear` = gear_old, `v5 gear` = gear_new,
+            `v4` = gout_old, `v5` = gout_new,
+            `VP h v4` = vp_old, `AFE h v4` = afe_old, `AFE h v5` = afe_new) |>
+  kt()
+```
+
+`r csv_link(select(gt_, all_of(gear_cols)), "gear_validation.csv", "Every reviewed vessel's gear outcome")`
+
+## Activity false positives: AFE during survey trips and safety charters {#sec-activity}
+
+Several commercial fishing vessels were hired for offshore wind work after
+2020. During that work the hull is a fishing vessel, but it is not fishing.
+
+- **Survey trips** are Ørsted's fisheries monitoring surveys (trawl,
+  ventless trap and others). Each trip is dated day by day in the survey
+  project and date data Ørsted provided, so AFE on those days is a confirmed activity false
+  positive. Some survey gear, such as trawl survey tows, is mechanically
+  fishing. Even so, it is survey work and not commercial effort.
+- **Safety and guard duty** means escorting construction vessels or
+  standing by them. The vessels are those on the Ørsted–SSNA safety-vessel
+  contract, many of them also named in Appendix A of the SFW PSO/PAM report
+  for 2024. A few vessels were added from this study's behavioural screen for
+  charter-like activity, such as long days spent mostly inside the leases.
+  The windows are **contract periods, not dated trips**. Most start at
+  Stage 2 (2020-10-01) or at the Ørsted–SSNA safety-vessel contract
+  (2021-05-01), and PROVIDER's starts on 2020-06-18. All are open-ended. A
+  contracted vessel may still fish on some days inside its window, so these
+  hours are an upper bound on activity false positives. The speed table
+  below suggests that most of them are standby.
+
+```{r activity-table}
+act_tab |>
+  arrange(Operation, `Development Stage`) |>
+  rename(Stage = `Development Stage`,
+         !!paste("AFE h", v_old) := all_of(v_old), !!paste("AFE h", v_new) := all_of(v_new),
+         `VP h (v5)` = vp_hours_new, `% change` = pct) |>
+  kt(digits = 1)
+```
+
+By vessel, with the source of each window:
+
+```{r activity-vessels}
+act_vessel |>
+  rename(Name = Vessel_Name, `v4 type` = type_old, `v5 type` = type_new, Source = Identified_By) |>
+  rename_with(\(n) sub("^afe_", "AFE h ", sub("^vp_", "VP h ", n))) |>
+  kt(digits = 1)
+```
+
+`r csv_link(act_vessel, "activity_false_positives.csv")`
+
+### Speed on days with AFE (v5 only)
+
+v5 adds a presence `speed` field. Each AFE record gets the vessel's
+hours-weighted mean speed on that day, from its v5 VP records. Towing and
+hauling are normally below about 4–5 kn. Vessels holding station or
+drifting on guard duty are below 2 kn. In this table, the
+`r act_set_label` rows are the activity false positives, and the other rows
+are everything else in the analysis set.
+
+In v5, AFE on fishing vessels' ordinary days drops sharply above 6 kn,
+which fits GFW's removal of transit false positives. During charter work,
+however, `r p1(act_slow)` of v5 AFE is below 4 kn, and most of that is
+below 2 kn. Slow standby near a construction site still reads as fishing.
+
+```{r speed-table}
+speed_tab |>
+  rename(Set = set, `Vessel-day mean speed (kn)` = speed_kn,
+         !!paste("AFE h", v_old) := all_of(v_old), !!paste("AFE h", v_new) := all_of(v_new),
+         `% change` = pct) |>
+  kt(digits = 1)
+```
+
+## Fishing false negatives: reviewed fixed-gear vessels {#sec-fixed}
+
+GFW lists fixed gear, pots and traps, set gillnets and set longlines among
+v5's known false negatives. The fixed-gear fleet here is mainly lobster and
+Jonah crab pot boats and gillnetters out of Rhode Island and Massachusetts.
+The table gives AFE and VP for the analysis set of each version (our review
+applied to that version's labels), with gear held at the reviewed class.
+Records in survey and safety-charter windows are left out. VP depends on
+no fishing model, so it is the yardstick. Gear is held at each vessel's
+reviewed class: where a vessel was reviewed, its reviewed gear, otherwise
+GFW's v4 gear class. That way a vessel's hours stay in the same row in both
+versions.
+
+The pole-and-line row is mostly a label effect. v5 types most of the
+for-hire fleet PASSENGER (@sec-type), so those vessels leave the fishing set
+and their VP goes with them.
+
+```{r gear-ratio}
+gear_ratio |>
+  arrange(cohort_gear, version) |>
+  transmute(`Gear class` = cohort_gear, Version = version, `AFE h` = afe,
+            `MMSIs with AFE` = afe_mmsi, `VP h` = vp, `MMSIs with VP` = vp_mmsi,
+            `AFE h per 100 VP h` = afe_per_100_vp) |>
+  kt(digits = 1)
+```
+
+```{r fig-fixed-month, fig.height=4}
+#| fig-cap: "AFE by month of year for reviewed fixed-gear vessels, outside verified non-fishing windows."
+ggplot(fixed_month, aes(month, afe, colour = version, group = version)) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2.2) +
+  scale_colour_manual(values = col_ver) +
+  scale_y_continuous(labels = scales::label_comma()) +
+  labs(x = NULL, y = "AFE hours (2016–2026, summed)") +
+  theme_report
+```
+
+Reviewed fixed-gear vessels with `r v_old` AFE, ordered by `r v_old` AFE:
+
+```{r fixed-list}
+fixed_vessel |>
+  filter(.data[[paste0("afe_", v_old)]] > 0 | .data[[paste0("afe_", v_new)]] > 0) |>
+  rename(Name = Vessel_Name, `v4 type` = type_old, `v5 type` = type_new,
+         `v4 gear` = gear_old, `v5 gear` = gear_new, Basis = basis) |>
+  rename_with(\(n) sub("^afe_", "AFE h ", sub("^vp_", "VP h ", n))) |>
+  kt(digits = 1)
+```
+
+`r csv_link(fixed_vessel, "fixed_gear_vessels.csv")`
+
+# Is the change uniform in time and space? {#sec-bias}
+
+The study compares effort before, during and after construction, at
+distances from the leases (a Before–After–Gradient design). A change
+between versions that is the same everywhere cancels out of those
+contrasts. A change that differs by stage or by distance does not. These
+tables give the `r v_new` vs `r v_old` % change in hours for the analysis
+set, with gear held at the cohort class.
+
+```{r ratio-stage}
+ratio_stage |>
+  select(dataset, cohort_gear, stage, pct) |>
+  pivot_wider(names_from = stage, values_from = pct) |>
+  arrange(desc(dataset), cohort_gear) |>
+  rename(Dataset = dataset, Gear = cohort_gear) |>
+  kt(digits = 1, caption = "% change in hours, v5 vs v4, by stage")
+```
+
+VP barely moves for mobile and fixed gear, as it should when no fishing
+model is involved. AFE does move, and by different amounts in each stage:
+
+- **Mobile-gear AFE** changes by `r sp1(rs("AFE", "MOBILE", "Stage 1"))`,
+  `r sp1(rs("AFE", "MOBILE", "Stage 2"))` and
+  `r sp1(rs("AFE", "MOBILE", "Stage 3"))` in Stages 1 to 3, so it rises most
+  in the earliest years. AIS coverage of this inshore fleet was sparser then,
+  and v5 drops the minimum-position requirement. A plausible explanation is
+  that v5 now classifies positions that v4 left null. GFW may be able to
+  confirm this.
+- **Fixed-gear AFE** falls in every stage: by
+  `r p1(abs(rs("AFE", "FIXED", "Stage 1")))`,
+  `r p1(abs(rs("AFE", "FIXED", "Stage 2")))` and
+  `r p1(abs(rs("AFE", "FIXED", "Stage 3")))` in Stages 1 to 3.
+
+For a before–after design, a change that differs by stage is not neutral.
+Compared with v4, v5 makes mobile-gear effort after construction began look
+lower relative to the baseline, even though the fleet did nothing different.
+
+```{r fig-band, fig.height=6}
+#| fig-cap: "% change in AFE hours (v5 vs v4) by distance band from the nearest lease and stage. Bands with fewer than 20 v4 AFE hours are omitted."
+ratio_band |>
+  filter(dataset == "AFE", .data[[v_old]] >= 20) |>
+  mutate(dist_band = factor(dist_band, c("inside", "0-2", "2-4", "4-8", "8-15"))) |>
+  ggplot(aes(dist_band, pct, colour = stage, group = stage)) +
+  geom_hline(yintercept = 0, colour = "#8a8984", linewidth = 0.4) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2.2) +
+  facet_wrap(~ cohort_gear) +
+  scale_colour_manual(values = c("Stage 1" = "#2a78d6", "Stage 2" = "#eb6834", "Stage 3" = "#1baf7a")) +
+  labs(x = "Distance band (km from nearest lease)", y = "% change in AFE hours") +
+  theme_report
+```
+
+The change also varies with distance from the leases. In Stage 1,
+mobile-gear AFE rises by `r sp1(rb("MOBILE", "Stage 1", "inside"))` inside
+the leases but by `r sp1(rb("MOBILE", "Stage 1", "2-4"))` at 2–4 km. A
+version change that differs inside and outside the leases enters the
+Before–After–Gradient contrast directly.
+
+`r csv_link(ratio_band, "ratio_stage_band.csv", "% change by dataset, gear, stage and distance band")`
+
+```{r fig-map, fig.height=7}
+#| fig-cap: "Change in AFE hours per 0.01° cell (v5 − v4), analysis set, all gears, 2016–2026. Red: fewer hours in v5. The colour scale is capped at the 98th percentile of the absolute change. Outlines: SFW, RWF and SRW lease areas."
+cap <- quantile(abs(cell_afe$diff), 0.98)
+leases_ll <- st_transform(leases, 4326)
+ggplot(cell_afe) +
+  geom_tile(aes(lon, lat, fill = pmax(pmin(diff, cap), -cap)), width = 0.01, height = 0.01) +
+  geom_sf(data = leases_ll, fill = NA, colour = "#0b0b0b", linewidth = 0.4, inherit.aes = FALSE) +
+  scale_fill_gradient2(low = col_loss, mid = col_mid, high = col_gain, midpoint = 0,
+                       limits = c(-cap, cap), name = "AFE h, v5 − v4") +
+  coord_sf(expand = FALSE) +
+  labs(x = NULL, y = NULL) +
+  theme_report + theme(legend.position = "right", legend.title = element_text())
+```
+
+Most of the cells that lose hours are in the north of the area, toward
+Rhode Island Sound and the shallower inshore grounds. Most of the cells
+that gain hours are in the southwest. That pattern fits GFW's note that v5
+misses shallow, near-shore fishing.
+
+# Caveats {#sec-caveats}
+
+- **The reference favours v5.** It was built by reviewing v4's suspected
+  errors, so v4's error rates are overstated relative to v5's. Vessels v5
+  newly mislabels, such as the permitted vessels that left FISHING
+  (@sec-type), are candidates, not confirmed errors.
+- **The v4 data are a snapshot.** They were taken from `:latest` on
+  `r pull_old$pull_date`, before v4 was frozen. Labels for six MMSIs differed
+  in frozen `:v4.0` on the June 2024 spot check. Hours matched.
+- **Safety-charter windows are contract periods.** They are open-ended from
+  each contract's start, so their AFE is an upper bound on activity false
+  positives (@sec-activity). Survey trips are dated day by day.
+- **Hours are as GFW serves them.** Only the review's classifications are
+  applied, and no hours are adjusted.
+- **MMSI is the counting unit.** A shared or reused MMSI can blend two hulls.
+  The review checked for this where it could (by length, name and
+  transmission dates).
+- **Activity windows are complete only for known contracts.** Survey dates
+  cover Ørsted's survey programme through `r survey_dates_through`. Safety
+  windows are open-ended from the contract start. Other operators'
+  charters are not covered.
+
+# Questions for Global Fishing Watch {#sec-questions}
+
+1. **Presence by cell.** Has the way v5 assigns presence hours to 0.01° cells
+   changed (thinning, segmentation)? Within the same vessel-days, the cells
+   that receive the hours differ for
+   `r p1(100 - grain_tab$pct_old_matched[grain_tab$dataset == "VP" & grepl("^Record", grain_tab$grain)])`
+   of v4 VP hours (@sec-recon).
+2. **Permitted fishing vessels typed as non-fishing.** Can vessels that v5 types
+   PASSENGER or INSUFFICIENT_DATA be flagged? For example, through the
+   registry match or through `atomicClassSc` (@sec-type, @sec-fn).
+3. **Fixed gear.** Is there a planned fix or a recommended correction for
+   fixed-gear apparent fishing (pots, gillnets) in near-shore,
+   shallow-water fleets (@sec-fixed)?
+4. **Charter and survey work by fishing vessels.** Would dated lists of
+   offshore wind survey and guard work help as training or evaluation data
+   for activity false positives (@sec-activity)?
+
+# Reproducibility {#sec-repro}
+
+```{r repro}
+commit <- tryCatch(system("git rev-parse --short HEAD", intern = TRUE), error = \(e) NA_character_)
+tibble(Item = c("Repository commit", "Rendered", "R", "gfwr"),
+       Value = c(commit, format(Sys.time(), "%Y-%m-%d %H:%M %Z"), R.version.string,
+                 pull_new$gfwr_version)) |>
+  kt()
+```
+
+Raw 4Wings extracts: `data/raw/gfw/{v4,v5}/`. Review inputs:
+`references/vessel_decisions.csv`, `vessel_gear.csv`, `vessel_removals.csv`,
+`orsted_fv_survey_dates_aug2026.csv`, `vessel_crosswalk_v4.csv` and
+`vessel_permit_groups_v4.csv`. Code: `r/compare_helpers.R` and this file.
+Every table in this report is also written to
+`reports/pipeline_compare/tables/`. GFW data are CC BY-SA 4.0.

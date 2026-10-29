@@ -7,6 +7,9 @@ params:
   pipeline: ""    # GFW pipeline version to render against (r/paths.R); blank = the default
   fishnet: ""     # override the grid output folder (paths$fishnet)
   interim_gfw: "" # override the aggregate-table output folder (paths$interim_gfw)
+  # pipeline versions whose raw VP cells make up the grid, comma-separated
+  # (e.g. "v4,v5"); blank = every pull filed under data/raw/gfw/ (D-069)
+  grid_versions: ""
 ---
 
 ```{r setup, include=FALSE}
@@ -62,6 +65,24 @@ gear class on every record, is in
 The grid itself does not depend on that work, because it is built from the
 cells present in the raw VP data, so run this script first.
 
+### One grid for every pipeline version
+
+The grid is the **union of the VP cells in every GFW pull** filed under
+`data/raw/gfw/` (each pipeline version's folder), not only the pull being
+rendered (decision D-069). GFW reprocesses its history at each pipeline
+release, and the cells returned at the AOI edge differ slightly between
+versions. v4 and v5 each have 4 cells the other lacks, each holding 1–4 VP
+hours and no AFE, all at or just outside the AOI boundary. A shared grid
+gives every version the same cells and the same spatial weights, so their
+tables can be compared cell for cell. A cell with no records in the version
+being rendered is zero-filled, which is the same "GFW served no records
+here" zero as any other empty cell. The aggregates use only the rendered
+version's records. The `in_pulls` column records which pulls have records in
+each cell.
+
+Adding a pull for a new version changes the grid for every version. Re-render
+02 → 05 for each version after a new pull so they stay on the same grid.
+
 ## Plan
 
 1. **Snap coordinates to integer cell indices.** GFW `Lat`/`Lon` mark the
@@ -71,8 +92,9 @@ cells present in the raw VP data, so run this script first.
    `cell_id = "ix_iy"` is the join key from here on; floating-point
    coordinates are never compared. `read_gfw()` in `r/gfw_helpers.R` does
    this for every script.
-2. **Grid = the distinct cells in `gfw_vp_id`.** Every AFE cell must already be
-   among them.
+2. **Grid = the distinct cells in `gfw_vp_id`, across every pull** (see *One
+   grid for every pipeline version*). Every AFE cell must already be among
+   them.
 3. **Build each cell from its lower-left corner** in WGS 84, spanning
    `Lon`–`Lon + 0.01` and `Lat`–`Lat + 0.01`. Corners come from integer
    arithmetic so adjacent cells share bit-identical vertices.
@@ -167,14 +189,43 @@ stopifnot("records with no development stage" =
             !anyNA(vp$`Development Stage`) && !anyNA(afe$`Development Stage`))
 ```
 
-## Grid cells from the VP data
+## Grid cells from the VP data of every pull
 
 ```{r}
-cells <- distinct(vp_pull, cell_id, ix, iy)
+# The pulls whose VP cells make up the grid (D-069): the grid_versions
+# parameter, or every version with a raw pull under data/raw/gfw/. The
+# version being rendered must be one of them, and its own VP file is the one
+# in `paths` (so a raw_vp override still applies); the others are read from
+# their standard locations in r/paths.R.
+grid_versions <- if (exists("params") && nzchar(params$grid_versions %||% "")) {
+  str_trim(str_split_1(params$grid_versions, ","))
+} else {
+  pull_versions(dirname(paths$raw_gfw))
+}
+stopifnot("the rendered pipeline version must be one of grid_versions" =
+            paths$pipeline %in% grid_versions)
 
-stopifnot("AFE has cells absent from the VP grid" =
+vp_files <- set_names(map_chr(grid_versions, \(v) make_gfw_paths(v)$raw_vp), grid_versions)
+vp_files[paths$pipeline] <- paths$raw_vp
+cells <- union_grid_cells(vp_files)
+
+# the union must contain every cell of the rendered pull
+stopifnot("rendered pull has cells missing from the union grid" =
+            all(vp_pull$cell_id %in% cells$cell_id),
+          "AFE has cells absent from the VP grid" =
             all(afe_pull$cell_id %in% cells$cell_id))
+
+# cells contributed by each pull, and those the rendered pull lacks (they are
+# zero-filled in this version's tables)
+count(cells, in_pulls)
+not_in_pull <- cells |> filter(!cell_id %in% vp_pull$cell_id)
+not_in_pull
 ```
+
+The grid combines `r length(grid_versions)` pulls
+(`r paste(grid_versions, collapse = ", ")`) into `r nrow(cells)` cells.
+`r nrow(not_in_pull)` of them have no records in the `r paths$pipeline`
+pull, and their rows in this version's tables are zero.
 
 ## Build cell polygons from the lower-left corner
 

@@ -72,6 +72,52 @@ read_gfw <- function(path) {
       cell_id = sprintf("%d_%d", ix, iy))
 }
 
+# Combined grid across pipeline versions -------------------------------------
+# GFW reprocesses its history at each pipeline release, and the cells a pull
+# returns at the AOI edge differ slightly between versions (v4 and v5 each
+# have 4 one-to-four-hour VP cells the other lacks, all at or just outside the
+# AOI boundary). So that every version's tables and spatial weights share one
+# cell set and can be compared cell for cell, 02 builds the grid from the
+# union of the VP cells in every pull filed under data/raw/gfw/ (decision
+# D-069; planning/gfw_pipeline_v5_plan.qmd, Section 2.2). A cell with no
+# records in one version is zero-filled in that version's tables, the same
+# "GFW served no records here" zero as any other empty cell.
+
+# The pipeline versions that have a raw VP pull under `raw_root` (the parent
+# of paths$raw_gfw, i.e. data/raw/gfw), sorted by version number (v10 after
+# v9). Folders without a gfw_vp_id.csv are not pulls and are skipped.
+pull_versions <- function(raw_root) {
+  files <- Sys.glob(file.path(raw_root, "*", "gfw_vp_id.csv"))
+  versions <- basename(dirname(files))
+  num <- suppressWarnings(as.numeric(sub("^v", "", versions)))
+  versions[order(num, versions)]
+}
+
+# Distinct cells (cell_id, ix, iy) across several raw VP files, with
+# `in_pulls`, the versions whose pull has records in the cell ("v4;v5").
+# `vp_files` is a named vector, version -> path to that version's
+# gfw_vp_id.csv. Only the coordinate columns are needed, so only they are
+# read, to keep memory down on the full pulls.
+union_grid_cells <- function(vp_files) {
+  stopifnot("vp_files must be named by pipeline version" =
+              !is.null(names(vp_files)) && all(nzchar(names(vp_files))))
+  purrr::imap(vp_files, \(f, v) {
+    readr::read_csv(f, col_select = c(Lat, Lon), show_col_types = FALSE,
+                    col_types = readr::cols(.default = readr::col_character())) |>
+      dplyr::distinct() |>
+      # the same lattice snap as read_gfw(): round(), never floor()
+      dplyr::transmute(ix = as.integer(round(as.numeric(Lon) / 0.01)),
+                       iy = as.integer(round(as.numeric(Lat) / 0.01))) |>
+      dplyr::distinct() |>
+      dplyr::mutate(version = v)
+  }) |>
+    purrr::list_rbind() |>
+    dplyr::mutate(cell_id = sprintf("%d_%d", ix, iy)) |>
+    dplyr::group_by(cell_id, ix, iy) |>
+    dplyr::summarise(in_pulls = paste(version, collapse = ";"), .groups = "drop") |>
+    dplyr::arrange(iy, ix)
+}
+
 # Gear classes -------------------------------------------------------------
 # GFW `Gear Type` -> analysis gear class (references/data_dictionary.md)
 

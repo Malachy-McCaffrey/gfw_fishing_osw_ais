@@ -104,3 +104,25 @@ test_that("gfw_4wings_request() keeps gfwr's checks on dates and region", {
   expect_error(gfw_4wings_request("public-global-presence:v5.0", "2020-01-01", "2021-01-01",
                                   sf::st_centroid(test_region()), key = "k"), "sf polygon")
 })
+
+test_that("pull_versions() finds pulls by their VP file and orders by version number", {
+  root <- file.path(tempfile(), "gfw")
+  for (v in c("v10", "v4", "v5")) {
+    dir.create(file.path(root, v), recursive = TRUE)
+    writeLines("x", file.path(root, v, "gfw_vp_id.csv"))
+  }
+  dir.create(file.path(root, "scratch"))          # no VP file: not a pull
+  expect_equal(pull_versions(root), c("v4", "v5", "v10"))
+})
+
+test_that("union_grid_cells() unions cells across pulls and records which pull has each", {
+  # float32-noisy corners must snap to the same cell as clean ones
+  f4 <- write_raw(Lat = c(41.0699999, 41.25), Lon = c(-71.209999, -71.30))
+  f5 <- write_raw(Lat = c("41.070000", "40.990000"), Lon = c("-71.210000", "-71.000000"))
+  u <- union_grid_cells(c(v4 = f4, v5 = f5))
+  expect_equal(nrow(u), 3)
+  expect_equal(u$in_pulls[u$cell_id == "-7121_4107"], "v4;v5")
+  expect_equal(u$in_pulls[u$cell_id == "-7130_4125"], "v4")
+  expect_equal(u$in_pulls[u$cell_id == "-7100_4099"], "v5")
+  expect_error(union_grid_cells(c(f4, f5)), "named by pipeline version")
+})

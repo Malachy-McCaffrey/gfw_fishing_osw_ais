@@ -790,6 +790,7 @@ reachable after April 2027.
 
 1. **Grid:** rebuild the 0.01° grid from the union of v4 and v5 cells (my
    recommendation), or keep the current grid and drop v5-only cells?
+   *Settled 2026-10-29: union of every pull (D-069).*
 2. **Moving v4 data:** move the current files into `v4/` folders, or leave
    them in place as the implicit v4 and put only new pulls in versioned
    folders (less churn, less symmetric)?

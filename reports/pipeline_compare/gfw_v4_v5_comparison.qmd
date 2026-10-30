@@ -441,19 +441,66 @@ vd_speed <- vp_new |>
   group_by(`Vessel ID`, date) |>
   summarise(speed = weighted.mean(speed, hours), .groups = "drop")
 speed_bins <- c(0, 2, 4, 6, 8, 10, Inf)
-act_set_label <- "survey trip or safety charter"
-speed_tab <- bind_rows(cls$afe_old |> mutate(version = v_old),
+# The excluded records split three ways (D-072): dated survey trips, safety
+# charters from a list (the Ørsted contract, the PSO report, operators), and
+# safety charters found only by 03's behavioural screen. Listed safety
+# vessels are the confirmed case; screen-only windows rest on behaviour, so
+# they are shown apart.
+set_levels <- c(survey = "survey trip", listed = "safety charter, listed",
+                screen = "safety charter, behavioural screen only",
+                other  = "fishing hulls, other days")
+speed_rec <- bind_rows(cls$afe_old |> mutate(version = v_old),
                        cls$afe_new |> mutate(version = v_new)) |>
   filter(in_primary | excluded) |>
+  left_join(cw_ops |> select(-Identified_By),
+            by = join_by(MMSI, between(date, w_from, w_to))) |>
   left_join(vd_speed, by = c("Vessel ID", "date")) |>
   mutate(speed_kn = cut(speed, speed_bins, right = FALSE,
                         labels = c("<2", "2-4", "4-6", "6-8", "8-10", ">=10")),
          speed_kn = fct_na_value_to_level(speed_kn, "no v5 VP that day"),
-         set = if_else(excluded, act_set_label, "fishing hulls, other days")) |>
+         set = case_when(
+           !excluded                                        ~ set_levels[["other"]],
+           Operation %in% "Survey"                          ~ set_levels[["survey"]],
+           str_detect(cw_identified_by, "behavioural_screen") &
+             !str_detect(cw_identified_by, regex("orsted|PSO|marinetraffic", ignore_case = TRUE)) ~
+                                                               set_levels[["screen"]],
+           TRUE                                             ~ set_levels[["listed"]]),
+         set = factor(set, levels = set_levels))
+speed_tab <- speed_rec |>
   group_by(set, speed_kn, version) |>
   summarise(afe_hours = sum(hours), .groups = "drop") |>
   pivot_wider(names_from = version, values_from = afe_hours, values_fill = 0) |>
   mutate(pct = pct_change(.data[[v_old]], .data[[v_new]]))
+
+# v5 share of a set's AFE on days below 4 kn (days with a speed only)
+slow_share <- function(sets) {
+  d <- speed_tab |> filter(set %in% sets, speed_kn != "no v5 VP that day")
+  100 * sum(d[[v_new]][d$speed_kn %in% c("<2", "2-4")]) / sum(d[[v_new]])
+}
+# screen-only safety vessels whose v5 window AFE is mostly at fishing speed
+# (less than half below 4 kn, at least 20 h): the speed check's "underway"
+screen_fast <- speed_rec |>
+  filter(version == v_new, set == set_levels[["screen"]], !is.na(speed)) |>
+  group_by(MMSI) |>
+  summarise(h = sum(hours), lt4 = sum(hours[speed < 4]) / h, .groups = "drop") |>
+  filter(h >= 20, lt4 < 0.5)
+n_screen_fast <- nrow(screen_fast)
+screen_fast_sentence <- switch(
+  as.character(pmin(n_screen_fast, 2)),
+  "0" = "None of their vessels has most of its window AFE at fishing speed.",
+  "1" = "One of their vessels has most of its window AFE at fishing speed.",
+  paste(n0(n_screen_fast), "of their vessels have most of their window AFE at fishing speed."))
+# screen-flagged charter windows later dropped after a speed and permit
+# check (D-072): their decision rows record "Charter exclusion ... dropped"
+n_screen_dropped <- decisions |>
+  filter(decision == "accept", str_detect(Identified_By, "behavioural_screen"),
+         str_detect(coalesce(Notes, ""), "^Charter exclusion .* dropped")) |>
+  distinct(MMSI) |> nrow()
+screen_dropped_sentence <- if (n_screen_dropped == 0) "" else paste0(
+  "That is after a speed check added to the study's screen (a vessel at ",
+  "fishing speed is re-checked against its permits before its window is ",
+  "excluded): ", n0(n_screen_dropped), " screen-flagged vessels were found to ",
+  "be ordinary fishing vessels, and their windows were dropped.")
 ```
 
 ```{r fixed, include=FALSE}
@@ -619,8 +666,10 @@ act_op <- \(op, ver) sum(act$hours[act$Operation == op & act$version == ver])
 # safety vessels' v5 AFE as a share of their v5 VP inside the same windows
 act_share <- 100 * act_op("Safety", v_new) /
   sum(act_vp$hours[act_vp$Operation == "Safety" & act_vp$version == v_new])
-act_slow <- speed_tab |> filter(set == act_set_label) |>
-  summarise(pct = 100 * sum(.data[[v_new]][speed_kn %in% c("<2", "2-4")]) / sum(.data[[v_new]])) |> pull(pct)
+# safety charters' v5 AFE below 4 kn (survey work tows gear, so it is left out)
+act_slow   <- slow_share(set_levels[c("listed", "screen")])
+act_slow_l <- slow_share(set_levels[["listed"]])
+act_slow_s <- slow_share(set_levels[["screen"]])
 
 # reviewed gear
 gs <- \(g, ver, col) gear_score[[col]][gear_score$truth_gear == g & gear_score$version == ver]
@@ -1171,14 +1220,21 @@ act_vessel |>
 v5 adds a presence `speed` field. Each AFE record gets the vessel's
 hours-weighted mean speed on that day, from its v5 VP records. Towing and
 hauling are normally below about 4–5 kn. Vessels holding station or
-drifting on guard duty are below 2 kn. In this table, the
-`r act_set_label` rows are the activity false positives, and the other rows
-are everything else in the analysis set.
+drifting on guard duty are below 2 kn. In this table, the survey-trip and
+safety-charter rows are the activity false positives, and the last rows are
+everything else in the analysis set. Safety charters are split by how they
+were identified: from a list (the Ørsted–SSNA safety-vessel contract, the
+PSO report, operators), or only by this study's behavioural screen for
+charter-like activity.
 
 In v5, AFE on fishing vessels' ordinary days drops sharply above 6 kn,
-which fits GFW's removal of transit false positives. During charter work,
-however, `r p1(act_slow)` of v5 AFE is below 4 kn, and most of that is
-below 2 kn. Slow standby near a construction site still reads as fishing.
+which fits GFW's removal of transit false positives. During safety
+charters, however, `r p1(act_slow)` of v5 AFE is below 4 kn, and most of
+that is below 2 kn. Slow standby near a construction site still reads as
+fishing. The listed vessels have `r p1(act_slow_l)` of their window AFE
+below 4 kn, and the screen-only windows `r p1(act_slow_s)`.
+`r screen_fast_sentence` `r screen_dropped_sentence` Survey work tows gear
+or steams between stations, so it is not slow.
 
 ```{r speed-table}
 speed_tab |>

@@ -76,6 +76,43 @@ test_that("charter_screen() flags a lease burst and a lease shift, given enough 
   expect_equal(out$charter_flag, c(TRUE, TRUE, FALSE, FALSE))
 })
 
+test_that("afe_speed_profile() weights day speed by VP hours and splits Stage 3 AFE by speed", {
+  rec <- function(mmsi, date, stage, hours, speed = NULL) {
+    out <- tibble(MMSI = mmsi, date = as.Date(date), `Development Stage` = stage,
+                  hours = hours)
+    if (!is.null(speed)) out$Speed <- as.character(speed)
+    out
+  }
+  # day 1: VP-weighted mean (3 h at 1 kn, 1 h at 5 kn) = 2 kn, so not < 2;
+  # day 2: 1.5 kn; day 3: 6 kn; day 4 has AFE but no VP, so no speed;
+  # the Stage 2 AFE day is outside the profile
+  vp <- bind_rows(rec("367000001", "2024-06-01", "Stage 3", c(3, 1), c(1, 5)),
+                  rec("367000001", "2024-06-02", "Stage 3", 2, 1.5),
+                  rec("367000001", "2024-06-03", "Stage 3", 2, 6),
+                  rec("367000001", "2021-06-01", "Stage 2", 2, 1))
+  afe <- bind_rows(rec("367000001", "2024-06-01", "Stage 3", c(2, 2)),
+                   rec("367000001", "2024-06-02", "Stage 3", 1),
+                   rec("367000001", "2024-06-03", "Stage 3", 5),
+                   rec("367000001", "2024-06-04", "Stage 3", 9),
+                   rec("367000001", "2021-06-01", "Stage 2", 9))
+
+  p <- afe_speed_profile(vp, afe)
+  expect_equal(p$afe_speed_h, 10)            # 4 + 1 + 5; day 4 has no speed
+  expect_equal(p$afe_lt2, 1 / 10)            # day 2 only
+  expect_equal(p$afe_lt4, 5 / 10)            # days 1 and 2
+  expect_equal(p$afe_median_kn, 2)           # median of 2, 1.5 and 6
+  # a pull without the Speed field (v4): no check
+  expect_null(afe_speed_profile(select(vp, -Speed), afe))
+})
+
+test_that("speed_class() sorts vessels by their share of AFE below 4 kn", {
+  screen <- list(speed_min_afe_h = 20, standby_min_lt4 = 0.75, underway_max_lt4 = 0.50)
+  expect_equal(
+    speed_class(afe_speed_h = c(100, 100, 100, 10, NA, 100),
+                afe_lt4     = c(0.95, 0.60, 0.20, 0.95, NA, 0.75), screen),
+    c("standby-like", "mixed", "underway", "too few hours", NA, "standby-like"))
+})
+
 # Phase 2: GARFO matching ---------------------------------------------------
 
 test_that("norm_name() makes vessel names comparable", {

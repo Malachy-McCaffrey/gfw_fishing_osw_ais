@@ -117,8 +117,8 @@ flowchart TD
   Q1 -- "yes" --> X1["Its decision rows only<br/>(section 3)"]
   Q1 -- "no" --> Q2{"Has survey<br/>trips?"}
   Q2 -- "yes" --> Q3{"Operation"}
-  Q3 -- "Survey, or not<br/>on the list" --> SW["One excluded window per<br/>run of overlapping or<br/>consecutive trips"]
-  SW --> SG["Before, between and after<br/>trips: no row, GFW's<br/>label stands"]
+  Q3 -- "Survey, or not<br/>on the list" --> SW["Set and haul days excluded,<br/>one window per run of<br/>consecutive days"]
+  SW --> SG["Soak days, and before,<br/>between and after trips:<br/>no row, GFW's label stands"]
   Q3 -- "Safety" --> Q4
   Q2 -- "no" --> Q4{"Scope"}
   Q4 -- "stages_2_3" --> RS["fishing hull, excluded<br/>from 2020-10-01,<br/>open-ended"]
@@ -136,8 +136,11 @@ flowchart TD
   stays in Primary. The list's `Confidence` column is kept
   only for the archived Python code; the R workflow ignores it.
 - **Survey windows** are charter exclusions (`hull_class = fishing`,
-  `activity_excluded = TRUE`, `Identified_By = orsted_survey_dates`), using
-  the file's Departure and Return Dates as given.
+  `activity_excluded = TRUE`, `Identified_By = orsted_survey_dates`) on the
+  trips' set and haul days only: a trip's Departure Date is the day its gear
+  was set and its Return Date the day it was retrieved, and the soak days in
+  between count as fishing (D-073). Set and haul days on consecutive dates
+  merge into one window.
 - **Survey work only.** The files do not date guard or scout work, so
   `Safety` vessels keep their open-ended removal-list row even when they
   appear in a survey file.

@@ -27,7 +27,7 @@ execute:
 
 ## Status {#sec-status}
 
-As of 2026-10-28. Decision IDs refer to [`planning/decisions.md`](decisions.md).
+As of 2026-10-30. Decision IDs refer to [`planning/decisions.md`](decisions.md).
 
 | Phase | Notebook | Status | Outcome recorded in |
 |---|---|---|---|
@@ -40,10 +40,11 @@ As of 2026-10-28. Decision IDs refer to [`planning/decisions.md`](decisions.md).
 | 6: INLA-SPDE | `12_models_inla.qmd` | Not started | @sec-models |
 | 7: sensitivity | `13_sensitivity.qmd` | Not started | @sec-sensitivity |
 | 8: synthesis | `14_synthesis.qmd` | Not started | @sec-synthesis |
-| Data: GFW pipeline v5 | `01`, then `01a_compare_pipelines.qmd` | **In progress**: versioned layout, v4 roster and the v5 pull (2026-10-28) done; raw-data comparison report for GFW written (`reports/pipeline_compare/`); v5 review session, 02 → 05 on v5 and the adoption decision next | `planning/gfw_pipeline_v5_plan.qmd`; D-053 to D-057, D-062 to D-064, D-068 |
+| Data: GFW pipeline v5 | `01`, then `01a_compare_pipelines.qmd` | **v5 adopted as primary, v4 as sensitivity (2026-10-30, D-070).** Done: versioned layout, v4 roster, the v5 pull (2026-10-28), the combined grid (D-069) with v4's 02 → 05a re-rendered on it (2026-10-30), the comparison report for GFW (`reports/pipeline_compare/`). In progress: the v5 vessel and gear review. Next: 03 → 05 on v5 once the review is finished, then the descriptive BAG on both versions (v5 plan step 9) | `planning/gfw_pipeline_v5_plan.qmd`; D-053 to D-057, D-062 to D-064, D-068 to D-070 |
 
 Every number typed in this plan was measured on the 2026-10-06 pull, which
-is GFW pipeline **v4**. If v5 is adopted (D-053), they are re-measured. The
+is GFW pipeline **v4**. v5 is now the primary version (D-070), so they are
+re-measured once 03 → 05 have been re-rendered on v5. The
 split of this plan into a plan and a methods document waits for that
 decision and for Phase 5 (D-058).
 

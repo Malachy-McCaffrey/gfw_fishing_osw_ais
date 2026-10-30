@@ -46,6 +46,25 @@ test_that("norm_survey_name() normalises Ørsted vessel names", {
                c("HEATHER LYNN", "CAILYN AND MAREN", "ARCH ANGEL"))
 })
 
+test_that("survey_trip_windows() excludes only set and haul days (D-073)", {
+  trip <- \(mmsi, dep, ret, project = "SFW")
+    tibble(MMSI = mmsi, Vessel_Name = "V", Project = project, source_file = "f.csv",
+           dep = as.Date(dep), ret = as.Date(ret))
+  w <- survey_trip_windows(bind_rows(
+    trip("367000001", "2021-05-01", "2021-05-06"),          # set 05-01, haul 05-06
+    trip("367000001", "2021-05-06", "2021-05-11"),          # set on the haul day
+    trip("367000001", "2021-05-12", "2021-05-12", "REV"),   # single day, touches 05-11
+    trip("367000002", "2022-01-03", "2022-01-03")))
+  expect_equal(w$MMSI, c("367000001", "367000001", "367000001", "367000002"))
+  # the soak days 05-02..05-05 and 05-07..05-10 are in no window
+  expect_equal(w$valid_from, c("2021-05-01", "2021-05-06", "2021-05-11", "2022-01-03"))
+  expect_equal(w$valid_to,   c("2021-05-01", "2021-05-06", "2021-05-12", "2022-01-03"))
+  # 05-06 is the first trip's haul and the second's set; 05-11..05-12 merges
+  # the second trip's haul with the single-day trip
+  expect_equal(w$Notes, c("1 survey trip: SFW", "2 survey trips: SFW",
+                          "2 survey trips: REV; SFW", "1 survey trip: SFW"))
+})
+
 test_that("classify() applies crosswalk windows, gear windows and the two sets", {
   records <- tibble(
     MMSI          = c("1", "1", "2", "3", "4", "5"),

@@ -723,3 +723,8 @@ accept,2026-10-29,367451380,,,ALEX MARIE,MOBILE,GFW registry,,FISHING,2026-10-28
 accept,2026-10-29,367460670,,,NORTH CAPE,FIXED,RFMO listing,marinetraffic: set longline,TRAWLERS,2026-10-28,v5,gear class changed since v4: FIXED -> MOBILE
 accept,2026-10-29,368045130,,,MISS FREYA,FIXED,GARFO permit,GARFO hull 1114679; permit 410605,FISHING,2026-10-28,v5,GFW gear unresolved; gear class changed since v4: FIXED -> UNRESOLVED
 accept,2026-10-29,368284160,,,BENTHIC HARVESTER,FIXED,GARFO permit,GARFO hull 538431; permit 410639,TRAWLERS,2026-10-28,v5,GARFO permits disagree with GFW gear; gear class changed since v4: FIXED -> MOBILE
+accept,2026-10-30,338419562,,,KARENB,POLE_AND_LINE,marinetraffic,MarineTraffic,FISHING,2026-10-28,v5,"Fishing vessel per MarineTraffic; no call sign, no IMO and no GARFO match, so no permit gear. GFW gear OTHER (v4), FISHING (v5)"
+reject,2026-10-30,367327960,,,SANDRA JANE,,,,TRAWLERS,2026-10-28,v5,"MarineTraffic gear dredge; GFW gear TRAWLERS in v4 and v5, same class (MOBILE)"
+reject,2026-10-30,368361590,,,Tradition,,,,TRAWLERS,2026-10-28,v5,"MarineTraffic gear dredge; GFW gear TRAWLERS in v4 and v5, same class (MOBILE)"
+reject,2026-10-30,368128790,,,Gulf Stream,,,,TRAWLERS,2026-10-28,v5,"MarineTraffic gear dredge; GFW gear TRAWLERS in v4 and v5, same class (MOBILE)"
+accept,2026-10-30,338350046,,,Argo,FIXED,marinetraffic,SET GILLNETS,FISHING,2026-10-28,v5,"MarineTraffic gear set gillnets (now named CAROLINER, NC); GFW gear SET_GILLNETS in v4, FISHING in v5"

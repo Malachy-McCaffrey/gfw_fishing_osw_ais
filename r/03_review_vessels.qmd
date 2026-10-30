@@ -155,6 +155,11 @@ screen <- list(
   min_lease_share  = 0.25, # charter screen: share of hours inside SFW/RWF/SRW
   max_prior_hours  = 0,    # charter screen: Stage 1-2 hours for a "no history" burst
   min_lease_shift  = 0.25, # charter screen: rise in lease share, Stage 1-2 to 3
+  # charter speed check (v5 pulls on; D-072): share of Stage 3 AFE hours on
+  # days with a mean speed below 4 kn, and the least AFE to judge it on
+  speed_min_afe_h  = 20,   # speed check: fewer AFE hours with a speed -> "too few hours"
+  standby_min_lt4  = 0.75, # speed check: at least this share below 4 kn -> "standby-like"
+  underway_max_lt4 = 0.50, # speed check: less than this share below 4 kn -> "underway"
   fp_max_days      = 30,   # FP screen: short foreign-flag visit, active days
   fp_min_h_day     = 12,   # FP screen: hours per active day
   length_tolerance = 0.15, # GARFO vs GFW registry length agreement (share)
@@ -235,8 +240,11 @@ website), and record the check in `evidence_ref`. The crosswalk is built as:
 - **Survey-date rows.** Ørsted's survey trip lists
   (`references/orsted_fv_survey_dates_*.csv`) give the actual survey dates.
   Each vessel name is mapped to an MMSI through
-  `references/orsted_survey_vessels.csv`, and a vessel's trips that overlap
-  or touch are merged into one window (Departure to Return Date, as given).
+  `references/orsted_survey_vessels.csv`. A trip's Departure Date is the day
+  its gear was set and its Return Date the day it was retrieved, so only
+  those two days are excluded; the soak days between them count as fishing
+  (D-073). A vessel's set and haul days on consecutive dates are merged into
+  one window.
   For each survey vessel these windows replace its open-ended removal-list
   row, so its records between surveys -- and before its first listed trip --
   count as fishing. The files cover trips through `survey_dates_through`
@@ -373,6 +381,21 @@ if (!is.null(roster_chk)) {
 
 ```{r}
 profiles <- profile_mmsi(vp, afe, cell_lease, gfw_labels)
+
+# speed check for the charter screen (D-072): v5 pulls on only. A vessel
+# with no Stage 3 AFE on a day with a speed gets 0 hours ("too few hours");
+# on a pull without speed every column stays NA and the check is skipped.
+speed_prof <- afe_speed_profile(vp, afe)
+profiles <- if (is.null(speed_prof)) {
+  message("No Speed field in this pull: the charter speed check is skipped")
+  mutate(profiles, afe_speed_h = NA_real_, afe_lt2 = NA_real_, afe_lt4 = NA_real_,
+         afe_median_kn = NA_real_)
+} else {
+  profiles |>
+    left_join(speed_prof, by = "MMSI") |>
+    mutate(afe_speed_h = coalesce(afe_speed_h, 0))
+}
+profiles <- mutate(profiles, speed_class = speed_class(afe_speed_h, afe_lt4, screen))
 
 nrow(profiles)
 ```
@@ -562,7 +585,13 @@ Each list excludes vessels already in the crosswalk or in the decisions file.
 2. **Charter activity** -- typed FISHING with a lease-concentrated Stage 3:
    either no Stage 1–2 history (a burst), or a lease share that rose from
    Stages 1–2 to Stage 3 (catches established vessels that took a charter, the
-   *Virginia Wave* blind spot).
+   *Virginia Wave* blind spot). On pulls with a speed field (v5 on), each
+   candidate also gets a **speed check** (D-072): the share of its Stage 3
+   AFE on days with a mean speed below 2 and 4 kn, and a `speed_class`.
+   Safety and guard vessels standing by a construction site are slow
+   (`standby-like`); a fishing vessel that simply works the lease areas tows
+   at fishing speed (`underway`). The flag rule is unchanged, so the screen
+   still finds every candidate; the speed check informs the decision.
 3. **Non-fishing vessels typed FISHING** -- research or survey names, short
    intense foreign-flag visits, or foreign-flag vessels whose gear is
    unresolved (`INCONCLUSIVE` in v4; generic `FISHING` and the rest of the
@@ -652,7 +681,11 @@ candidates <- bind_rows(cand_missed, cand_charter, cand_nonfishing, cand_marker,
          gfw_gear_type, vp_hours, s1, s2, s3, afe_hours, days, h_day,
          lease_share, lease_share_s12, lease_share_s3, s3_lease_first,
          s3_lease_last, first, last, any_of(c("burst", "shift", "afe_hours_old")),
+         afe_speed_h, afe_lt2, afe_lt4, afe_median_kn, speed_class,
          starts_with("garfo_"), hull_is_uscg) |>
+  # the speed check is for charter candidates only (D-072)
+  mutate(across(c(afe_speed_h, afe_lt2, afe_lt4, afe_median_kn, speed_class),
+                \(x) if_else(list == "2_charter_activity", x, NA))) |>
   arrange(list, desc(vp_hours))
 
 candidates |>
@@ -683,6 +716,21 @@ screen_recall |>
 screen_recall |>
   filter(!charter_flag) |>
   select(MMSI, names, s1, s2, s3, lease_share, lease_share_s12, lease_share_s3)
+
+# the speed check's calibration, re-checked on every run with speed (D-072):
+# confirmed safety vessels should be standby-like. The profile covers all of
+# Stage 3, not only the charter window, so a vessel that also fished in
+# Stage 3 can come out mixed. Survey vessels are left out: survey work tows
+# gear or steams between stations, so it is not slow.
+if (!all(is.na(profiles$speed_class))) {
+  safety_mmsi <- cw |>
+    filter(activity_excluded, str_detect(coalesce(Operation, ""), regex("safety", ignore_case = TRUE))) |>
+    distinct(MMSI)
+  profiles |>
+    semi_join(orsted_charters, by = "MMSI") |>
+    semi_join(safety_mmsi, by = "MMSI") |>
+    count(speed_class, name = "safety_vessels")
+}
 ```
 
 ### Gear review candidates
@@ -914,7 +962,7 @@ that cannot be verified.
 | GFW registry lists fishing gear on a record whose MMSI or call sign matches AIS (list 1) | `fishing` | MarineTraffic MMSI search shows a fishing vessel |
 | On an RFMO vessel list, e.g. ICCAT, whatever the registry type (list 1) | `fishing` | A US ICCAT listing covers HMS Angling (private recreational) as well as Charter/Headboat; the MarineTraffic photo separates sport fishing boats from motor yachts |
 | Unique or length-resolved GARFO match, permit years overlap (list 1) | `fishing` | The AIS vessel is the GARFO hull: PSIX call sign for the hull ID matches AIS, or the MarineTraffic MMSI search agrees. A PSIX hull lookup alone shows only that the hull is a fishing vessel |
-| Charter burst, or a lease-share rise (list 2) | exclusion | Charter dates from Ørsted or the operator |
+| Charter burst, or a lease-share rise (list 2) | exclusion | Charter dates from Ørsted or the operator. On v5 pulls, read `speed_class` first (D-072). `standby-like`: fits safety or guard work (`Operation` is pre-filled `Safety`). `underway`: most of its Stage 3 AFE is at fishing speed, as for NICHOLAS C, a trawler the screen flagged for working the leases. Check its GARFO permits and MarineTraffic, and without charter evidence accept it as `fishing` with `activity_excluded` FALSE and no window |
 | GFW registry lists non-fishing gear, or name or behaviour only (list 3) | `non_fishing` | MarineTraffic MMSI search; a unique GARFO match is noted as contrary evidence |
 | Battery-level call sign (list 4) | `gear_marker` | |
 | MMSI not 9 digits only (list 4) | `unknown` | Whether it is a vessel |
@@ -930,7 +978,10 @@ next run, since GFW's gear for it is unresolved.
 ```{r}
 evidence_cols <- c("list", "reason", "names", "flag", "call_sign", "vp_hours",
                    "s1", "s2", "s3", "afe_hours", "h_day", "lease_share",
-                   "lease_share_s12", "lease_share_s3", "reg_records",
+                   "lease_share_s12", "lease_share_s3",
+                   # charter speed check (D-072; v5 pulls on)
+                   "speed_class", "afe_speed_h", "afe_lt2", "afe_lt4", "afe_median_kn",
+                   "reg_records",
                    "reg_sources", "reg_gear", "gfw_combined", "reg_length_m",
                    "garfo_class", "garfo_hull_id", "hull_is_uscg",
                    "garfo_permits", "garfo_years", "garfo_length_ft",
@@ -1106,7 +1157,9 @@ review <- assessed |>
                          as.character(s3_lease_first), NA_character_),
     valid_to   = if_else(list == "2_charter_activity",
                          as.character(s3_lease_last), NA_character_),
-    Operation  = NA_character_,
+    # a standby-like charter candidate is suggested as safety work (D-072)
+    Operation  = if_else(list == "2_charter_activity" & speed_class %in% "standby-like",
+                         "Safety", NA_character_),
     Identified_By = case_when(
       list == "1_missed_fishing" & reg_fishing              ~ "gfw_registry",
       list == "1_missed_fishing" & reg_rfmo                 ~ "gfw_registry_rfmo",
@@ -1148,11 +1201,23 @@ review <- assessed |>
           hms_chb & garfo_support ~ "GARFO HMS Charter/Headboat permit: for-hire",
           hms_chb ~ "a GARFO hull with this name holds an HMS Charter/Headboat permit",
           TRUE    ~ "no GARFO HMS Charter/Headboat match: may be HMS Angling (private recreational)")),
+        ""),
+      # the charter speed check (D-072), on pulls with speed
+      if_else(list == "2_charter_activity" & !is.na(speed_class), paste0(
+        ". Speed check: ", speed_class, " (", round(100 * coalesce(afe_lt4, 0)),
+        "% of ", round(afe_speed_h), " Stage 3 AFE h on days < 4 kn, ",
+        round(100 * coalesce(afe_lt2, 0)), "% < 2 kn; median ",
+        round(afe_median_kn, 1), " kn)",
+        if_else(speed_class %in% "underway",
+                ". Check GARFO permits before accepting an exclusion", "")),
         ""))) |>
   # within each list: GFW registry evidence first, then RFMO listings, then
   # GARFO hulls PSIX ties to the AIS call sign, then by hours; list 5 by its
-  # fishing-effort hours in the previous version
-  arrange(list, desc(coalesce(afe_hours_old, 0)),
+  # fishing-effort hours in the previous version. Charter candidates (list 2)
+  # come standby-like first, then mixed, too few hours and underway (D-072).
+  mutate(speed_rank = coalesce(match(speed_class, c("standby-like", "mixed",
+                                                    "too few hours", "underway")), 0L)) |>
+  arrange(list, desc(coalesce(afe_hours_old, 0)), speed_rank,
           desc(reg_fishing), desc(reg_rfmo),
           desc(psix_link %in% "match"), desc(vp_hours)) |>
   mutate(across(where(is.numeric), \(x) round(x, 3))) |>

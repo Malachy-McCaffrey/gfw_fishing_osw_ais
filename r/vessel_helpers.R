@@ -166,6 +166,40 @@ validate_gear <- function(gear_inputs, source = "the gear file") {
 # matched to orsted_survey_vessels.csv
 norm_survey_name <- function(x) str_squish(str_remove(toupper(x), "^F/?V\\s+"))
 
+# Excluded survey windows from Ørsted survey trips (one row per trip and
+# vessel: MMSI, Vessel_Name, Project, dep, ret as Dates, source_file). A trip's
+# Departure Date is the day its gear was set and its Return Date the day it was
+# retrieved; the gear soaks in between, so only those two days are survey work
+# and the vessel's records on the days between count as fishing (D-073). The set and
+# haul days of all a vessel's trips are pooled (a haul and the next set often
+# share a day), and each run of consecutive days becomes one window, so no day
+# that is not a set or haul day is ever inside a window. Notes count the trips
+# whose set or haul days fall in the window.
+survey_trip_windows <- function(trips) {
+  # each trip as its set day and its haul day (one day when they coincide)
+  trip_days <- bind_rows(
+    transmute(trips, MMSI, Vessel_Name, Project, source_file, trip = row_number(), date = dep),
+    transmute(trips, MMSI, Vessel_Name, Project, source_file, trip = row_number(), date = ret)
+  ) |>
+    distinct()
+
+  trip_days |>
+    arrange(MMSI, date) |>
+    group_by(MMSI, Vessel_Name) |>
+    # a new window starts on any day more than one day after the previous one
+    mutate(window = cumsum(as.numeric(date) > lag(as.numeric(date), default = -Inf) + 1)) |>
+    group_by(MMSI, Vessel_Name, window) |>
+    summarise(valid_from = min(date), valid_to = max(date), trips = n_distinct(trip),
+              projects = paste(sort(unique(na.omit(Project))), collapse = "; "),
+              evidence_ref = paste(sort(unique(source_file)), collapse = "; "),
+              .groups = "drop") |>
+    transmute(MMSI, Vessel_Name,
+              valid_from = as.character(valid_from), valid_to = as.character(valid_to),
+              evidence_ref,
+              Notes = paste0(trips, if_else(trips == 1, " survey trip", " survey trips"),
+                             if_else(projects == "", "", paste0(": ", projects))))
+}
+
 # The crosswalk, as character columns in cw_cols order, from the removal list,
 # the Ørsted survey-date files and the accepted decisions. Precedence: a
 # decision replaces survey-date and removal-list rows; survey-date rows replace
@@ -224,23 +258,9 @@ build_crosswalk <- function(paths, decisions, gfw_labels, pull_date) {
             paste(kept_open, collapse = ", "))
   }
 
-  # one window per run of overlapping or touching trips
   survey_windows <- survey_trips |>
     filter(MMSI %in% survey_mmsi) |>
-    arrange(MMSI, dep) |>
-    group_by(MMSI, Vessel_Name) |>
-    mutate(window = cumsum(as.numeric(dep) >
-                             lag(cummax(as.numeric(ret)), default = -Inf) + 1)) |>
-    group_by(MMSI, Vessel_Name, window) |>
-    summarise(valid_from = min(dep), valid_to = max(ret), trips = n(),
-              projects = paste(sort(unique(na.omit(Project))), collapse = "; "),
-              evidence_ref = paste(sort(unique(source_file)), collapse = "; "),
-              .groups = "drop") |>
-    transmute(MMSI, Vessel_Name,
-              valid_from = as.character(valid_from), valid_to = as.character(valid_to),
-              evidence_ref,
-              Notes = paste0(trips, if_else(trips == 1, " survey trip", " survey trips"),
-                             if_else(projects == "", "", paste0(": ", projects))))
+    survey_trip_windows()
 
   survey_rows <- survey_windows |>
     mutate(hull_class = "fishing", activity_excluded = "TRUE", Operation = "Survey",

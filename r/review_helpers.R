@@ -261,6 +261,64 @@ charter_screen <- function(p, screen) {
            charter_flag = s3 >= screen$min_s3_hours & (burst | shift))
 }
 
+# Speed check for the charter screen (decision 2026-10-30, D-072). Safety
+# and guard vessels standing by a construction site log AFE while holding
+# station or drifting, so their AFE days are slow; a fishing vessel that
+# simply works the lease areas tows at fishing speed. Only pulls from GFW
+# pipeline v5 on have the presence `Speed` field (the mean speed, in knots,
+# of a vessel-cell-day), so on a v4 pull this returns NULL and the check is
+# skipped.
+#
+# One row per MMSI with AFE in `stage`:
+#   afe_speed_h    AFE hours on days that have a speed (VP records that day)
+#   afe_lt2        share of those hours on days with a mean speed < 2 kn
+#   afe_lt4        share on days < 4 kn
+#   afe_median_kn  median day speed over its AFE days
+# A day's speed is the VP-hours-weighted mean of its records' `Speed`, the
+# same measure as the pipeline comparison report's speed table.
+afe_speed_profile <- function(vp, afe, stage = "Stage 3") {
+  if (!"Speed" %in% names(vp)) return(NULL)
+
+  day_speed <- vp |>
+    filter(!is.na(MMSI), hours > 0) |>
+    mutate(speed = suppressWarnings(as.numeric(Speed))) |>
+    filter(!is.na(speed)) |>
+    group_by(MMSI, date) |>
+    summarise(speed = weighted.mean(speed, hours), .groups = "drop")
+
+  afe |>
+    filter(!is.na(MMSI), `Development Stage` %in% stage) |>
+    group_by(MMSI, date) |>
+    summarise(afe = sum(hours), .groups = "drop") |>
+    inner_join(day_speed, by = c("MMSI", "date")) |>
+    group_by(MMSI) |>
+    summarise(afe_speed_h   = sum(afe),
+              afe_lt2       = sum(afe[speed < 2]) / afe_speed_h,
+              afe_lt4       = sum(afe[speed < 4]) / afe_speed_h,
+              afe_median_kn = median(speed),
+              .groups = "drop")
+}
+
+# The speed check's verdict for each vessel, from afe_speed_profile()'s
+# columns and 03's thresholds (screen$speed_min_afe_h, screen$standby_min_lt4,
+# screen$underway_max_lt4):
+#   standby-like   most AFE on slow days, as for the listed safety vessels
+#   underway       most AFE at fishing or transit speed: check the vessel's
+#                  GARFO permits before accepting a charter exclusion
+#   mixed          in between
+#   too few hours  too little AFE with a speed to judge
+#   NA             no speed in the pull (v4), so no check
+# The thresholds were set on the v5 pull: every Ørsted-listed safety vessel
+# with at least 20 Stage 3 AFE h in its window had >= 77% of it on days
+# below 4 kn, against 59% for ordinary mobile-gear AFE.
+speed_class <- function(afe_speed_h, afe_lt4, screen) {
+  case_when(is.na(afe_speed_h)                      ~ NA_character_,
+            afe_speed_h < screen$speed_min_afe_h     ~ "too few hours",
+            afe_lt4 >= screen$standby_min_lt4        ~ "standby-like",
+            afe_lt4 <  screen$underway_max_lt4       ~ "underway",
+            TRUE                                     ~ "mixed")
+}
+
 # Phase 3: evidence caches --------------------------------------------------
 
 # Append rows to a cache CSV, creating it (with a header) on first write.

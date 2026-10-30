@@ -720,7 +720,13 @@ non-fishing activity by fishing hulls:
 - **Speed check** (v5 VP `speed`): AFE hours on vessel-days with mean speed
   in transit range (e.g. > 6–7 kn for trawlers, gear-specific) are FP
   candidates. Only v5 has speed, but the v4 hours can be joined onto it by
-  record key.
+  record key. *Done in the comparison report (speed table, Section 6.6.1).
+  It showed the reverse case too: low speed marks standby. Since 2026-10-30
+  (D-072), 03's charter screen uses it on v5 pulls. Each list-2 candidate
+  gets the share of its Stage 3 AFE on days below 2 and 4 kn and a
+  `speed_class` (`standby-like` / `underway` / `mixed` / `too few hours`),
+  calibrated on the Ørsted-listed safety vessels. Applied to the existing
+  screen-only charters, it sent four fishing-speed vessels back for review.*
 - **Port / near-shore**: AFE hours in cells within a few km of shore or
   harbours (if the AOI reaches them). Expect v5 to drop these.
 
@@ -775,7 +781,7 @@ report v4 as a sensitivity. If it is not, report the affected dataset × gear
 | 2 | Add the version parameter to `paths.R` (+ tests) and move existing data into `v4/` folders | Claude (code) + you (data move) | `quarto render r/ -P pipeline:v4` must reproduce current outputs |
 | 3 | Add `gfw_4wings_pinned()` and the `pull_info` columns; parameterise `01` | Claude | — |
 | 4 | Pull `:v5.0` → `data/raw/gfw/v5/` (the `:v4.0` re-pull was dropped, D-063) | you (API token) | `quarto render r/01_pull_gfw.qmd -P pipeline:v5 -P dataset_version:v5.0` |
-| 5 | Version-aware identity cache, extended `parse_identity()`, 03 screen tweaks, roster check (Section 3.6, Part B) | Claude | — |
+| 5 | Version-aware identity cache, extended `parse_identity()`, 03 screen tweaks, roster check (Section 3.6, Part B); charter-screen speed check added 2026-10-30 (D-072) | Claude | — |
 | 6 | Render `01a_compare_pipelines.qmd`, sections 4.1–4.2 (raw only) | Claude | update `gear_class_map` from the real label set |
 | 7 | Run 03 on v5 with APIs on; auto-resolve gear; review list 5 (v4 label changes), the gear residual and the v5-triggered sample | you | review session |
 | 8 | Add the 04 roster gate (Section 3.6, Part C); render 02 (union grid) → 04 → 05 for both versions. The v5 render of 04 must pass the gate. | both | — |

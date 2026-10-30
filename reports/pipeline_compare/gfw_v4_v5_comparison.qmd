@@ -582,6 +582,37 @@ yr_up <- slice_max(afe_year, pct, n = 1); yr_dn <- slice_min(afe_year, pct, n = 
 # permitted vessels that left FISHING, split by whether the review covers them
 lost_permit <- lost_fishing |> filter(!is.na(permit_group))
 lost_permit_unrev <- lost_permit |> filter(is.na(reviewed_as))
+lost_permit_fish  <- sum(lost_permit$reviewed_as %in% "fishing")
+lost_permit_non   <- sum(lost_permit$reviewed_as %in% c("non_fishing", "gear_marker"))
+
+# reviewed vessels whose truth was checked against the new version's labels
+# (the roster check of v4 fishing vessels v5 retyped, D-064), which partly
+# offsets the reference's tilt towards v4 errors
+rev_new <- grepl(v_new, ht$truth_pipeline) & grepl("roster_check", ht$Identified_By)
+n_rev_new <- sum(rev_new)
+n_rev_new_err <- sum(rev_new & ht$out_new %in% c("FP", "FN"))
+
+# The vessels v5 newly types FISHING (v4 typed them something else, or has no
+# records for them): the pool where v5's new false positives would be. Each
+# was checked by hand (MarineTraffic, PSIX, online search) after the v5 pull;
+# out_new is NA for any that has no reviewed hull class yet.
+new_fish <- mt |>
+  filter(fishing_new, !fishing_old) |>
+  left_join(select(ht, MMSI, out_new), by = "MMSI")
+n_new_fish     <- nrow(new_fish)
+n_new_fish_rev <- sum(!is.na(new_fish$out_new))
+n_new_fish_fp  <- sum(new_fish$out_new %in% "FP")
+# "all 15" when every one was reviewed, "12 of the 15" otherwise
+new_fish_checked <- if (n_new_fish_rev == n_new_fish) {
+  paste("all", n0(n_new_fish))
+} else {
+  paste(n0(n_new_fish_rev), "of the", n0(n_new_fish))
+}
+
+# a closing sentence about permitted vessels not yet reviewed, or nothing
+unrev_sentence <- if (nrow(lost_permit_unrev) == 0) "" else sprintf(
+  "The other %s have not been reviewed. Until they are, they are **candidate** false negatives.",
+  n0(nrow(lost_permit_unrev)))
 
 # activity false positives by kind of window
 act_op <- \(op, ver) sum(act$hours[act$Operation == op & act$version == ver])
@@ -623,7 +654,8 @@ rb <- \(g, s, b) ratio_band$pct[ratio_band$dataset == "AFE" & ratio_band$cohort_
    `r n0(fish_mmsi_old)` to `r n0(fish_mmsi_new)`. Of the
    `r n0(nrow(lost_fishing))` that left FISHING, most are now PASSENGER, and
    `r n0(nrow(lost_permit))` hold a federal (GARFO) commercial or for-hire
-   permit. Among the vessels this study counts as fishing, pole-and-line
+   permit. The hand review confirms `r n0(lost_permit_fish)` of those as
+   fishing hulls. Among the vessels this study counts as fishing, pole-and-line
    (for-hire) VP falls by `r p1(abs(gr("POLE_AND_LINE", "vp")))` and its AFE
    by `r p1(abs(gr("POLE_AND_LINE", "afe")))` (@sec-type).
 4. **Non-fishing vessels labelled as fishing are largely fixed.** Of the
@@ -636,7 +668,7 @@ rb <- \(g, s, b) ratio_band$pct[ratio_band$dataset == "AFE" & ratio_band$cohort_
    confirmed fishing hulls that v4 typed as non-fishing (mostly PASSENGER or
    OTHER), v5 types only
    `r n0(st_n(fn_status, "corrected"))` as FISHING. It also newly mistypes
-   `r n0(nrow(new_err))` reviewed fishing hulls that v4 had right
+   `r n0(sum(new_err$out_new == "FN"))` reviewed fishing hulls that v4 had right
    (@sec-fn).
 6. **Gear improves for mobile gear only.** Among `r n0(n_gear("MOBILE"))`
    reviewed mobile-gear vessels, v5's gear is correct for
@@ -745,9 +777,14 @@ The gear classes group GFW gear codes:
 
 The vessels were reviewed because **v4** flagged them: screens for missed
 fishing vessels, foreign-flag visits, gear buoys and charter-like behaviour,
-all run on v4 labels. The reference is therefore rich in v4 errors, and it
-says little about vessels v5 newly mislabels. @sec-type shows where those
-are likely, and they have not yet been checked by hand.
+all run on v4 labels. The reference is therefore rich in v4 errors. One
+part of it was checked against v5: `r n0(n_rev_new)` vessels that v4 typed
+FISHING and v5 retyped, which v5's labels get wrong in
+`r n0(n_rev_new_err)` cases. The vessels v5 newly types FISHING were also
+checked (`r new_fish_checked`), and `r n0(n_new_fish_fp)` of them is not a
+fishing vessel. That partly offsets the tilt. Vessels that v5 moved between
+non-fishing labels, and most of the v4 fishing vessels it retyped, have not
+been looked at.
 :::
 
 # Reconciliation: do the two pulls line up? {#sec-recon}
@@ -887,12 +924,13 @@ for-hire fishing permit. They had `r n0(sum(lost_permit$afe_old))` AFE hours
 in v4 and have `r n0(sum(lost_permit$afe_new))` in v5, because v5 computes no
 AFE for vessels it does not type as fishing.
 
-The hand review already covers `r n0(sum(!is.na(lost_permit$reviewed_as)))`
-of the permitted vessels. All of them are fishing hulls, several on survey
-or safety charters (@sec-fn). The other `r n0(nrow(lost_permit_unrev))` have
-not been reviewed. Until they are, they are **candidate** false negatives.
-The full list gives each vessel's labels, permit group, review status and
-hours in both versions:
+The hand review covers `r n0(sum(!is.na(lost_permit$reviewed_as)))` of the
+permitted vessels. It confirms `r n0(lost_permit_fish)` as fishing hulls,
+several of them on survey or safety charters, which makes them v5 false
+negatives (@sec-fn). It finds that `r n0(lost_permit_non)` are not fishing
+vessels. For some of these, the GARFO permit matched by name belongs to a
+different hull, so v5's non-fishing type is right for them. `r unrev_sentence` The full list gives each vessel's labels, permit
+group, review status and hours in both versions:
 
 `r csv_link(lost_fishing, "fishing_to_nonfishing.csv", "Vessels typed FISHING in v4 and not in v5")`
 
@@ -1028,11 +1066,15 @@ fn_old |>
 ## New errors in v5 among reviewed vessels
 
 These are vessels whose `r v_old` label the review confirmed, and which
-`r v_new` now labels wrongly. The `OTHER_NON_FISHING` vessels are fishing
-hulls on survey or safety charters. Their v5 type describes their charter
-work, not the hull. Because GFW types the whole vessel and not each day, any
-fishing these vessels do outside their charters gets no AFE in v5. The
-PASSENGER vessels are for-hire boats that the review confirmed as fishing.
+`r v_new` now labels wrongly. `r n0(sum(ht$status == "new error" & ht$activity_excluded))`
+of them are fishing hulls on survey or safety charters. Their v5 type
+describes their charter work, not the hull. Because GFW types the whole
+vessel and not each day, any fishing these vessels do outside their
+charters gets no AFE in v5. `r n_fp_new <- sum(new_err$out_new == "FP"); if (n_fp_new == 1) "One is a non-fishing vessel" else paste(n0(n_fp_new), "are non-fishing vessels")`
+that v5 newly types FISHING (`v5 outcome` FP), found when every vessel v5
+newly types FISHING was checked. The rest are
+commercial and for-hire boats, most with GARFO permits, that the review
+confirmed as fishing hulls. v5 types most of them PASSENGER.
 
 ```{r new-errors}
 if (nrow(new_err) == 0) asis_output("None.") else
@@ -1277,10 +1319,14 @@ misses shallow, near-shore fishing.
 
 # Caveats {#sec-caveats}
 
-- **The reference favours v5.** It was built by reviewing v4's suspected
-  errors, so v4's error rates are overstated relative to v5's. Vessels v5
-  newly mislabels, such as the permitted vessels that left FISHING
-  (@sec-type), are candidates, not confirmed errors.
+- **The reference favours v5.** It was built mainly by reviewing v4's
+  suspected errors, so v4's error rates are overstated relative to v5's.
+  Two checks were made against v5 itself. The `r n0(n_rev_new)` permitted
+  vessels that v5 stopped typing as FISHING give its new false negatives,
+  and the vessels it newly types FISHING (`r new_fish_checked` checked) give
+  its new false positives: `r n0(n_new_fish_fp)`. The other v4 fishing
+  vessels that v5 retyped, most of them small for-hire boats now typed
+  PASSENGER, have not been checked by hand.
 - **The v4 data are a snapshot.** They were taken from `:latest` on
   `r pull_old$pull_date`, before v4 was frozen. Labels for six MMSIs differed
   in frozen `:v4.0` on the June 2024 spot check. Hours matched.

@@ -156,7 +156,7 @@ accept,2026-10-15,366989560,,,F/V LADY PATRICIA,MOBILE,GARFO permit,GARFO hull 5
 accept,2026-10-15,368161000,,,W()4% W!4%2 2 / WHITE WATER II,MOBILE,marinetraffic,DRIFTING LONGLINE,GEAR,2026-10-06,v4,GFW gear unresolved
 accept,2026-10-15,368354160,,,SEEL JR,MOBILE,marinetraffic,TRAWLER,FISHING,2026-10-06,v4,GFW gear unresolved
 accept,2026-10-15,367401240,,,OCEAN WAVE,MOBILE,marinetraffic,DREDGE FISHING,FISHING,2026-10-06,v4,GFW gear unresolved
-accept,2026-10-15,366725960,,,ALISON ROSE,FIXED,marinetraffic,POTS AND TRAPS,FISHING,2026-10-06,v4,GFW gear unresolved
+accept,2026-10-15,366725960,,,ALISON ROSE,FIXED,marinetraffic,POTS AND TRAPS,FISHING,2026-10-06,v4,"GFW gear unresolved. Re-checked 2026-10-29, kept FIXED: its one GARFO hull (937288) also held open-access surfclam (1) and ocean quahog (6) permits 2016-2022, alongside lobster trap Area 3; no limited-access mobile permit, and lobster trap Area 1 only from 2024"
 accept,2026-10-15,367352170,,,SUSAN MARIE,MOBILE,GARFO permit,GARFO hull 625950; permit 220886,FISHING,2026-10-06,v4,GFW gear unresolved
 accept,2026-10-15,367159840,,,TIMOTHY MICHAEL,FIXED,GARFO permit,GARFO hull 673582; permit 320678,FISHING,2026-10-06,v4,GFW gear unresolved. GFW registry gear suggests POLE_AND_LINE instead
 accept,2026-10-15,338309386,,,DEFENDER,MOBILE,marinetraffic,DREDGE FISHING,FISHING,2026-10-06,v4,GFW gear unresolved
@@ -183,7 +183,7 @@ accept,2026-10-16,367444970,,,NORDIC EXPLORER,MOBILE,GARFO permit,GARFO hull 678
 accept,2026-10-16,368183050,,,CAMERON SCOTT,MOBILE,marinetraffic,DREDGE FISHING,FISHING,2026-10-06,v4,GFW gear unresolved
 accept,2026-10-16,367345930,,,SETTLER,MOBILE,GARFO permit,GARFO hull 620472; permit 410253,FISHING,2026-10-06,v4,GFW gear unresolved
 accept,2026-10-16,367764570,,,NAUTILUS II,MOBILE,GARFO permit,GARFO hull 567254; permit 330484,SET_LONGLINES,2026-10-06,v4,GARFO permits disagree with GFW gear
-accept,2026-10-16,367162510,,,EXCALIBUR,FIXED,CFRF,POTS AND TRAPS,FISHING,2026-10-06,v4,GFW gear unresolved
+accept,2026-10-16,367162510,,,EXCALIBUR,FIXED,CFRF,POTS AND TRAPS,FISHING,2026-10-06,v4,"GFW gear unresolved. Re-checked 2026-10-29, kept FIXED: the name matches 3 GARFO hulls; the lobster trap hull (620338, 62 ft) holds no mobile permits. The squid-trawl and clam permits are on another EXCALIBUR (607406, 72.7 ft)"
 accept,2026-10-16,367694180,,,SAINT JAMES,MOBILE,marinetraffic,DREDGE FISHING,FISHING,2026-10-06,v4,GFW gear unresolved
 reject,2026-10-16,367628630,,,AVALON / SPILL THE WINE,,,,INCONCLUSIVE,2026-10-06,v4,GFW gear unresolved
 accept,2026-10-16,367371170,,,HAWK / OCEAN PRIDE,MOBILE,GFW registry,,FISHING,2026-10-06,v4,GFW gear unresolved
@@ -517,7 +517,7 @@ accept,2026-10-16,367633670,,,LISA K,POLE_AND_LINE,RFMO listing,,INCONCLUSIVE,20
 reject,2026-10-16,367636780,,,THIRD STAR,,,,INCONCLUSIVE,2026-10-06,v4,GFW gear unresolved
 accept,2026-10-16,367640060,,,F/V C.B. KEANE,MOBILE,marinetraffic,TRAWLER,FISHING,2026-10-06,v4,GFW gear unresolved
 accept,2026-10-16,367641010,,,F/V CAPT TRAVIS,MOBILE,GARFO permit,GARFO hull 920388; permit 330845,FISHING,2026-10-06,v4,GFW gear unresolved
-accept,2026-10-16,367642830,,,F/V LIBERTY / LIBERTY,FIXED,marinetraffic,POTS AND TRAPS,FISHING,2026-10-06,v4,GFW gear unresolved
+accept,2026-10-16,367642830,,,F/V LIBERTY / LIBERTY,FIXED,marinetraffic,POTS AND TRAPS,FISHING,2026-10-06,v4,"GFW gear unresolved. Re-checked 2026-10-29, kept FIXED: the name matches 6 GARFO hulls; the lobster trap hull (1255891, 69.5 ft, MA) holds no mobile permits. The limited-access scallop and clam permits are on another LIBERTY (912143, 97.2 ft)"
 accept,2026-10-16,367647590,,,CHESAPEAKE,POLE_AND_LINE,marinetraffic,sportfisher,INCONCLUSIVE,2026-10-06,v4,GFW gear unresolved. Also holds open-access commercial permits (directed: HMS:CHB COMMERCIAL SALE ENDORSEMENT); may fish commercially on some trips
 accept,2026-10-16,367653580,,,PERCEPTION,MOBILE,GFW registry,,FISHING,2026-10-06,v4,GFW gear unresolved
 accept,2026-10-16,367653650,,,HAWK / MAJOR EXPENSE,MOBILE,marinetraffic,DREDGE FISHING,FISHING,2026-10-06,v4,GFW gear unresolved
@@ -614,7 +614,7 @@ accept,2026-10-16,368150670,,,SPECULATOR,POLE_AND_LINE,RFMO listing,,PASSENGER,2
 accept,2026-10-16,368153510,,,NORDI PROSPEC,MOBILE,GFW registry,,FISHING,2026-10-06,v4,GFW gear unresolved
 accept,2026-10-16,368154990,,,LADY AMANDA,MOBILE,marinetraffic,TRAWLER,FISHING,2026-10-06,v4,GFW gear unresolved
 accept,2026-10-16,368159020,,,VELARIS,MOBILE,GARFO permit,GARFO hull 252094; permit 410019,FISHING,2026-10-06,v4,GFW gear unresolved
-accept,2026-10-16,368161410,,,WESTERN EDGE,FIXED,marinetraffic,POTS AND TRAPS,FISHING,2026-10-06,v4,GFW gear unresolved
+accept,2026-10-29,368161410,,,WESTERN EDGE,MOBILE,GARFO permit,GARFO hull 584535; LAGC A scallop + surfclam/ocean quahog 2023-2026; MarineTraffic gear DREDGE FISHING,TRAWLERS,2026-10-28,v5,"Switched gear: lobster trap Area 3 2020-2022, then scallop and clam dredge 2023-2026 per GARFO permits; its only record (2024-03-31) is in the mobile period. Was FIXED (MarineTraffic POTS AND TRAPS, 2026-10-16, v4)"
 accept,2026-10-16,368164940,,,AVA GRACE,MOBILE,marinetraffic,TRAWLER,INCONCLUSIVE,2026-10-06,v4,GFW gear unresolved. Also holds open-access commercial permits (directed: HMS:GENERAL); may fish commercially on some trips
 accept,2026-10-16,368175650,,,LIGIA,MOBILE,marinetraffic,DREDGE FISHING,FISHING,2026-10-06,v4,GFW gear unresolved
 accept,2026-10-16,368178140,,,MISS EMILY,MOBILE,marinetraffic,DREDGE FISHING,FISHING,2026-10-06,v4,GFW gear unresolved
@@ -692,3 +692,34 @@ accept,2026-10-18,338524196,,,DAWN TREADER,POLE_AND_LINE,marinetraffic,sportfish
 accept,2026-10-18,338215028,,,DO BUOY,POLE_AND_LINE,marinetraffic,MarineTraffic,GEAR,2026-10-06,v4,Sportfishing boat per MarineTraffic; GFW gear GEAR
 accept,2026-10-18,338376812,,,WASABI II,POLE_AND_LINE,marinetraffic,MarineTraffic,OTHER,2026-10-06,v4,Sportfishing boat per MarineTraffic; GFW gear OTHER
 accept,2026-10-18,338127334,,,FV CODZILLA,POLE_AND_LINE,marinetraffic,MarineTraffic,OTHER,2026-10-06,v4,Sportfishing boat per MarineTraffic; GFW gear OTHER
+accept,2026-10-29,338453955,,,TORO,POLE_AND_LINE,online search,POLE AND LINE,FISHING,2026-10-28,v5,Online search gear POLE AND LINE; v5 gear FISHING
+accept,2026-10-29,368325670,,,SCOOTER,FIXED,marinetraffic,POTS AND TRAPS,FISHING,2026-10-28,v5,Marinetraffic gear POTS AND TRAPS; v5 gear FISHING
+accept,2026-10-29,368248177,,,BRIANAJAMES,MOBILE,marinetraffic,TRAWLER,FISHING,2026-10-28,v5,Marinetraffic gear TRAWLER; v5 gear FISHING
+reject,2026-10-29,368403820,,,LUCKY DANNY 2,,,,TRAWLERS,2026-10-28,v5,"Marinetraffic gear DREDGE FISHING; v5 gear TRAWLERS, same class (MOBILE)"
+reject,2026-10-29,368449390,,,VIRGINIA LYNN,,,,TRAWLERS,2026-10-28,v5,"Marinetraffic gear DREDGE FISHING; v5 gear TRAWLERS, same class (MOBILE)"
+accept,2026-10-29,338362000,,,F\V THE GIPPER,MOBILE,marinetraffic,DREDGE FISHING,FISHING,2026-10-28,v5,Marinetraffic gear DREDGE FISHING; v5 gear FISHING
+accept,2026-10-29,338604000,,,RINGSIDE,POLE_AND_LINE,marinetraffic,POLE AND LINE,TRAWLERS,2026-10-28,v5,Marinetraffic gear POLE AND LINE; v5 gear TRAWLERS
+reject,2026-10-29,367085960,,,PEROLA DO CORVO,,,,TRAWLERS,2026-10-28,v5,"Marinetraffic gear DREDGE FISHING; v5 gear TRAWLERS, same class (MOBILE)"
+accept,2026-10-29,367335210,,,AERIE ONE,POLE_AND_LINE,online search,POLE AND LINE,FISHING,2026-10-28,v5,Online search gear POLE AND LINE; v5 gear FISHING
+accept,2026-10-29,367105250,,,KAREN ANN,FIXED,GARFO permit,GARFO hull 635591; permit 230985,TRAWLERS,2026-10-28,v5,gear class changed since v4: FIXED -> MOBILE
+accept,2026-10-29,367052470,,,SEVEN B 5 / SEVEN B S V,POLE_AND_LINE,RFMO listing,marinetraffic: headboat,FISHING,2026-10-28,v5,GFW gear unresolved; gear class changed since v4: MOBILE -> UNRESOLVED
+accept,2026-10-29,338514768,,,CRISTINA FAITH,FIXED,GARFO permit,GARFO hull RI8630GF; permit 10217810|151395,FISHING,2026-10-28,v5,GFW gear unresolved; gear class changed since v4: FIXED -> UNRESOLVED
+accept,2026-10-29,338355588,,,OCEAN VUE,POLE_AND_LINE,GARFO permit,GARFO hull 1284147; permit 10182424|233984,FISHING,2026-10-28,v5,"GFW gear unresolved; gear class changed since v4: POLE_AND_LINE -> UNRESOLVED. Holds 5 open-access commercial permits, a typical party-boat bundle; POLE_AND_LINE suggested -- treat it as possible"
+accept,2026-10-29,367379210,,,MEKONG,MOBILE,GARFO permit,GARFO hull 1044079; permit 330886,FISHING,2026-10-28,v5,GFW gear unresolved; gear class changed since v4: MOBILE -> UNRESOLVED
+accept,2026-10-29,338303808,,,RUNAWAY,POLE_AND_LINE,GARFO permit,GARFO hull 557719; permit 10012750,PASSENGER,2026-10-28,v5,GFW gear unresolved; gear class changed since v4: POLE_AND_LINE -> UNRESOLVED
+accept,2026-10-29,338311545,,,FREDDY JOE,POLE_AND_LINE,GARFO permit,GARFO hull 1151254; permit 10077552|215315,PASSENGER,2026-10-28,v5,GFW gear unresolved; gear class changed since v4: POLE_AND_LINE -> UNRESOLVED
+accept,2026-10-29,338368646,,,RIGGER,POLE_AND_LINE,GARFO permit,GARFO hull 1111624; permit 10060003|233682,OTHER_NON_FISHING,2026-10-28,v5,"GFW gear unresolved; gear class changed since v4: POLE_AND_LINE -> UNRESOLVED. Holds 9 open-access commercial permits, a typical party-boat bundle; POLE_AND_LINE suggested -- treat it as possible"
+accept,2026-10-29,338376307,,,SNIPER,POLE_AND_LINE,GARFO permit,GARFO hull 1069364; permit 10020959,PASSENGER,2026-10-28,v5,GFW gear unresolved; gear class changed since v4: POLE_AND_LINE -> UNRESOLVED
+accept,2026-10-29,338477497,,,JACKIE C,POLE_AND_LINE,GARFO permit,GARFO hull CT3762BA; permit 10209062,PASSENGER,2026-10-28,v5,GFW gear unresolved; gear class changed since v4: POLE_AND_LINE -> UNRESOLVED
+accept,2026-10-29,366431380,,,NATHANIEL LEE,FIXED,GARFO permit,GARFO hull 623839; permit 330458,FISHING,2026-10-28,v5,GFW gear unresolved; gear class changed since v4: FIXED -> UNRESOLVED
+accept,2026-10-29,366940990,,,GAIL FRANCES,POLE_AND_LINE,RFMO listing,,PASSENGER,2026-10-28,v5,GFW gear unresolved; gear class changed since v4: POLE_AND_LINE -> UNRESOLVED
+accept,2026-10-29,367088910,,,FV SENECA,MOBILE,GFW registry,,DRIFTING_LONGLINES,2026-10-28,v5,gear class changed since v4: FIXED -> MOBILE
+accept,2026-10-29,367145730,,,F/V MICHIGAN,MOBILE,GARFO permit,GARFO hull 252094; permit 410019,FISHING,2026-10-28,v5,GFW gear unresolved; gear class changed since v4: MOBILE -> UNRESOLVED
+accept,2026-10-29,367155670,,,LADY FRANCES,POLE_AND_LINE,RFMO listing,,PASSENGER,2026-10-28,v5,GFW gear unresolved; gear class changed since v4: POLE_AND_LINE -> UNRESOLVED
+accept,2026-10-29,367156650,,,KATHY & JACKIE,MOBILE,GARFO permit,GARFO hull 940494; permit 410499,FISHING,2026-10-28,v5,GFW gear unresolved; gear class changed since v4: MOBILE -> UNRESOLVED
+accept,2026-10-29,367300830,,,NORDIK VIKING,POLE_AND_LINE,GFW registry,,FISHING,2026-10-28,v5,GFW gear unresolved; gear class changed since v4: POLE_AND_LINE -> UNRESOLVED
+accept,2026-10-29,367330610,,,DESTINY,MOBILE,GFW registry,,DRIFTING_LONGLINES,2026-10-28,v5,gear class changed since v4: FIXED -> MOBILE
+accept,2026-10-29,367451380,,,ALEX MARIE,MOBILE,GFW registry,,FISHING,2026-10-28,v5,GFW gear unresolved; gear class changed since v4: FIXED -> UNRESOLVED
+accept,2026-10-29,367460670,,,NORTH CAPE,FIXED,RFMO listing,marinetraffic: set longline,TRAWLERS,2026-10-28,v5,gear class changed since v4: FIXED -> MOBILE
+accept,2026-10-29,368045130,,,MISS FREYA,FIXED,GARFO permit,GARFO hull 1114679; permit 410605,FISHING,2026-10-28,v5,GFW gear unresolved; gear class changed since v4: FIXED -> UNRESOLVED
+accept,2026-10-29,368284160,,,BENTHIC HARVESTER,FIXED,GARFO permit,GARFO hull 538431; permit 410639,TRAWLERS,2026-10-28,v5,GARFO permits disagree with GFW gear; gear class changed since v4: FIXED -> MOBILE

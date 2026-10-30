@@ -490,6 +490,37 @@ the methods with numbers recomputed at render time, not typed.
       Mariners), so `sz_share_install` (installation days only) is the
       enforcement-only lower bound, run as a sensitivity.
 
+### Vessel classification
+
+18. **Open-ended safety windows may hold some fishing** (2026-10-30,
+    D-074). Ørsted gave no charter dates for its safety vessels, so 30 MMSIs
+    are excluded from the contract start (2021-05-01) with no end date.
+    On the v5 pull these windows remove 55,478 Stage 3 AFE h across 23
+    vessels. Of that, 9,374 h (17%) fall on days with a mean speed of at
+    least 2 kn outside the leases, as much as all Stage 3 Primary AFE
+    (9,850 h).
+    - Most of it looks like guard work. For the six vessels with the most
+      such hours, they line the lease edges and cable corridors, and the
+      vessels first appear with the cable lay and construction.
+    - Speed cannot tell guard patrols from fishing, since both run at
+      fishing speed.
+    - The windows cannot bias the before–after contrast through the
+      baseline: the 30 vessels have 73 AFE h in the AOI before their windows
+      open (HUNTER 61 h in 2016–17), none of it in a lease. Any real fishing
+      the windows hide is effort from vessels new to the AOI.
+
+    *Treatment:*
+    - Keep the windows as they are.
+    - Phase 7 adds two runs (@sec-sensitivity):
+      - a **fixed cohort** (each gear restricted to MMSIs with Primary
+        activity in Stage 1), the main check. The windows' vessels are not
+        in it, so a result that holds there does not depend on them;
+      - an **exclusion upper bound**: the fishing-like in-window hours
+        restored, together with the screen-only charter windows in full
+        (AMELIA JOYCE, JACK M, LILY M, BUCKEYE and KINEO: 3,507 Stage 3 AFE
+        h on v5, 1 and 21 h of AFE before their windows).
+    - Re-run the pre-window check (caveat 11) for any new open-ended window.
+
 ## Recommended treatments and transformations {#sec-treatments}
 
 One principle runs through this section: **transform for descriptive spatial
@@ -2020,6 +2051,8 @@ grid: variant × outcome, with the estimate and CI.
 | Drop AFE records < 0.32 h | Continuity with the archived threshold |
 | Leave out each of the top 10 MMSIs per gear | Vessel concentration |
 | Restore PROVIDER's 2020-06-18 → 2020-09-30 hours to Stage 1 | Effect of the caveat 11 decision on the baseline |
+| Fixed cohort: each gear restricted to MMSIs with Primary activity in Stage 1 | Fleet composition. Exclusions of vessels new to the AOI (caveat 18), new entrants and AIS uptake (caveat 5) cannot drive a result that holds in the cohort. The main robustness check on vessel processing (D-074) |
+| Exclusion upper bound: restore the fishing-like hours (day mean ≥ 2 kn, outside the leases) in the open-ended safety windows, and the screen-only charter windows in full | The most fishing the exclusions could hide (caveat 18, D-074). Mostly guard work, so expect spurious attraction near the cables: a bound, not an alternative estimate |
 | Exclude 2020 | COVID, and the Stage 1/2 boundary |
 | With / without environmental covariates (bathymetry; habitat once available) | Stability of the BAG effects (@sec-env) |
 | Ørsted habitat vs regional substrate (if Ørsted coverage is partial) | Habitat source |

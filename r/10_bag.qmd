@@ -29,6 +29,18 @@ params:
   lovo_extra: !expr c("368175660")   # BUCKEYE: kept at the pre-Phase 4 screen, checked here
   n_boot: 999
   event_window: 24
+  # Minimum support per fixed-effect indicator (D-076), fixed before any fit:
+  # a term needs this many positive rows, from this many cells and vessels.
+  # A BAG term below it makes the model pool its bands (or lead bins); an
+  # optional term below it is dropped. Logged in bag_support_rules.
+  support_min_positive: 30
+  support_min_cells: 10
+  support_min_vessels: 5
+  # Random-field check (D-077): spatial-block cross-validation of the stage ×
+  # season models' fields, and AIC for the timing models' AR1 year field.
+  # Several hours of extra fits on a cold cache (cached after); false skips it.
+  field_check: true
+  cv_folds: 5
 ---
 
 ```{r setup, include=FALSE}
@@ -168,7 +180,9 @@ each band (`r qparams$n_boot` draws). All cells, all three gears.
 
 ```{r}
 #| fig-height: 8
-band_order <- c("inside", "0-2", "2-4", "4-8", "8-15")
+# plotting order; near (inside + 0–2) and mid (2–8 km) are the merged
+# scheme's bands (D-076)
+band_order <- c("inside", "0-2", "near", "2-4", "4-8", "mid", "8-15")
 desc_stage <- map_dfr(set_names(datasets), function(ds) {
   st[[ds]] |>
     transmute(gear_class, stage, dist_band, hours = rate_std, expo = area_km2) |>
@@ -274,6 +288,37 @@ for (ds in datasets) {
 }
 ```
 
+## Vessel records
+
+Primary records per vessel, read once. They serve the term-support check
+below (how many vessels back each term, D-076) and the leave-one-vessel-out
+refits (step 8). `vessel_month` holds each vessel's hours per cell and
+month; the support check matches it to the model rows by cell and stage ×
+season, or by cell and time-step end for the timing models.
+
+```{r}
+records_path <- \(ds) file.path(paths$processed_gfw, sprintf("gfw_%s_id_classified.csv", ds))
+vessel_month <- map_dfr(set_names(datasets), \(ds)
+  read_csv(records_path(ds), col_types = cols(.default = "c"),
+           col_select = c(MMSI, `Vessel Name`, cell_id, gear_class, in_primary, hours, date)) |>
+    filter(in_primary == "TRUE") |>
+    mutate(hours = as.numeric(hours), m = floor_date(as.Date(date), "month")) |>
+    group_by(MMSI, vessel = `Vessel Name`, cell_id, gear_class, m) |>
+    summarise(hours = sum(hours), .groups = "drop"), .id = "dataset")
+input_files <- c(input_files, records_path(datasets))
+
+# per cell × stage × season (stage × season models and leave-one-vessel-out)
+vessel_hours <- vessel_month |>
+  mutate(stage = stage_of(m), season = season_of(m)) |>
+  group_by(dataset, MMSI, vessel, cell_id, gear_class, stage, season) |>
+  summarise(hours = sum(hours), .groups = "drop")
+vessel_ss <- vessel_hours |> filter(hours > 0) |> distinct(dataset, gear_class, cell_id, stage, season, MMSI)
+# per cell × time step, keyed by the step's last day (timing models)
+vessel_step <- map(c(month = "month", season_year = "season_year"), \(step)
+  vessel_month |> filter(hours > 0) |> mutate(step_end = step_end_of(m, step)) |>
+    distinct(dataset, gear_class, cell_id, step_end, MMSI))
+```
+
 ## Model specifications
 
 Every model is written once as a **specification**: its data, formula and
@@ -315,23 +360,85 @@ fit_ok <- \(f) { s <- sanity(f, silent = TRUE); isTRUE(s$hessian_ok && s$eigen_v
 # --- stage × season (steps 3, 5) --------------------------------------------
 ss_cols <- c("cell_id", "stage", "stage_num", "season", "dist_band", "hours", "log_expo",
              "depth_m", "slope_z", "bpi_z", "x_km", "y_km")
-ss_data <- function(ds, g) {
-  ss[[ds]] |> filter(gear_class == g, domain) |> bag_prepare() |>
+# `bands`: the distance-band scheme (D-076), "full" (inside, 0–2, 2–4, 4–8
+# km) or "merged" (near = inside + 0–2, mid = 2–8 km); 8–15 km is the
+# reference in both
+ss_data <- function(ds, g, bands = "full") {
+  d <- ss[[ds]] |> filter(gear_class == g, domain) |> bag_prepare() |>
     mutate(stage_num = as.integer(stage)) |> select(all_of(ss_cols))
+  if (bands == "merged") d <- mutate(d, dist_band = merge_bands(dist_band))
+  d
 }
 ss_formula <- hours ~ stage * dist_band + season + s(depth_m, k = 4) + slope_z + bpi_z
 ss_base_formula <- hours ~ stage + dist_band + season + s(depth_m, k = 4) + slope_z + bpi_z
-bag_terms <- c("stageStage 2:dist_bandinside", "stageStage 3:dist_bandinside",
-               "stageStage 2:dist_band0-2", "stageStage 3:dist_band0-2")
-headline_term <- "stageStage 3:dist_bandinside"
+# the BAG terms and the headline term of a band scheme: the Stage 2 and
+# Stage 3 × near-band interactions (inside and 0–2 km, or near when merged)
+near_bands <- \(bands) if (bands == "full") c("inside", "0-2") else "near"
+bag_terms_of <- \(bands) paste0("stageStage ", rep(2:3, length(near_bands(bands))), ":dist_band",
+                                rep(near_bands(bands), each = 2))
+headline_of <- \(bands) paste0("stageStage 3:dist_band", near_bands(bands)[1])
+all_bag_terms <- unique(c(bag_terms_of("full"), bag_terms_of("merged")))
+# the headline row of each model in a results table with id and term
+headline_rows <- \(tab) semi_join(tab, transmute(ss_sets, id, term = headline), by = c("id", "term"))
 # a spatial field shared by all stages plus an iid field per stage (plan, Phase 5 sketch)
 ss_spec <- \(id, d, formula, family) make_spec(id, d, formula, family, "iid", "stage_num")
 
 # cells with any area in an active safety zone in any month (caveat 17)
 zone_cells <- month$vp |> filter(sz_share > 0) |> distinct(cell_id) |> pull()
+```
 
-ss_sets <- ss_models |>
-  mutate(data = map2(dataset, gear, ss_data),
+### Term support (D-076)
+
+Before any fit, every 0/1 fixed-effect column of every model is counted:
+the rows it switches on, the **positive** rows among them (hours > 0), and
+the distinct cells and vessels with effort in those rows
+(`term_support()`). A term is supported if it has at least
+`r qparams$support_min_positive` positive rows from at least
+`r qparams$support_min_cells` cells and `r qparams$support_min_vessels`
+vessels. The thresholds are parameters, set before fitting. The rule is
+applied the same way to every model, with no case-by-case choices:
+
+- **BAG terms** (stage × band; construction and development × band):
+  if any lacks support, the model pools its bands (near = inside + 0–2 km,
+  mid = 2–8 km). If the pooled terms still lack support, the model is not
+  fitted and that gear is reported descriptively.
+- **Lead terms** (leads model): if any lacks support, the three lead bins
+  pool into one (24–1 months). If that still fails, no leads model is
+  fitted.
+- **Foundation distance** (*h*(·)): bands coarsen from 0–2 / 2–5 / 5–10 km
+  to 0–5 / 5–10, then 0–10, and the term is dropped if even that fails.
+- **Other indicators** (post-construction × band, active construction):
+  dropped one by one if unsupported.
+
+The decisions are logged in `bag_support_rules`, and every count in
+`bag_term_support`. No new term enters a main model after this point.
+New questions go into separate sensitivity fits, as the leads model does
+(D-076).
+
+```{r}
+sup_ok <- \(sup) support_ok(sup, qparams$support_min_positive, qparams$support_min_cells,
+                            qparams$support_min_vessels)
+# the support of a stage × season model's terms; vessels matched by cell,
+# stage and season
+ss_support <- function(ds, g, d)
+  term_support(ss_formula, d, filter(vessel_ss, dataset == ds, gear_class == g), c("cell_id", "stage", "season"))
+# the finest band scheme whose BAG terms are all supported, or "none"
+choose_ss <- function(ds, g) {
+  sup_all <- NULL
+  for (b in names(band_schemes)) {
+    sup <- ss_support(ds, g, ss_data(ds, g, b)) |> mutate(bands = b)
+    sup_all <- bind_rows(sup_all, sup)
+    if (all(sup_ok(filter(sup, term %in% bag_terms_of(b))))) return(list(bands = b, support = sup_all))
+  }
+  list(bands = "none", support = sup_all)
+}
+
+ss_choice <- ss_models |> mutate(choice = map2(dataset, gear, choose_ss), bands = map_chr(choice, "bands"))
+# a gear whose pooled BAG terms still lack support is reported descriptively
+# only (step 1) and has no stage × season model
+ss_sets <- ss_choice |> filter(bands != "none") |>
+  mutate(data = pmap(list(dataset, gear, bands), ss_data),
+         terms = map(bands, bag_terms_of), headline = map_chr(bands, headline_of),
          spec = pmap(list(id, data, family), \(id, d, fam) ss_spec(id, d, ss_formula, fam)),
          spec_base = pmap(list(id, data, family), \(id, d, fam) ss_spec(paste(id, "base"), d, ss_base_formula, fam)),
          spec_nozone = pmap(list(id, data, family), \(id, d, fam)
@@ -339,7 +446,7 @@ ss_sets <- ss_models |>
          # AFE: the delta-Gamma hurdle alongside Tweedie (plan, "Response families")
          spec_dg = pmap(list(id, data, dataset), \(id, d, ds)
            if (ds == "afe") ss_spec(paste(id, "delta_gamma"), d, ss_formula, "delta_gamma") else NULL))
-ss_sets |> transmute(id, cells = map_int(data, \(d) n_distinct(d$cell_id)), rows = map_int(data, nrow),
+ss_sets |> transmute(id, bands, cells = map_int(data, \(d) n_distinct(d$cell_id)), rows = map_int(data, nrow),
                      positive_rows = map_int(data, \(d) sum(d$hours > 0))) |> knitr::kable()
 
 # --- timing and pre-trend (steps 4, 6) ----------------------------------------
@@ -349,19 +456,19 @@ timing_models <- tribble(~dataset, ~gear, ~step,
   mutate(id = paste(dataset, gear, sep = "_"),
          family = if_else(dataset == "vp", "nbinom2", "tweedie"))
 
-timing_data <- function(ds, g, step) {
+# `bands`: the distance-band scheme (D-076); `cuts`: the foundation-distance
+# band edges for h(·), coarsened when the finer bands lack support
+timing_data <- function(ds, g, step, bands = "full", cuts = c(2, 5, 10)) {
   base <- if (step == "month") month[[ds]] else sy_afe
-  base |> filter(gear_class == g, domain) |> bag_prepare() |>
+  d <- base |> filter(gear_class == g, domain) |> bag_prepare()
+  if (bands == "merged") d <- mutate(d, dist_band = merge_bands(dist_band))
+  bx <- band_schemes[[bands]]
+  d |>
     mutate(year_c = if (step == "month") (t_index - 1) / 12 - 5 else season_year - 2021,
            season = factor(season, c("AprSep", "OctMar")),
            construction = as.numeric(phase == "construction"),
            post = as.numeric(phase == "post_construction"),
-           cx_inside = construction * (dist_band == "inside"), cx_0_2 = construction * (dist_band == "0-2"),
-           cx_2_4 = construction * (dist_band == "2-4"), cx_4_8 = construction * (dist_band == "4-8"),
-           post_inside = post * (dist_band == "inside"), post_0_2 = post * (dist_band == "0-2"),
-           found_band = factor(case_when(is.na(d_found_km) | d_found_km > 10 ~ "none",
-                                         d_found_km <= 2 ~ "0-2", d_found_km <= 5 ~ "2-5", TRUE ~ "5-10"),
-                               c("none", "0-2", "2-5", "5-10")),
+           found_band = found_band_of(d_found_km, cuts),
            active = if (step == "month") as.numeric(active_construction) else active_construction_share,
            year_num = if (step == "month") as.numeric(year) else as.numeric(season_year),
            time_year = as.integer(year_num),
@@ -372,78 +479,168 @@ timing_data <- function(ds, g, step) {
            # For RWF- and SRW-nearest cells development runs into Stage 3,
            # up to their own project's first works.
            development = as.numeric(phase == "pre" & stage != "Stage 1"),
-           # last day of the time step, for the 2016–2019 pre-trend fit;
-           # season-year OctMar Y runs from October Y to March Y + 1
+           # last day of the time step, for the 2016–2019 pre-trend fit and
+           # the vessel match; season-year OctMar Y runs October Y − 1 to
+           # March Y (season_year_of(), r/analysis_helpers.R)
            step_end = if (step == "month") ceiling_date(as.Date(year_month), "month") - 1
-                      else if_else(season == "AprSep", make_date(season_year, 9, 30), make_date(season_year + 1, 3, 31)),
+                      else season_year_end(season, season_year),
            # event-time leads (D-075): months to the cell's first
            # construction step, binned inside development
-           step_idx = if (step == "month") t_index else 2L * season_year + (season == "OctMar"),
+           step_idx = if (step == "month") t_index else season_year_index(season, season_year),
            lead_months = months_to_works(cell_id, step_idx, phase, if (step == "month") 1 else 6),
            pre_bin = pre_period_bin(phase, development == 1, lead_months),
            dev_early = as.numeric(pre_bin %in% "dev_early"),
            lead_24_13 = as.numeric(pre_bin %in% "lead_24_13"),
-           lead_12_1 = as.numeric(pre_bin %in% "lead_12_1")) |>
-    band_interactions("development", "dx") |>
-    band_interactions("dev_early", "de") |>
-    band_interactions("lead_24_13", "l24") |>
-    band_interactions("lead_12_1", "l12")
+           lead_12_1 = as.numeric(pre_bin %in% "lead_12_1"),
+           # the pooled lead bin, when the three bins lack support (D-076)
+           lead_24_1 = lead_24_13 + lead_12_1) |>
+    band_interactions("construction", "cx", bx) |>
+    band_interactions("post", "post", bx) |>
+    band_interactions("development", "dx", bx) |>
+    band_interactions("dev_early", "de", bx) |>
+    band_interactions("lead_24_13", "l24", bx) |>
+    band_interactions("lead_12_1", "l12", bx) |>
+    band_interactions("lead_24_1", "l241", bx)
 }
-# the development and lead × band columns made by band_interactions()
-band_x <- \(prefix) paste0(prefix, "_", c("inside", "0_2", "2_4", "4_8"))
-timing_cols <- c("cell_id", "hours", "log_expo", "dist_band", "phase", "stage", "step_end", "year_c", "construction",
-                 "cx_inside", "cx_0_2", "cx_2_4", "cx_4_8", "post_inside", "post_0_2", "found_band",
-                 "development", band_x("dx"), "pre_bin", "dev_early", "lead_24_13", "lead_12_1",
-                 band_x("de"), band_x("l24"), band_x("l12"),
+# the indicator × band columns of a scheme, e.g. band_cols("cx", "full") gives
+# cx_inside, cx_0_2, cx_2_4, cx_4_8
+band_cols <- \(prefix, bands = "full") paste0(prefix, "_", names(band_schemes[[bands]]))
+timing_core <- c("cell_id", "hours", "log_expo", "dist_band", "phase", "stage", "step_end", "year_c", "construction",
+                 "found_band", "development", "pre_bin", "dev_early", "lead_24_13", "lead_12_1", "lead_24_1",
                  "active", "sz_share", "depth_m", "slope_z", "bpi_z", "year_num", "time_year", "x_km", "y_km")
+timing_select <- \(d) select(d, all_of(timing_core), matches("^(cx|post|dx|de|l24|l12|l241)_"),
+                             any_of(c("moy", "season")))
 pretrend_formula <- function(step) {
   if (step == "month") hours ~ dist_band * year_c + s(moy, bs = "cc", k = 8) + s(depth_m, k = 4) + slope_z + bpi_z
   else hours ~ dist_band * year_c + season + s(depth_m, k = 4) + slope_z + bpi_z
 }
-# `pre_terms`: how the pre-construction period is split. The main timing
-# model gives development one set of band terms (D-075); the leads model
-# (`lead_terms`) splits it by months to the works instead.
-dev_terms  <- paste(c("development", band_x("dx")), collapse = " + ")
-lead_terms <- paste(c("dev_early", "lead_24_13", "lead_12_1", band_x("de"), band_x("l24"), band_x("l12")),
-                    collapse = " + ")
-timing_formula <- function(step, pre_terms = dev_terms) {
-  common <- paste("construction + cx_inside + cx_0_2 + cx_2_4 + cx_4_8 + post_inside + post_0_2 +", pre_terms,
-                  "+ found_band + active + sz_share + dist_band + s(depth_m, k = 4) + slope_z + bpi_z")
+# How the pre-construction period is split (D-075): the main timing model
+# gives development one set of band terms; the leads model splits it by
+# months to the works, in three bins or, when those lack support, one.
+dev_terms_of   <- \(b) c("development", band_cols("dx", b))
+lead3_terms_of <- \(b) c("dev_early", "lead_24_13", "lead_12_1", band_cols("de", b), band_cols("l24", b), band_cols("l12", b))
+lead1_terms_of <- \(b) c("dev_early", "lead_24_1", band_cols("de", b), band_cols("l241", b))
+# `terms`: the fixed effects other than the terrain covariates and smooths,
+# in the order construction, construction × band, post × band, the pre-period
+# split, found_band, active, sz_share, dist_band
+timing_formula <- function(step, terms) {
+  common <- paste(c(terms, "s(depth_m, k = 4)", "slope_z", "bpi_z"), collapse = " + ")
   as.formula(if (step == "month") paste("hours ~", common, "+ s(moy, bs = 'cc', k = 8) + s(year_num, k = 5)")
              else paste("hours ~", common, "+ season + s(year_num, k = 5)"))
 }
 month_knots <- \(step) if (step == "month") list(moy = c(0.5, 12.5)) else NULL
+timing_terms_of <- \(b, pre, post_keep, found = TRUE, active = TRUE)
+  c("construction", band_cols("cx", b), post_keep, pre, if (found) "found_band", if (active) "active", "sz_share", "dist_band")
 
+# The support rule for one timing model (D-076), in a fixed order: band
+# scheme from the construction and development × band terms; then the
+# foundation-distance bands; then the optional post-construction and active
+# terms; then the lead bins. Returns the scheme, the data, the main and leads
+# fixed terms (NULL when unsupported), the support counts and a log.
+plan_timing <- function(ds, g, step) {
+  vess <- filter(vessel_step[[step]], dataset == ds, gear_class == g)
+  supp <- \(d, terms) term_support(timing_formula(step, terms), d, vess, c("cell_id", "step_end"))
+  ok_of <- \(sup) set_names(sup_ok(sup), sup$term)
+  log <- character()
+  tried <- NULL   # support of each band scheme tried, kept when none passes
+  # 1. band scheme
+  for (b in names(band_schemes)) {
+    d <- timing_data(ds, g, step, b)
+    terms <- timing_terms_of(b, dev_terms_of(b), band_cols("post", b))
+    sup_b <- supp(d, terms)
+    tried <- bind_rows(tried, mutate(sup_b, model = "timing", bands = b))
+    ok <- ok_of(sup_b)
+    if (all(ok[c(band_cols("cx", b), band_cols("dx", b))] %in% TRUE)) break
+    log <- c(log, paste(b, "bands: a construction or development × band term lacks support"))
+    if (b == "merged") return(list(bands = "none", log = log, support = tried))
+  }
+  # 2. foundation-distance bands, finest supported cut
+  found <- FALSE
+  for (cuts in list(c(2, 5, 10), c(5, 10), 10)) {
+    d <- timing_data(ds, g, step, b, cuts)
+    ok <- ok_of(supp(d, terms))
+    lv <- paste0("found_band", levels(d$found_band)[-1])
+    if (all(ok[lv] %in% TRUE)) { found <- TRUE; break }
+    log <- c(log, paste0("found_band cuts ", paste(cuts, collapse = "/"), " km: a band lacks support"))
+  }
+  if (!found) { cuts <- c(2, 5, 10); d <- timing_data(ds, g, step, b, cuts); log <- c(log, "found_band dropped") }
+  # 3. optional terms: post × band and (monthly) active construction
+  post_keep <- band_cols("post", b)[ok[band_cols("post", b)] %in% TRUE]
+  if (length(setdiff(band_cols("post", b), post_keep)))
+    log <- c(log, paste("dropped:", paste(setdiff(band_cols("post", b), post_keep), collapse = ", ")))
+  active <- !("active" %in% names(ok)) || isTRUE(ok[["active"]])
+  if (!active) log <- c(log, "dropped: active")
+  terms <- timing_terms_of(b, dev_terms_of(b), post_keep, found, active)
+  sup <- supp(d, terms) |> mutate(model = "timing")
+  # 4. lead bins: three, else one, else none
+  lead_terms <- NULL
+  for (lt in list(lead3_terms_of(b), lead1_terms_of(b))) {
+    terms_l <- timing_terms_of(b, lt, post_keep, found, active)
+    sup_l <- supp(d, terms_l) |> mutate(model = "leads")
+    if (all(ok_of(sup_l)[setdiff(lt, "dev_early")] %in% TRUE)) { lead_terms <- terms_l; break }
+    log <- c(log, paste0("leads (", if (identical(lt, lead3_terms_of(b))) "three bins" else "one bin",
+                         "): a lead term lacks support"))
+  }
+  if (is.null(lead_terms)) log <- c(log, "no leads model")
+  list(bands = b, cuts = cuts, data = timing_select(d), terms = terms, lead_terms = lead_terms,
+       support = bind_rows(mutate(sup, bands = b), if (!is.null(lead_terms)) mutate(sup_l, bands = b)), log = log)
+}
+
+# A spec, or NULL when the support rule left no model to fit
+spec_or_null <- \(ok, ...) if (ok) make_spec(...) else NULL
 timing_sets <- timing_models |>
-  mutate(data = pmap(list(dataset, gear, step), \(ds, g, step)
-                       timing_data(ds, g, step) |> select(all_of(timing_cols), any_of(c("moy", "season")))),
+  left_join(select(ss_choice, id, pre_bands = bands), by = "id") |>
+  mutate(plan = pmap(list(dataset, gear, step), plan_timing),
+         bands = map_chr(plan, "bands"),
+         # pre-trend data use the stage × season model's band scheme, so the
+         # gate tests the bands that model estimates
+         pre_data = pmap(list(dataset, gear, step, pre_bands), \(ds, g, step, b)
+           if (b == "none") NULL else timing_select(timing_data(ds, g, step, b))),
          # pre-trend: pre-construction months, persistent field only
-         spec_pre = pmap(list(id, data, step, family), \(id, d, step, fam)
-           make_spec(paste(id, "pretrend"), filter(d, phase == "pre"), pretrend_formula(step), fam,
-                     knots = month_knots(step))),
+         spec_pre = pmap(list(id, pre_data, step, family), \(id, d, step, fam)
+           spec_or_null(!is.null(d), paste(id, "pretrend"), filter(d, phase == "pre"), pretrend_formula(step), fam,
+                        knots = month_knots(step))),
          # diagnostic pre-trend fits (D-075): Stage 1 only, without the
          # Stage 2 site work; and 2016–2019, without COVID as well
-         spec_pre_s1 = pmap(list(id, data, step, family), \(id, d, step, fam)
-           make_spec(paste(id, "pretrend stage 1"), filter(d, phase == "pre", stage == "Stage 1"),
-                     pretrend_formula(step), fam, knots = month_knots(step))),
-         spec_pre_1619 = pmap(list(id, data, step, family), \(id, d, step, fam)
-           make_spec(paste(id, "pretrend 2016-2019"), filter(d, phase == "pre", step_end <= as.Date("2019-12-31")),
-                     pretrend_formula(step), fam, knots = month_knots(step))),
+         spec_pre_s1 = pmap(list(id, pre_data, step, family), \(id, d, step, fam)
+           spec_or_null(!is.null(d), paste(id, "pretrend stage 1"), filter(d, phase == "pre", stage == "Stage 1"),
+                        pretrend_formula(step), fam, knots = month_knots(step))),
+         spec_pre_1619 = pmap(list(id, pre_data, step, family), \(id, d, step, fam)
+           spec_or_null(!is.null(d), paste(id, "pretrend 2016-2019"),
+                        filter(d, phase == "pre", step_end <= as.Date("2019-12-31")),
+                        pretrend_formula(step), fam, knots = month_knots(step))),
          # timing BAG: persistent field plus an AR1 field over years
-         spec_timing = pmap(list(id, data, step, family), \(id, d, step, fam)
-           make_spec(paste(id, "timing"), d, timing_formula(step), fam, "ar1", "time_year",
-                     knots = month_knots(step))),
+         spec_timing = pmap(list(id, plan, step, family), \(id, pl, step, fam)
+           spec_or_null(pl$bands != "none", paste(id, "timing"), pl$data, timing_formula(step, pl$terms), fam,
+                        "ar1", "time_year", knots = month_knots(step))),
          # the same with development split into event-time leads (D-075)
-         spec_timing_leads = pmap(list(id, data, step, family), \(id, d, step, fam)
-           make_spec(paste(id, "timing leads"), d, timing_formula(step, lead_terms), fam, "ar1", "time_year",
-                     knots = month_knots(step))))
-timing_sets |> transmute(id, step, rows = map_int(data, nrow), cells = map_int(data, \(d) n_distinct(d$cell_id)),
-                         pre_rows = map_int(data, \(d) sum(d$phase == "pre")),
-                         stage1_rows = map_int(data, \(d) sum(d$pre_bin %in% "baseline")),
-                         pre_2016_2019_rows = map_int(data, \(d) sum(d$phase == "pre" & d$step_end <= as.Date("2019-12-31"))),
-                         dev_early_rows = map_int(data, \(d) sum(d$pre_bin %in% "dev_early")),
-                         lead_24_13_rows = map_int(data, \(d) sum(d$pre_bin %in% "lead_24_13")),
-                         lead_12_1_rows = map_int(data, \(d) sum(d$pre_bin %in% "lead_12_1"))) |> knitr::kable()
+         spec_timing_leads = pmap(list(id, plan, step, family), \(id, pl, step, fam)
+           spec_or_null(!is.null(pl$lead_terms), paste(id, "timing leads"), pl$data,
+                        timing_formula(step, pl$lead_terms), fam, "ar1", "time_year", knots = month_knots(step))))
+timing_sets |> filter(!map_lgl(pre_data, is.null)) |>
+  transmute(id, step, pre_bands, timing_bands = bands, rows = map_int(pre_data, nrow),
+            cells = map_int(pre_data, \(d) n_distinct(d$cell_id)),
+            pre_rows = map_int(pre_data, \(d) sum(d$phase == "pre")),
+            stage1_rows = map_int(pre_data, \(d) sum(d$pre_bin %in% "baseline")),
+            pre_2016_2019_rows = map_int(pre_data, \(d) sum(d$phase == "pre" & d$step_end <= as.Date("2019-12-31"))),
+            dev_early_rows = map_int(pre_data, \(d) sum(d$pre_bin %in% "dev_early")),
+            lead_24_13_rows = map_int(pre_data, \(d) sum(d$pre_bin %in% "lead_24_13")),
+            lead_12_1_rows = map_int(pre_data, \(d) sum(d$pre_bin %in% "lead_12_1"))) |> knitr::kable()
+
+# the support rule's decisions and every count behind them (D-076)
+support_rules <- bind_rows(
+  ss_choice |> transmute(id, model = "stage × season", decision = paste("bands:", bands)),
+  timing_sets |> transmute(id, model = "timing",
+                           decision = map_chr(plan, \(pl) paste(c(paste("bands:", pl$bands),
+                             if (!is.null(pl$cuts) && pl$bands != "none") paste0("found_band cuts: ", paste(pl$cuts, collapse = "/")),
+                             pl$log), collapse = "; "))))
+save_tab(support_rules, "bag_support_rules")
+support_rules |> knitr::kable()
+term_support_tab <- bind_rows(
+  ss_choice |> transmute(id, s = map(choice, "support")) |> unnest(s) |> mutate(model = "stage × season"),
+  timing_sets |> transmute(id, s = map(plan, "support")) |> unnest(s)) |>
+  mutate(supported = sup_ok(pick(everything())))
+save_tab(term_support_tab, "bag_term_support")
 
 # --- fleet-size sensitivity (step 8; plan caveat 5) ---------------------------
 # AOI-wide fleet size per gear and time step: distinct Primary MMSIs of that
@@ -492,10 +689,10 @@ ss_sets <- ss_sets |>
   mutate(spec_fleet = pmap(list(id, gear, data, family), \(id, g, d, fam)
     ss_spec(paste(id, "fleet"), add_log_fleet(d, g, "stage_season"), ss_fleet_formula, fam)))
 timing_sets <- timing_sets |>
-  mutate(spec_timing_fleet = pmap(list(id, gear, data, step, family), \(id, g, d, step, fam)
-    make_spec(paste(id, "timing fleet"), add_log_fleet(d, g, step),
-              update(timing_formula(step), . ~ . + log_fleet), fam, "ar1", "time_year",
-              knots = month_knots(step))))
+  mutate(spec_timing_fleet = pmap(list(id, gear, plan, step, family), \(id, g, pl, step, fam)
+    spec_or_null(pl$bands != "none", paste(id, "timing fleet"), add_log_fleet(pl$data, g, step),
+                 timing_formula(step, c(pl$terms, "log_fleet")), fam, "ar1", "time_year",
+                 knots = month_knots(step))))
 
 # the fleet values each model sees (raw counts, before the log and centring)
 fleet_vp |> imap_dfr(\(f, step) f |> group_by(gear_class) |>
@@ -504,9 +701,15 @@ fleet_vp |> imap_dfr(\(f, step) f |> group_by(gear_class) |>
 
 # --- mobile vs fixed (step 7) --------------------------------------------------
 gc_formula <- hours ~ gear * stage * dist_band + gear * season + s(depth_m, k = 4) + slope_z + bpi_z
-gc_specs <- map(set_names(datasets), function(ds) {
-  d <- bind_rows(ss_data(ds, "MOBILE") |> mutate(gear = "MOBILE"),
-                 ss_data(ds, "FIXED") |> mutate(gear = "FIXED")) |>
+# the joint model uses the coarser of the two gears' band schemes (D-076),
+# and is not fitted if either gear has no stage × season model
+gc_bands <- map_chr(set_names(datasets), function(ds) {
+  b <- ss_choice$bands[ss_choice$id %in% paste(ds, c("MOBILE", "FIXED"), sep = "_")]
+  if (any(b == "none")) "none" else if (any(b == "merged")) "merged" else "full"
+})
+gc_specs <- map(set_names(datasets[gc_bands[datasets] != "none"]), function(ds) {
+  d <- bind_rows(ss_data(ds, "MOBILE", gc_bands[[ds]]) |> mutate(gear = "MOBILE"),
+                 ss_data(ds, "FIXED", gc_bands[[ds]]) |> mutate(gear = "FIXED")) |>
     mutate(gear = factor(gear, c("MOBILE", "FIXED")),
            # each gear × stage gets its own iid field
            gear_stage = as.integer(interaction(gear, stage, drop = TRUE)))
@@ -523,12 +726,14 @@ fails stops the render with its error. The power and leave-one-vessel-out
 refits (steps 3 and 8) run in their own worker pool.
 
 ```{r}
+# compact(): the support rule (D-076) leaves some timing specs NULL
 all_specs <- c(ss_sets$spec, ss_sets$spec_base, ss_sets$spec_nozone, compact(ss_sets$spec_dg),
-               timing_sets$spec_pre, timing_sets$spec_timing, gc_specs,
+               compact(timing_sets$spec_pre), compact(timing_sets$spec_timing), gc_specs,
                # Stage 2 diagnostics (D-075)
-               timing_sets$spec_pre_s1, timing_sets$spec_pre_1619, timing_sets$spec_timing_leads,
+               compact(timing_sets$spec_pre_s1), compact(timing_sets$spec_pre_1619),
+               compact(timing_sets$spec_timing_leads),
                # fleet-size sensitivity (step 8): new fits; the ones above stay cached
-               ss_sets$spec_fleet, timing_sets$spec_timing_fleet)
+               ss_sets$spec_fleet, compact(timing_sets$spec_timing_fleet))
 run_specs <- function(specs, workers) {
   todo <- keep(specs, \(s) !file.exists(fit_cache_path(s$key, paths$models)))
   message(length(todo), " of ", length(specs), " fits to run")
@@ -590,11 +795,13 @@ interrupted render resumes where it stopped.
 ```{r}
 # a job: one response vector to refit with the full stage × season model.
 # Shared by the power analysis and the leave-one-vessel-out refits (step 8)
-run_refit_jobs <- function(spec_id, d, family, jobs, workers = qparams$workers) {
+# `term`, `terms`: the model's headline and BAG terms, which depend on its
+# band scheme (D-076)
+run_refit_jobs <- function(spec_id, d, family, jobs, term, terms, workers = qparams$workers) {
   # spec on disk, read by every worker; its hash names the result folder, so
   # a changed specification never reuses old results
   spec <- list(data = d, formula = ss_formula, family = family, cutoff = qparams$mesh_cutoff_km,
-               term = headline_term, terms = bag_terms)
+               term = term, terms = terms)
   key <- substr(digest::digest(list(spec, as.character(packageVersion("sdmTMB"))), algo = "sha256"), 1, 10)
   out_dir <- file.path(job_dir, paste(spec_id, key, sep = "_"))
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
@@ -643,17 +850,18 @@ run_refit_jobs <- function(spec_id, d, family, jobs, workers = qparams$workers) 
 
 ```{r}
 power_runs <- ss_sets |>
-  mutate(res = pmap(list(id, data, family, spec_base), function(id, d, fam, sb) {
+  mutate(res = pmap(list(id, data, family, spec_base, headline, terms), function(id, d, fam, sb, hl, tm) {
     base <- get_fit(sb)
     sims <- simulate(base, nsim = qparams$power_nsim, re_form = ~0, seed = 42)
-    in_effect <- d$stage == "Stage 3" & d$dist_band %in% c("inside", "0-2")
+    # inside and 0–2 km, or the pooled near band (D-076)
+    in_effect <- d$stage == "Stage 3" & d$dist_band %in% c("inside", "0-2", "near")
     type <- if (fam == "nbinom2") "count" else "continuous"
     jobs <- expand_grid(effect = unlist(qparams$power_effects), sim = seq_len(qparams$power_nsim)) |>
       mutate(tag = sprintf("power_e%02d_s%03d", round(100 * effect), sim),
              y = map2(effect, sim, \(e, i) inject_effect(sims[, i], if_else(in_effect, 1 - e, 1),
                                                          type, seed = i)))
-    run_refit_jobs(id, d, fam, jobs) |>
-      filter(term == headline_term) |>
+    run_refit_jobs(id, d, fam, jobs, hl, tm) |>
+      filter(term == hl) |>
       left_join(select(jobs, tag, effect, sim), by = "tag")
   })) |>
   select(id, dataset, gear, res) |> unnest(res)
@@ -713,7 +921,9 @@ pretrend_tab <- function(sp, delta) {
     select(band, est, se, lo90, hi90, lo95, hi95, delta, outcome)
 }
 pretrend_windows <- c(full = "full pre-period", stage1 = "Stage 1 only", pre_covid = "2016–2019")
-pretrend_all <- timing_sets |>
+# every gear with a stage × season model; its pre-trend uses that model's
+# band scheme (D-076)
+pretrend_all <- timing_sets |> filter(!map_lgl(spec_pre, is.null)) |>
   mutate(res = pmap(list(id, spec_pre, spec_pre_s1, spec_pre_1619), function(id, s0, s1, s2) {
     m <- mde$mde[mde$id == id]
     delta <- pretrend_margin(if (length(m)) m else NA_real_, dt_years)
@@ -742,7 +952,7 @@ pretrend_where |> knitr::kable()
 # one row per band and window, offset vertically so the three windows sit
 # side by side; the margin is shaded as before
 win_cols <- c("full pre-period" = "black", "Stage 1 only" = "#2a78d6", "2016–2019" = "#eb6834")
-band_lv <- c("inside", "0-2", "2-4", "4-8")
+band_lv <- c("inside", "0-2", "near", "2-4", "4-8", "mid")
 pt_plot <- pretrend_all |>
   mutate(window = factor(pretrend_windows[window], pretrend_windows),
          y = match(band, band_lv) + c(0.2, 0, -0.2)[as.integer(window)])
@@ -763,6 +973,139 @@ save_fig(p, "bag_pretrend", height = 6)
 p
 ```
 
+## Random-field check (D-077)
+
+**Read this before Step 5.** The fixed-effect terms are capped by the
+support rule (D-076); the random fields are checked here instead, by how
+well each structure **predicts data it has not seen**. Only predictive
+scores are shown: no BAG effect is read from these fits, so the choice of
+field cannot be steered by the answer it gives.
+
+- **Stage × season models: spatial-block cross-validation.** The study area
+  is cut into square blocks at least *ρ*<sub>0</sub> wide (Phase 3's
+  practical range for the dataset × gear, `global_rho0.csv`, rounded up),
+  and whole blocks are dealt to `r qparams$cv_folds` folds
+  (`spatial_block_folds()`). Each fold is held out in turn, the model is
+  fitted to the rest, and the held-out rows are scored by their log
+  likelihood. Three structures, same fixed effects and family:
+  - **shared**: one spatial field for all stages (`spatiotemporal = "off"`);
+  - **iid per stage** (the fitted model): the shared field plus an
+    independent field per stage;
+  - **AR1 per stage**: the shared field plus stage fields correlated from
+    one stage to the next.
+
+  Higher summed held-out log likelihood is better. The rule is fixed in
+  advance (plan, "Term support and model complexity"): another structure
+  replaces the fitted one only if it scores higher in total, scores higher
+  in at least four of the five folds (`folds_better`), and has no failed
+  fold (`folds_ok` below `folds`: a non-positive-definite Hessian).
+- **Timing models: AIC.** Five-fold CV of the monthly timing models would
+  take days (each fit is 3–6 h), so the AR1 year field is compared with the
+  persistent field alone by AIC on the full data. Both fits are by maximum
+  likelihood with the same fixed effects. A variance at its boundary makes
+  AIC conservative about dropping the field, which is the safe direction
+  here. The AR1 field is dropped only if that lowers AIC by more than 2
+  (`d_aic` above 2).
+
+The fitted models are **not** changed by this section in an interim
+render. Under the plan, a structure that meets the rule replaces the
+fitted one in Phase 5's refit, logged as a new decision; the BAG terms stay
+as frozen.
+
+```{r field-check, eval = isTRUE(get0("qparams")$field_check)}
+# Phase 3's practical range per dataset × gear (07 writes it); the block
+# size for each stage × season model's folds
+rho0_path <- file.path(paths$spatial, "tables", "global_rho0.csv")
+input_files <- c(input_files, rho0_path)
+rho0 <- read_csv(rho0_path, show_col_types = FALSE) |>
+  transmute(id = paste(dataset, gear_class, sep = "_"), rho0_km, rho0_censored)
+
+# a cross-validation specification: the same cache as make_spec(), but the
+# fit function runs sdmTMB_cv and keeps only the scores (no models, no
+# coefficients), so nothing here can be read as a BAG effect
+make_cv_spec <- function(id, d, formula, family, spatiotemporal, time, folds) {
+  force(d); force(formula); force(family); force(spatiotemporal); force(time); force(folds)
+  cut <- cutoff
+  key <- list(type = "spatial-block cv", data = d, formula = formula, family = family, cutoff = cut,
+              spatial = "on", spatiotemporal = spatiotemporal, time = time, folds = folds)
+  fun <- function() {
+    fam <- switch(family, nbinom2 = sdmTMB::nbinom2(), tweedie = sdmTMB::tweedie())
+    # one mesh from all the data, shared by every fold
+    mesh <- sdmTMB::make_mesh(d, c("x_km", "y_km"), cutoff = cut)
+    # sequential folds: each spec already runs in its own process, and the
+    # future packages are not direct dependencies; the offset must be given
+    # by column name for sdmTMB_cv
+    cv <- sdmTMB::sdmTMB_cv(formula, data = d, mesh = mesh, family = fam, offset = "log_expo",
+                            spatial = "on", spatiotemporal = spatiotemporal, time = time,
+                            fold_ids = folds, k_folds = max(folds), parallel = FALSE,
+                            save_models = FALSE, silent = TRUE)
+    list(sum_loglik = cv$sum_loglik, fold_loglik = cv$fold_loglik, pdHess = cv$pdHess,
+         max_gradients = cv$max_gradients, fold_rows = as.vector(table(folds)))
+  }
+  list(id = id, key = key, fun = fun)
+}
+
+# the three field structures for the stage × season models
+cv_structures <- tribble(~structure, ~spatiotemporal, ~time,
+                         "shared", "off", NA,
+                         "iid per stage", "iid", "stage_num",
+                         "AR1 per stage", "ar1", "stage_num")
+cv_sets <- ss_sets |>
+  select(id, family, data) |>
+  left_join(rho0, by = "id") |>
+  # blocks at least ρ0 wide, rounded up to the next km
+  mutate(block_km = ceiling(rho0_km),
+         folds = map2(data, block_km, \(d, b) spatial_block_folds(d$x_km, d$y_km, b, qparams$cv_folds)),
+         blocks = map2_int(data, block_km, \(d, b) n_distinct(floor((d$x_km - min(d$x_km)) / b),
+                                                            floor((d$y_km - min(d$y_km)) / b)))) |>
+  cross_join(cv_structures) |>
+  mutate(spec = pmap(list(id, data, family, spatiotemporal, time, folds, structure),
+                     \(id, d, fam, st, tm, fo, s) make_cv_spec(paste(id, "cv", s), d, ss_formula, fam, st,
+                                                               if (is.na(tm)) NULL else tm, fo)))
+
+# the timing models without the AR1 year field, for the AIC comparison
+field_timing <- timing_sets |> filter(!map_lgl(spec_timing, is.null)) |>
+  mutate(spec_nofield = pmap(list(id, plan, step, family), \(id, pl, step, fam)
+    make_spec(paste(id, "timing no year field"), pl$data, timing_formula(step, pl$terms), fam,
+              knots = month_knots(step))))
+
+field_specs <- c(cv_sets$spec, field_timing$spec_nofield)
+t_field <- system.time(run_specs(field_specs, qparams$fit_workers))[["elapsed"]]
+round(t_field / 60, 1)
+# fit times of the new jobs (the CV jobs are 5 fits each)
+field_log <- map_dfr(field_specs, function(s) {
+  m <- jsonlite::read_json(paste0(as.character(fit_cache_path(s$key, paths$models)), ".json"))
+  tibble(model = s$id, rows = nrow(s$key$data), fit_minutes = round(m$fit_seconds / 60, 1))
+})
+save_tab(field_log, "bag_field_fit_log")
+
+# cross-validation scores; Δ against the fitted model (iid per stage)
+cv_scores <- cv_sets |>
+  mutate(cv = map(spec, get_fit)) |>
+  transmute(id, structure, block_km, rho0_censored, blocks,
+            folds_ok = map_int(cv, \(r) sum(r$pdHess)), folds = map_int(cv, \(r) length(r$pdHess)),
+            sum_loglik = map_dbl(cv, "sum_loglik"), fold_loglik = map(cv, "fold_loglik")) |>
+  group_by(id) |>
+  mutate(ref = fold_loglik[structure == "iid per stage"],
+         d_loglik = sum_loglik - sum_loglik[structure == "iid per stage"],
+         # folds where this structure scores higher than the fitted one
+         folds_better = map2_int(fold_loglik, ref, \(a, b) sum(a > b))) |>
+  ungroup() |> select(-ref)
+cv_tab <- cv_scores |> mutate(fold_loglik = map_chr(fold_loglik, \(v) paste(round(v, 1), collapse = "; ")))
+save_tab(cv_tab, "bag_field_cv")
+cv_tab |> select(id, structure, block_km, blocks, folds_ok, folds, sum_loglik, d_loglik, folds_better) |>
+  kable_round(1)
+
+# timing models: AIC with and without the AR1 year field
+field_aic <- field_timing |>
+  transmute(id, ar1 = map(spec_timing, get_fit), off = map(spec_nofield, get_fit)) |>
+  transmute(id, converged_ar1 = map_lgl(ar1, fit_ok), converged_off = map_lgl(off, fit_ok),
+            aic_ar1 = map_dbl(ar1, AIC), aic_off = map_dbl(off, AIC),
+            d_aic = aic_ar1 - aic_off)   # negative: the AR1 year field earns its place
+save_tab(field_aic, "bag_field_aic")
+field_aic |> kable_round(1)
+```
+
 ## Step 5: stage × season BAG
 
 The Stage 2 × band terms (`stageStage 2:dist_bandinside`, `…0-2`) compare
@@ -780,13 +1123,14 @@ ss_fits |> transmute(id, converged = map_lgl(fit, fit_ok),
                      converged_delta_gamma = map_lgl(fit_dg, \(f) if (is.null(f)) NA else fit_ok(f))) |>
   knitr::kable()
 
+# each model's own BAG terms, from its band scheme (D-076)
 bag_rr <- ss_fits |>
-  mutate(rr = map(fit, \(f) rate_ratios(tidy(f), bag_terms))) |>
-  select(id, dataset, gear, rr) |> unnest(rr) |>
-  mutate(stage = str_extract(term, "Stage [23]"), band = if_else(str_detect(term, "inside"), "inside", "0-2")) |>
+  mutate(rr = map2(fit, terms, \(f, tm) rate_ratios(tidy(f), tm))) |>
+  select(id, dataset, gear, bands, rr) |> unnest(rr) |>
+  mutate(stage = str_extract(term, "Stage [23]"), band = str_extract(term, "inside|0-2|near")) |>
   left_join(select(mde, id, mde, descriptive_only), by = "id")
 save_tab(bag_rr, "bag_rate_ratios")
-bag_rr |> select(id, stage, band, rr, rr_lo, rr_hi, p, mde, descriptive_only) |> kable_round(3)
+bag_rr |> select(id, bands, stage, band, rr, rr_lo, rr_hi, p, mde, descriptive_only) |> kable_round(3)
 ```
 
 The delta-Gamma parts for AFE: whether a cell is fished (binomial) and how
@@ -795,9 +1139,9 @@ substance (Phase 5).
 
 ```{r}
 dg_rr <- ss_fits |> filter(dataset == "afe") |>
-  mutate(rr = map(fit_dg, \(f) bind_rows(
-    rate_ratios(tidy(f, model = 1), bag_terms) |> mutate(part = "occupancy (odds ratio)"),
-    rate_ratios(tidy(f, model = 2), bag_terms) |> mutate(part = "intensity given fished")))) |>
+  mutate(rr = map2(fit_dg, terms, \(f, tm) bind_rows(
+    rate_ratios(tidy(f, model = 1), tm) |> mutate(part = "occupancy (odds ratio)"),
+    rate_ratios(tidy(f, model = 2), tm) |> mutate(part = "intensity given fished")))) |>
   select(id, rr) |> unnest(rr)
 save_tab(dg_rr, "bag_delta_gamma_parts")
 dg_rr |> select(id, part, term, rr, rr_lo, rr_hi, p) |> kable_round(3)
@@ -812,7 +1156,7 @@ refit drops every cell with any area in an active zone in any month.
 ```{r}
 length(zone_cells)
 bag_rr_nozone <- ss_sets |>
-  mutate(rr = map(spec_nozone, \(s) rate_ratios(tidy(get_fit(s)), bag_terms))) |>
+  mutate(rr = map2(spec_nozone, terms, \(s, tm) rate_ratios(tidy(get_fit(s)), tm))) |>
   select(id, rr) |> unnest(rr)
 save_tab(bag_rr_nozone, "bag_rate_ratios_no_zone_cells")
 bag_rr_nozone |> select(id, term, rr, rr_lo, rr_hi) |> kable_round(3)
@@ -827,7 +1171,8 @@ terrain, in hours per km² per month, per season.
 #| fig-height: 7
 pred_grid <- function(fit, d) {
   nd <- expand_grid(stage = factor(bag_stage_levels, bag_stage_levels),
-                    dist_band = factor(bag_band_levels, bag_band_levels),
+                    # the model's own band levels: full or merged (D-076)
+                    dist_band = factor(levels(d$dist_band), levels(d$dist_band)),
                     season = factor(c("AprSep", "OctMar"), c("AprSep", "OctMar"))) |>
     mutate(depth_m = mean(d$depth_m), slope_z = 0, bpi_z = 0, x_km = mean(d$x_km), y_km = mean(d$y_km),
            stage_num = as.integer(stage))
@@ -895,10 +1240,20 @@ Stages are replaced by each cell's own exposure, from the Ørsted dates
 The spatial field is persistent plus an AR1 field over years (plan, Phase
 6 sketch).
 
+Only the timing models that pass the term-support rule are fitted (D-076).
+A gear without one is listed in `bag_support_rules` with the reason, and
+its construction-phase response is read from the stage × season BAG or from
+VP. The band scheme, foundation-distance cut and dropped terms of each
+fitted model are listed there too.
+
 ```{r}
-timing_terms <- c("cx_inside", "cx_0_2", "post_inside", "post_0_2", band_x("dx"), "found_band0-2", "found_band2-5",
-                  "found_band5-10", "active", "sz_share")
-timing_fits <- timing_sets |> mutate(fit = map(spec_timing, get_fit))
+# every reported term under either band scheme and any foundation-distance
+# cut; each model reports the ones it has (D-076)
+found_lv <- c("0-2", "2-5", "5-10", "0-5", "0-10")
+timing_terms <- c("cx_inside", "cx_0_2", "cx_near", "post_inside", "post_0_2", "post_near",
+                  band_cols("dx", "full"), band_cols("dx", "merged"), paste0("found_band", found_lv), "active", "sz_share")
+# only the models the support rule kept
+timing_fits <- timing_sets |> filter(!map_lgl(spec_timing, is.null)) |> mutate(fit = map(spec_timing, get_fit))
 timing_fits |> transmute(id, step, converged = map_lgl(fit, fit_ok)) |> knitr::kable()
 
 timing_rr <- timing_fits |>
@@ -911,7 +1266,7 @@ save_tab(timing_rr, "bag_timing_rate_ratios")
 timing_rr |> select(id, term, rr, rr_lo, rr_hi, p) |> kable_round(3)
 
 p <- timing_rr |> filter(str_detect(term, "found_band")) |>
-  mutate(dist = factor(str_remove(term, "found_band"), c("0-2", "2-5", "5-10"))) |>
+  mutate(dist = factor(str_remove(term, "found_band"), found_lv)) |>
   ggplot(aes(dist, rr, colour = gear)) +
   geom_hline(yintercept = 1, colour = "grey50") +
   geom_pointrange(aes(ymin = rr_lo, ymax = rr_hi), position = position_dodge(0.4)) +
@@ -936,17 +1291,22 @@ half-years. The construction and foundation terms are reported for the main
 timing model above; here only the lead terms are read.
 
 ```{r}
-lead_bins <- c(de = "more than 24 months before", l24 = "24–13 months before", l12 = "12–1 months before")
-lead_rr <- timing_sets |>
+# l241: the pooled 24–1 month bin, used when the three bins lack support (D-076)
+lead_bins <- c(de = "more than 24 months before", l24 = "24–13 months before", l12 = "12–1 months before",
+               l241 = "24–1 months before")
+lead_cols <- unlist(map(names(lead_bins), \(p) c(band_cols(p, "full"), band_cols(p, "merged"))))
+# only the models the support rule kept
+lead_rr <- timing_sets |> filter(!map_lgl(spec_timing_leads, is.null)) |>
   mutate(fit = map(spec_timing_leads, get_fit),
          converged = map_lgl(fit, fit_ok),
          rr = map(fit, function(f) {
            t <- tidy(f)
-           rate_ratios(t, intersect(unlist(map(names(lead_bins), band_x)), t$term))
+           rate_ratios(t, intersect(lead_cols, t$term))
          })) |>
-  select(id, dataset, gear, step, converged, rr) |> unnest(rr) |>
+  select(id, dataset, gear, step, bands, converged, rr) |> unnest(rr) |>
   mutate(bin = factor(lead_bins[str_extract(term, "^[a-z0-9]+")], lead_bins),
-         band = factor(str_replace(str_remove(term, "^[a-z0-9]+_"), "_", "-"), c("inside", "0-2", "2-4", "4-8")))
+         band = factor(str_replace(str_remove(term, "^[a-z0-9]+_"), "_", "-"),
+                       c("inside", "0-2", "near", "2-4", "4-8", "mid")))
 save_tab(lead_rr, "bag_timing_leads")
 lead_rr |> select(id, converged, bin, band, rr, rr_lo, rr_hi, p) |> kable_round(3)
 
@@ -970,9 +1330,11 @@ a `gear × stage × band` interaction. The three-way terms test whether fixed
 gear's BAG effect differs from mobile gear's.
 
 ```{r}
-gear_contrast <- map_dfr(gc_specs, function(s) {
+# the three-way terms of each dataset's band scheme (gc_bands, D-076)
+gear_contrast <- imap_dfr(gc_specs, function(s, ds) {
   fit <- get_fit(s)
-  rate_ratios(tidy(fit), paste0("gearFIXED:", bag_terms)) |> mutate(converged = fit_ok(fit))
+  rate_ratios(tidy(fit), paste0("gearFIXED:", bag_terms_of(gc_bands[[ds]]))) |>
+    mutate(converged = fit_ok(fit), bands = gc_bands[[ds]])
 }, .id = "dataset")
 save_tab(gear_contrast, "bag_gear_contrast")
 gear_contrast |> select(dataset, term, rr, rr_lo, rr_hi, p) |> kable_round(3)
@@ -987,17 +1349,7 @@ screen kept but flagged. Each vessel's hours are removed from the cells,
 stages and seasons it used.
 
 ```{r}
-records_path <- \(ds) file.path(paths$processed_gfw, sprintf("gfw_%s_id_classified.csv", ds))
-vessel_hours <- map_dfr(set_names(datasets), \(ds)
-  read_csv(records_path(ds), col_types = cols(.default = "c"),
-           col_select = c(MMSI, `Vessel Name`, cell_id, gear_class, in_primary, hours, date)) |>
-    filter(in_primary == "TRUE") |>
-    mutate(hours = as.numeric(hours), m = floor_date(as.Date(date), "month"),
-           stage = stage_of(m), season = season_of(m)) |>
-    group_by(MMSI, vessel = `Vessel Name`, cell_id, gear_class, stage, season) |>
-    summarise(hours = sum(hours), .groups = "drop"), .id = "dataset")
-input_files <- c(input_files, records_path(datasets))
-
+# vessel_hours: read in "Vessel records" above
 lovo_vessels <- vessel_hours |>
   group_by(dataset, gear_class, MMSI) |>
   summarise(vessel = first(vessel), hours = sum(hours), .groups = "drop") |>
@@ -1007,7 +1359,7 @@ lovo_vessels <- vessel_hours |>
   ungroup()
 
 lovo <- ss_sets |>
-  mutate(res = pmap(list(id, dataset, gear, data, family), function(id, ds, g, d, fam) {
+  mutate(res = pmap(list(id, dataset, gear, data, family, headline, terms), function(id, ds, g, d, fam, hl, tm) {
     vs <- filter(lovo_vessels, dataset == ds, gear_class == g)
     if (nrow(vs) == 0) return(NULL)
     jobs <- tibble(MMSI = vs$MMSI) |>
@@ -1023,7 +1375,7 @@ lovo <- ss_sets |>
                if (fam == "nbinom2") round(y) else y
              }))
     # vessel names are attached in the next chunk, from the tag
-    run_refit_jobs(id, d, fam, jobs) |> filter(term == headline_term)
+    run_refit_jobs(id, d, fam, jobs, hl, tm) |> filter(term == hl)
   })) |>
   select(id, res) |> unnest(res)
 ```
@@ -1031,7 +1383,7 @@ lovo <- ss_sets |>
 ```{r}
 lovo <- lovo |> mutate(MMSI = str_remove(tag, "^lovo_")) |> select(-any_of(c("vessel", "hours"))) |>
   left_join(distinct(lovo_vessels, MMSI, vessel), by = "MMSI") |>
-  left_join(bag_rr |> filter(term == headline_term) |> select(id, full_estimate = estimate), by = "id") |>
+  left_join(headline_rows(bag_rr) |> select(id, full_estimate = estimate), by = "id") |>
   mutate(rr = exp(estimate), shift = estimate - full_estimate)
 save_tab(lovo, "bag_lovo")
 lovo |> group_by(id) |>
@@ -1068,10 +1420,13 @@ leaving the AOI lower it), so this is a sensitivity, not a correction.
 # `terms`: the BAG terms of that model type. The timing models drop terms that
 # do not exist for a gear (the post-construction terms), as in step 6.
 fleet_pairs <- bind_rows(
+  # each stage × season model's own BAG terms (D-076)
   ss_sets |> transmute(id, dataset, gear, model = "stage × season", base = spec, fleet = spec_fleet,
-                       terms = list(bag_terms)),
-  timing_sets |> transmute(id, dataset, gear, model = "timing", base = spec_timing,
-                           fleet = spec_timing_fleet, terms = list(timing_terms)))
+                       terms = terms),
+  # only the timing models the support rule kept
+  timing_sets |> filter(!map_lgl(spec_timing, is.null)) |>
+    transmute(id, dataset, gear, model = "timing", base = spec_timing,
+              fleet = spec_timing_fleet, terms = list(timing_terms)))
 
 fleet_res <- fleet_pairs |>
   mutate(res = pmap(list(base, fleet, terms), function(s0, s1, terms) {
@@ -1099,7 +1454,7 @@ fleet_res |> select(id, model, term, rr, rr_fleet, pct_change, flag) |> kable_ro
 
 # headline-style terms side by side: points without and with the fleet term
 p <- fleet_res |>
-  filter(term %in% c(bag_terms, "cx_inside", "cx_0_2")) |>
+  filter(term %in% c(all_bag_terms, "cx_inside", "cx_0_2", "cx_near")) |>
   pivot_longer(c(rr, rr_fleet), names_to = "fit", values_to = "est") |>
   mutate(lo = if_else(fit == "rr", rr_lo, rr_fleet_lo), hi = if_else(fit == "rr", rr_hi, rr_fleet_hi),
          fit = factor(fit, c("rr", "rr_fleet"), c("without fleet", "with fleet"))) |>
@@ -1119,13 +1474,14 @@ p
 ## Summary and gate
 
 ```{r}
-summary_tab <- bag_rr |>
-  filter(term == headline_term) |>
-  select(id, dataset, gear, rr, rr_lo, rr_hi, p, mde, descriptive_only) |>
+# `bands` says which headline each row is: inside × Stage 3 (full) or the
+# pooled near band × Stage 3 (merged, D-076)
+summary_tab <- headline_rows(bag_rr) |>
+  select(id, dataset, gear, bands, term, rr, rr_lo, rr_hi, p, mde, descriptive_only) |>
   left_join(select(pretrend_gate, id, pretrend = verdict), by = "id") |>
-  left_join(bag_rr_nozone |> filter(term == headline_term) |> select(id, rr_no_zone = rr), by = "id") |>
+  left_join(headline_rows(bag_rr_nozone) |> select(id, rr_no_zone = rr), by = "id") |>
   # the headline rate ratio with the fleet-size covariate (step 8)
-  left_join(fleet_res |> filter(model == "stage × season", term == headline_term) |>
+  left_join(headline_rows(filter(fleet_res, model == "stage × season")) |>
               select(id, rr_fleet), by = "id")
 save_tab(summary_tab, "bag_summary")
 summary_tab |> kable_round(3)

@@ -766,8 +766,16 @@ descriptive time steps (@sec-time-steps). The table covers the models.
 | Gear | VP stage × season | VP timing | AFE stage × season | AFE timing |
 |---|---|---|---|---|
 | MOBILE | Full | Monthly | Full | Monthly (season-year sensitivity) |
-| FIXED | Full | Monthly | Full | Season-year, domain-restricted |
+| FIXED | Full | Monthly | Full, **subject to the support rule** | Season-year, domain-restricted, **subject to the support rule** |
 | POLE_AND_LINE | Full | Monthly | **Not modelled.** Descriptive and spatial statistics only. | **Not modelled.** Only 601 cells were ever positive, and one vessel holds 40% of the hours. |
+
+Every modelled cell of this table also passes the **term-support rule**
+(@sec-bag-support, D-076) before fitting. On the v4 tables (dry run,
+2026-10-31) the rule pools fixed AFE's stage × season bands to near / mid,
+and fixes no AFE timing or leads model for fixed gear: its construction ×
+near-band term rests on 20 positive rows. Fixed-gear timing and
+anticipation therefore come from VP. The rule re-runs on every render, so
+v5 may differ.
 
 Each gear is modelled **separately**. A joint gear-interaction model is fitted
 only to test formally whether the BAG effect differs between mobile and fixed
@@ -1680,6 +1688,69 @@ Report *θ*<sub>b</sub> with 90% and 95% CIs and *δ* on one forest plot per
 gear × dataset, all three windows side by side. Written to
 `bag_pretrend*.csv` in the BAG tables (`bag_pretrend_windows` and
 `bag_pretrend_reading` for the diagnostics).
+
+### Term support and model complexity {#sec-bag-support}
+
+**Why.** The models estimate a fixed set of design terms rather than
+selecting them, which avoids the worst overfitting. But a term can still
+rest on too little data: a zero-filled table has hundreds of thousands of
+rows, while a band × phase term may switch on only a handful of positive
+ones, often from a few vessels. Such an estimate mostly reflects noise or
+one skipper, and its interval looks more precise than the data justify.
+
+**Rule (D-076).** Before any fit, every 0/1 fixed-effect column is counted:
+positive rows, distinct cells and distinct vessels behind it (vessels from
+the Primary records). A term is supported with at least **30 positive rows,
+10 cells and 5 vessels** (10's parameters, set before fitting). The rule is
+applied in a fixed order, with no case-by-case choices:
+
+1. **BAG terms** (stage × band; construction and development × band): if
+   any lacks support, pool the bands to **near** (inside + 0–2 km) and
+   **mid** (2–8 km), with 8–15 km still the reference. If the pooled terms
+   still fail, the model is not fitted and the gear is reported
+   descriptively. The pre-trend test uses the stage × season model's
+   scheme, and the gear contrast the coarser of its two gears'.
+2. **Foundation distance** *h*(·): 0–2 / 2–5 / 5–10 km, else 0–5 / 5–10,
+   else 0–10, else dropped.
+3. **Other indicators** (post-construction × band, active construction):
+   dropped one by one if unsupported.
+4. **Lead bins** (leads model): three, else one pooled 24–1 month bin, else
+   no leads model.
+
+Every count goes to `bag_term_support` and every decision to
+`bag_support_rules`. A pooled headline (near × Stage 3) is a different
+quantity from the full scheme's inside × Stage 3, and `bag_summary` says
+which each row is.
+
+**No new terms in the main models.** From here on, new questions are
+answered with separate sensitivity fits (as the leads model does), never by
+adding terms to the stage × season or timing models. The headline models
+stay as specified before the freeze.
+
+**Random-field complexity** is not covered by term counts. Spatial-block
+cross-validation (`sdmTMB_cv`) decides whether the per-stage and AR1 year
+fields earn their place against a shared field alone. It runs after the
+analysis freeze and before the BAG effects are read, and reports predictive
+scores only. 10 runs it now on the interim models (its "Random-field check"
+section, D-077); Phase 5 repeats it on the settled base model.
+
+- **Stage × season models.** Three structures with the same fixed effects
+  and family: a shared field only, the shared field plus iid per-stage
+  fields (the fitted model), and the shared field plus AR1 per-stage
+  fields. Square blocks at least *ρ*<sub>0</sub> wide (Phase 3's
+  `global_rho0.csv`, rounded up to the next km) are dealt whole to five
+  folds (`spatial_block_folds()`), so every row of a cell is held out
+  together. The score is the summed held-out log likelihood.
+- **Timing models.** Five-fold CV is infeasible (3–6 h per monthly fit), so
+  the AR1 year field is compared with the persistent field alone by AIC
+  (maximum likelihood, same fixed effects; conservative about dropping a
+  field whose variance is at its boundary).
+- **Reading the scores.** A structure replaces the fitted one only if it has
+  a higher total score, scores higher in at least four of the five folds,
+  and has no failed fold (a non-positive-definite Hessian). For the timing
+  models, the AR1 field is dropped only if that lowers AIC by more than 2.
+  A replacement is made in Phase 5's refit, logged as a new decision. The
+  BAG terms and the headline stay as frozen.
 
 ### Limits of the within-AOI BAG {#sec-bag-limits}
 

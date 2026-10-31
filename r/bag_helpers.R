@@ -175,15 +175,143 @@ pre_period_bin <- function(phase, development, lead_months) {
     TRUE ~ "dev_early")
 }
 
-# Indicator × distance-band columns, named `<prefix>_<band>` for the four
-# non-reference bands (inside, 0_2, 2_4, 4_8), as the timing model's cx_*
-# terms are. `d`: a model table with dist_band; `ind`: the name of a 0/1
-# column in it.
-band_interactions <- function(d, ind, prefix) {
-  bands <- c(inside = "inside", "0_2" = "0-2", "2_4" = "2-4", "4_8" = "4-8")
+# Distance-band schemes (D-076) ------------------------------------------------
+# The non-reference bands of each scheme, named as they appear in column
+# names (`<prefix>_<name>`) with their dist_band labels as values. "full" is
+# the plan's four bands; "merged" pools them into near (inside + 0–2 km) and
+# mid (2–8 km), for gears too sparse to support four band terms. The 8–15 km
+# ring stays the reference in both.
+band_schemes <- list(
+  full   = c(inside = "inside", "0_2" = "0-2", "2_4" = "2-4", "4_8" = "4-8"),
+  merged = c(near = "near", mid = "mid"))
+
+# Recode dist_band to the merged scheme: inside and 0–2 km become "near",
+# 2–4 and 4–8 km "mid"; the 8–15 km ring is unchanged and stays the
+# reference level.
+merge_bands <- function(dist_band) {
+  x <- as.character(dist_band)
+  x[x %in% c("inside", "0-2")] <- "near"
+  x[x %in% c("2-4", "4-8")] <- "mid"
+  factor(x, levels = c("8-15", "near", "mid"))
+}
+
+# Indicator × distance-band columns, named `<prefix>_<band>` for the
+# non-reference bands of `bands` (default: the full scheme's inside, 0_2,
+# 2_4, 4_8, as the timing model's cx_* terms are). `d`: a model table with
+# dist_band; `ind`: the name of a 0/1 column in it.
+band_interactions <- function(d, ind, prefix, bands = band_schemes$full) {
   for (nm in names(bands))
     d[[paste0(prefix, "_", nm)]] <- d[[ind]] * (as.character(d$dist_band) == bands[[nm]])
   d
+}
+
+# Distance to the nearest installed foundation as bands, for the timing
+# model's h(·) (D-076). `cuts`: upper edges in km, e.g. c(2, 5, 10) for
+# 0–2 / 2–5 / 5–10 km, or a coarser c(5, 10) or 10 when the finer bands lack
+# support. Cells with no foundation within the last cut are "none", the
+# reference level.
+found_band_of <- function(d_found_km, cuts = c(2, 5, 10)) {
+  labs <- paste0(c(0, utils::head(cuts, -1)), "-", cuts)
+  x <- cut(d_found_km, c(0, cuts), labels = labs, include.lowest = TRUE)
+  x <- as.character(x)
+  x[is.na(x)] <- "none"
+  factor(x, levels = c("none", labs))
+}
+
+# Last day of the model time step holding `month` (a first-of-month Date),
+# so vessel records can be matched to the timing tables' rows. "month": the
+# month's last day. "season_year": the project's convention
+# (season_year_of(), r/analysis_helpers.R): AprSep Y ends 30 September Y;
+# OctMar Y runs October Y − 1 to March Y and ends 31 March Y.
+step_end_of <- function(month, step) {
+  if (step == "month") return(as.Date(format(month + 31, "%Y-%m-01")) - 1)
+  mo <- as.integer(format(month, "%m")); yr <- as.integer(format(month, "%Y"))
+  as.Date(dplyr::case_when(
+    mo >= 4 & mo <= 9 ~ sprintf("%d-09-30", yr),
+    mo >= 10 ~ sprintf("%d-03-31", yr + 1L),
+    TRUE ~ sprintf("%d-03-31", yr)))
+}
+
+# Last day of a season-year time step, from the table's season and
+# season_year columns (the same convention as step_end_of()).
+season_year_end <- function(season, season_year) {
+  as.Date(ifelse(season == "AprSep", sprintf("%d-09-30", as.integer(season_year)),
+                 sprintf("%d-03-31", as.integer(season_year))))
+}
+
+# An integer index that orders season-year steps in time: within season_year
+# Y, OctMar (October Y − 1 to March Y) comes before AprSep Y.
+season_year_index <- function(season, season_year) {
+  2L * as.integer(season_year) + as.integer(season == "AprSep")
+}
+
+# Term support (D-076) ---------------------------------------------------------
+# The fixed-effect part of a model formula: every term except the s()
+# smooths, which have no indicator columns to count.
+fixed_formula <- function(f) {
+  lab <- attr(stats::terms(f), "term.labels")
+  stats::as.formula(paste(deparse(f[[2]]), "~", paste(lab[!startsWith(lab, "s(")], collapse = " + ")))
+}
+
+# How much data backs each 0/1 column of a model's fixed-effect design:
+# rows with it on, positive rows (hours > 0) among them, distinct cells with
+# a positive row and, if `vessels` is given, distinct vessels with positive
+# hours in those rows. Continuous columns (the intercept, terrain, shares,
+# trends) are skipped. `formula`, `d`: the model formula and data.
+# `vessels`: one row per key × MMSI with positive hours, keyed by `keys`
+# (columns of `d`, e.g. cell_id, stage, season).
+term_support <- function(formula, d, vessels = NULL, keys = NULL) {
+  X <- stats::model.matrix(fixed_formula(formula), d)
+  ind <- colnames(X)[apply(X, 2, function(x) all(x %in% c(0, 1)))]
+  ind <- setdiff(ind, "(Intercept)")
+  pos <- d$hours > 0
+  if (!is.null(vessels)) {
+    # character keys on both sides, so factors and dates join alike
+    kd <- dplyr::mutate(dplyr::select(d, dplyr::all_of(keys)), dplyr::across(dplyr::everything(), as.character))
+    kv <- dplyr::mutate(vessels, dplyr::across(dplyr::all_of(keys), as.character))
+  }
+  purrr::map_dfr(ind, function(t) {
+    on <- X[, t] == 1
+    nv <- if (is.null(vessels)) NA_integer_ else
+      dplyr::n_distinct(dplyr::semi_join(kv, dplyr::distinct(kd[on & pos, , drop = FALSE]), by = keys)$MMSI)
+    tibble::tibble(term = t, rows = sum(on), positive = sum(on & pos),
+                   cells = dplyr::n_distinct(d$cell_id[on & pos]), vessels = nv)
+  })
+}
+
+# Whether each term meets the minimum support set in 10's parameters
+# (D-076): at least `min_positive` positive rows, from at least `min_cells`
+# cells and `min_vessels` vessels. A vessel count of NA (no vessel table)
+# skips that criterion.
+support_ok <- function(sup, min_positive, min_cells, min_vessels) {
+  sup$positive >= min_positive & sup$cells >= min_cells &
+    (is.na(sup$vessels) | sup$vessels >= min_vessels)
+}
+
+# Spatial-block folds (D-077) -----------------------------------------------------
+# Cross-validation folds for the random-field check. The study area is cut
+# into square blocks `size_km` on a side (anchored at the lowest x and y),
+# and whole blocks are dealt to `k` folds, so every row of a cell (all its
+# stages and seasons) lands in the same fold. Blocks at least the
+# autocorrelation range ρ0 wide keep most of a held-out block beyond the
+# range of the training data, which is what makes the score honest about
+# spatial prediction (random row folds would leak through the field).
+#
+# The deal is deterministic and does not touch the session's random seed:
+# blocks are ordered by a hash of (seed, block label) and assigned 1, 2, …,
+# k, 1, 2, … in that order, so each fold gets the same number of blocks
+# (± 1). Returns an integer fold per row.
+spatial_block_folds <- function(x_km, y_km, size_km, k = 5, seed = 42) {
+  stopifnot("size_km must be positive" = size_km > 0,
+            "x_km and y_km must have the same length" = length(x_km) == length(y_km))
+  block <- paste(floor((x_km - min(x_km)) / size_km), floor((y_km - min(y_km)) / size_km))
+  blocks <- sort(unique(block))
+  if (length(blocks) < k) stop("only ", length(blocks), " blocks of ", size_km, " km for ", k, " folds")
+  # the hash order stands in for a shuffle: stable across sessions and platforms
+  h <- vapply(blocks, \(b) digest::digest(paste(seed, b), algo = "md5"), character(1))
+  fold_of_block <- integer(length(blocks))
+  fold_of_block[order(h)] <- rep_len(seq_len(k), length(blocks))
+  fold_of_block[match(block, blocks)]
 }
 
 # Cell bootstrap of band rates (descriptive BAG) ---------------------------------

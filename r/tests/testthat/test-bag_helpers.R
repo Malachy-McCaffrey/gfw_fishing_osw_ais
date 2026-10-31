@@ -101,6 +101,81 @@ test_that("band_interactions() adds one indicator × band column per non-referen
   expect_equal(out$dx_0_2, c(0, 1, 0, 0))
   expect_equal(out$dx_2_4, c(0, 0, 0, 0))
   expect_equal(out$dx_4_8, c(0, 0, 0, 0))
+  # merged scheme (D-076)
+  m <- band_interactions(mutate(d, dist_band = merge_bands(dist_band)), "x", "cx", band_schemes$merged)
+  expect_equal(m$cx_near, c(1, 1, 0, 0))
+  expect_equal(m$cx_mid, c(0, 0, 0, 0))
+})
+
+test_that("merge_bands() pools near and mid bands and keeps the ring as reference", {
+  m <- merge_bands(c("inside", "0-2", "2-4", "4-8", "8-15"))
+  expect_equal(as.character(m), c("near", "near", "mid", "mid", "8-15"))
+  expect_equal(levels(m)[1], "8-15")
+})
+
+test_that("found_band_of() bands foundation distance at fine and coarse cuts", {
+  d <- c(NA, 0.5, 2, 3, 7, 12)
+  expect_equal(as.character(found_band_of(d)), c("none", "0-2", "0-2", "2-5", "5-10", "none"))
+  expect_equal(as.character(found_band_of(d, c(5, 10))), c("none", "0-5", "0-5", "0-5", "5-10", "none"))
+  expect_equal(as.character(found_band_of(d, 10)), c("none", "0-10", "0-10", "0-10", "0-10", "none"))
+  expect_equal(levels(found_band_of(d))[1], "none")
+})
+
+test_that("step_end_of() matches months to the timing tables' step ends", {
+  m <- as.Date(c("2019-02-01", "2019-04-01", "2019-09-01", "2019-10-01", "2020-03-01"))
+  expect_equal(step_end_of(m, "month"), as.Date(c("2019-02-28", "2019-04-30", "2019-09-30", "2019-10-31", "2020-03-31")))
+  expect_equal(step_end_of(m, "season_year"),
+               as.Date(c("2019-03-31", "2019-09-30", "2019-09-30", "2020-03-31", "2020-03-31")))
+  # the table side agrees: OctMar 2020 is October 2019 – March 2020
+  expect_equal(season_year_end(c("OctMar", "AprSep", "OctMar"), c(2019, 2019, 2020)),
+               as.Date(c("2019-03-31", "2019-09-30", "2020-03-31")))
+  expect_equal(step_end_of(as.Date("2019-11-01"), "season_year"), season_year_end("OctMar", 2020))
+})
+
+test_that("season_year_index() puts OctMar Y before AprSep Y", {
+  i <- season_year_index(c("OctMar", "AprSep", "OctMar", "AprSep"), c(2019, 2019, 2020, 2020))
+  expect_equal(order(i), 1:4)
+  expect_equal(diff(i), c(1, 1, 1))
+})
+
+test_that("term_support() counts rows, positive rows, cells and vessels per indicator", {
+  d <- tibble(hours = c(0, 2, 1, 0, 3, 4), cell_id = c("a", "a", "b", "b", "c", "c"),
+              stage = factor(c("Stage 1", "Stage 3", "Stage 3", "Stage 1", "Stage 3", "Stage 1"),
+                             c("Stage 1", "Stage 3")),
+              x_cont = c(0.2, 0.5, 1, 2, 3, 4))
+  v <- tibble(cell_id = c("a", "b", "c", "c"), stage = c("Stage 3", "Stage 3", "Stage 3", "Stage 3"),
+              MMSI = c("1", "1", "2", "3"))
+  s <- term_support(hours ~ stage + x_cont + s(x_cont), d, v, c("cell_id", "stage"))
+  expect_equal(s$term, "stageStage 3")   # continuous columns and smooths skipped
+  expect_equal(s$rows, 3)
+  expect_equal(s$positive, 3)
+  expect_equal(s$cells, 3)
+  expect_equal(s$vessels, 3)
+  expect_true(is.na(term_support(hours ~ stage, d)$vessels))
+  expect_equal(support_ok(s, 3, 3, 3), TRUE)
+  expect_equal(support_ok(s, 3, 3, 4), FALSE)
+  expect_equal(support_ok(mutate(s, vessels = NA), 3, 3, 4), TRUE)
+})
+
+test_that("spatial_block_folds() keeps blocks whole and deals them evenly (D-077)", {
+  # a 20 × 20 km grid of 1 km cells, each with two rows (two stages)
+  g <- expand.grid(x = 0:19 + 0.5, y = 0:19 + 0.5)
+  x <- rep(g$x, 2); y <- rep(g$y, 2)
+  f <- spatial_block_folds(x, y, 5, k = 4)
+  expect_type(f, "integer")
+  expect_setequal(unique(f), 1:4)
+  # every 5 km block sits in one fold, and both rows of a cell agree
+  blk <- paste(floor(x / 5), floor(y / 5))
+  expect_true(all(tapply(f, blk, \(v) length(unique(v))) == 1))
+  expect_equal(f[seq_len(nrow(g))], f[nrow(g) + seq_len(nrow(g))])
+  # 16 blocks over 4 folds: 4 blocks each
+  expect_equal(as.vector(table(tapply(f, blk, unique))), rep(4, 4))
+  # deterministic, and the session seed is left alone
+  set.seed(1); r0 <- runif(1); set.seed(1)
+  expect_identical(spatial_block_folds(x, y, 5, k = 4), f)
+  expect_equal(runif(1), r0)
+  expect_false(identical(spatial_block_folds(x, y, 5, k = 4, seed = 7), f))
+  expect_error(spatial_block_folds(x, y, 15, k = 5), "only 4 blocks")
 })
 
 test_that("boot_band_rate() gives the pooled rate with an interval around it", {

@@ -1752,6 +1752,99 @@ section, D-077); Phase 5 repeats it on the settled base model.
   A replacement is made in Phase 5's refit, logged as a new decision. The
   BAG terms and the headline stay as frozen.
 
+### Reading the results {#sec-bag-reading}
+
+Phase 4 produces dozens of estimates per dataset × gear: the headline,
+Stage 2 terms, timing, leads, foundation distance, delta-Gamma parts, the
+gear contrast and several sensitivity refits. They are read as a hierarchy
+of four questions, in order. Each question counts only if the one before it
+passed (D-078). The rules below are fixed before the freeze and applied by
+code (10's "Reading the results" section, `r/bag_helpers.R`), so no
+estimate can change how the others are read.
+
+**1. Can the headline be read? (the gates)**
+
+| Gate | Fails when | Outcome |
+|---|---|---|
+| Support rule (D-076) | the pooled BAG terms still lack support | not fitted: descriptive only |
+| Convergence | the headline fit fails `sanity()` | **fail** |
+| Power | MDE above 50%, or never reached | **fail**: descriptive only, with the MDE |
+| Pre-trend (TOST) | non-parallel | **hold**: the headline comes from the model with the band × year term (Phase 7) |
+| Pre-trend (TOST) | inconclusive | **caution**: with- and without-term models co-primary |
+| Random fields (D-077) | another structure meets the CV rule | **caution** until Phase 5's refit |
+| Residuals (DHARMa) | — | read by eye, not automated (at this sample size the tests reject for trivial misfit) |
+
+A failed gate is "can't say", never "no effect".
+
+**2. What is the headline?** One estimate per dataset × gear: the Stage 3 ×
+inside rate ratio (Stage 3 × near when the bands are pooled, which is a
+different quantity), with its 95% CI, read against the gear's MDE. The
+verdict on it is one of:
+
+- **change detected** (decrease or increase): the 95% CI excludes 1;
+- **no change larger than the MDE**: the 90% CI lies inside ±MDE on the log
+  scale (the TOST reading of @sec-bag-pretrend). This is a finding, not a
+  null;
+- **inconclusive**: neither.
+
+**3. Does it survive? (robustness)** Each check re-estimates the headline
+term and gets one outcome (`check_outcome()`):
+
+- **shifted**: the estimate moves from the headline's by more than the MDE
+  (log scale), or the verdict changes in substance (to the opposite
+  direction, or between a detected change and "no change larger than the
+  MDE");
+- **weaker** / **stronger**: the verdict differs only because the CI is
+  wider (now inconclusive) or narrower (was inconclusive), with the
+  estimate within the MDE of the headline's;
+- **same**: otherwise.
+
+Only **shifted** counts against the headline. A narrower sample widens the
+CI, so a check can lose significance with the same estimate: that is lost
+precision, not a different answer, and it is reported (`checks_weaker`)
+but not counted. A check with several refits (leave-one-vessel-out) shifts
+the headline if any refit does, and the responsible vessel is named. The
+headline is **robust** if no counted check shifts it.
+
+**Counted checks, fixed now.** The more checks are counted, the more often
+one flips by chance, until no headline can be robust. So only four count:
+without safety-zone cells, the fleet-size covariate, leave one vessel out
+(all in 10) and the **fixed cohort** (Phase 7, D-074; the main check that a
+result does not depend on new entrants or on how the safety vessels were
+classified). Three other runs have their own roles:
+
+| Run | Role | Why not a counted check |
+|---|---|---|
+| Exclusion upper bound (D-074) | Own column. If it shifts the headline, the verdict is marked **classification-sensitive** | A bound, biased in a known direction: the restored guard-vessel hours sit inside and along the lease edges, so they push the estimate away from a decrease by construction |
+| Pre-trend-term models (D-018) | Set by the pre-trend gate: non-parallel, **replaces** the headline (resolves "hold"); inconclusive, **co-primary** (a firm verdict needs both to agree); parallel, reported sensitivity | Not a variant of the same estimate. The stage × season model cannot hold a band × year trend with its Stage 2 and Stage 3 × band terms (three stage points per band; dropping Stage 2 × band would extrapolate the trend from the disturbed Stage 2). The term goes in the monthly timing model, and is compared with that model's construction × band term without it |
+| The rest of the Phase 7 table (@sec-sensitivity) | Read together, for patterns across runs | About 15 runs: counted one by one, chance flips would decide robustness |
+
+Phase 7 calls the same helpers, appends its rows to `bag_reading_checks`
+and writes the final `bag_reading`. 10's table is the interim one.
+
+**4. Why and when? (mechanism)** The Stage 2 terms (anticipation, D-075),
+the timing and leads models, foundation distance, the delta-Gamma parts
+(occupancy vs intensity) and the mobile vs fixed contrast explain a
+headline. They are reported with it and never substitute for it: a
+significant lead bin or foundation band without a headline verdict is not a
+finding about the projects.
+
+**The verdict per gear** combines the three: *decrease (or increase)
+detected, robust / not robust*; *no change larger than X%, robust / not
+robust*; *inconclusive*; *withheld until the trend-adjusted fit*; or *not
+interpretable (descriptive only)*. A caution gate keeps the verdict and
+marks it provisional; a shifted exclusion bound adds
+*classification-sensitive*. 10 writes it to `bag_reading`, with every check row
+in `bag_reading_checks` and one forest plot per gear (`bag_reading`).
+
+**Weighing the evidence.** Across about 60 estimates, about 3 will exclude 1
+at 95% by chance alone, so a single surprising sensitivity row or lead bin
+is weak evidence. Agreement across checks, adjacent bands and the two
+datasets carries the weight. VP (presence) and AFE (apparent fishing) measure
+effort differently: the same direction in both is much stronger than either
+alone, and a disagreement is a finding to explain, not noise to average
+away.
+
 ### Limits of the within-AOI BAG {#sec-bag-limits}
 
 - **The reference ring may itself be affected.** If displaced effort moves
@@ -1988,6 +2081,14 @@ mesh <- make_mesh(d, c("x_km", "y_km"), cutoff = 1)
 # geography); spatiotemporal = "iid" adds an independent field per stage
 # for stage-specific deviations that the fixed effects miss. Both seasons
 # of a stage share that stage's field.
+# Frozen in 10, and refitted here as frozen:
+#  - the band scheme comes from the term-support rule (D-076): full bands,
+#    or near (inside + 0–2 km) / mid (2–8 km) where a BAG term lacks
+#    support (fixed AFE on v4). No terms are added (D-076);
+#  - the field structure is the one the spatial-block CV rule selects
+#    (D-077): shared + iid per stage as here, a shared field only
+#    (spatiotemporal = "off"), or AR1 per stage. Any change is a new
+#    decision; the fixed effects stay as frozen.
 m_tw <- sdmTMB(afe_hours ~ 0 + stage * dist_band + season + s(depth_m, k = 4) + slope_z + bpi_z,
                data = d, mesh = mesh, family = tweedie(link = "log"),
                offset = d$log_expo,
@@ -2003,26 +2104,52 @@ m_dg <- update(m_tw, family = delta_gamma())
 # ---- VP, cell x month, mobile gear (timing model) ---------------------------
 # VP behaves like an integer count of vessel-day occupancy, so NB2 (variance
 # grows with the square of the mean) rather than Tweedie. Monthly data
-# replace stages with:
-#  - phase (pre / construction / operation): from each cell's nearest
-#    project's Ørsted dates, so the three schedules give a staggered design;
+# replace stages with each cell's own exposure, from its nearest project's
+# Ørsted dates, so the three schedules give a staggered design. The terms
+# are 10's timing model as frozen (D-075, D-076), written out as 0/1
+# indicator columns built by 10's timing_data():
+#  - construction + cx_* (construction × band, the BAG terms of this
+#    model), and post_* (post-construction × band, SFW only, where
+#    supported);
+#  - development + dx_* (D-075): pre-construction months from Stage 2 on
+#    (October 2020 to the first works), so "pre" in the construction terms
+#    is Stage 1 only and dx_* estimate anticipation (site surveys, boulder
+#    clearance) instead of folding it into the baseline;
+#  - found_band (distance to the nearest installed foundation, 0–2 / 2–5 /
+#    5–10 km, or coarser cuts under the support rule), active (a foundation
+#    going in within 5 km that month), sz_share (share of the cell in an
+#    active safety zone), and dist_band (the baseline gradient);
 #  - s(moy, bs = "cc", k = 8): cyclic seasonal smooth, so December joins
 #    January (caveat 8, season composition);
-#  - s(year, k = 5): slow trend, including growth in AIS carriage (caveat 5).
+#  - s(year_num, k = 5): slow trend, including growth in AIS carriage
+#    (caveat 5).
+# Which of these columns exist, and whether bands are full or pooled, is
+# set per gear by the term-support rule (D-076; e.g. VP fixed drops
+# post_0_2). A separate leads fit replaces development + dx_* with lead bins
+# (dev_early, lead_24_13, lead_12_1 and their band terms; D-075).
 # spatiotemporal = "ar1" over years: fields in consecutive years are
-# correlated, as fishing grounds persist (caveat 14).
+# correlated, as fishing grounds persist (caveat 14). It stays unless the
+# AIC rule of D-077 drops it (ΔAIC > 2 in favour of no year field).
 # knots puts the cyclic smooth's ends at 0.5 and 12.5, so months 1 and 12
 # are one step apart, not the same point.
 # `vp_month_mobile` and `mesh_m` are built like `d` and `mesh` above, from
-# vp_month_gear.csv.
-m_vp <- sdmTMB(vp_hours ~ 0 + phase * dist_band + s(moy, bs = "cc", k = 8) + s(year, k = 5) +
-                 s(depth_m, k = 4) + slope_z + bpi_z,
+# vp_month_gear.csv, through 10's timing_data().
+m_vp <- sdmTMB(hours ~ construction + cx_inside + cx_0_2 + cx_2_4 + cx_4_8 + post_inside + post_0_2 +
+                 development + dx_inside + dx_0_2 + dx_2_4 + dx_4_8 +
+                 found_band + active + sz_share + dist_band +
+                 s(depth_m, k = 4) + slope_z + bpi_z +
+                 s(moy, bs = "cc", k = 8) + s(year_num, k = 5),
                data = vp_month_mobile, mesh = mesh_m, family = nbinom2(),
                offset = vp_month_mobile$log_expo,
-               spatial = "on", spatiotemporal = "ar1", time = "year",
+               spatial = "on", spatiotemporal = "ar1", time = "time_year",
                knots = list(moy = c(0.5, 12.5)))
 
 # ---- AFE, cell x season-year, fixed gear (timing model) ---------------------
+# CONDITIONAL on the term-support rule (D-076). On v4 this model is not
+# fitted: construction × near rests on 20 positive rows even with pooled
+# bands, so fixed-gear timing and anticipation come from VP. If v5 passes
+# the rule, the model takes the same terms as the monthly model above
+# (construction, cx_*, development, dx_*, …) at the season-year step.
 # Fixed-gear AFE is too sparse for a monthly occupancy part (1,381 positive
 # cell-months in a 465-cell domain), so its timing model uses the 22
 # season-years (1,018 positives). Most of what is lost is off-season months
@@ -2041,21 +2168,27 @@ m_vp <- sdmTMB(vp_hours ~ 0 + phase * dist_band + s(moy, bs = "cc", k = 8) + s(y
 # afe_season_year_gear.csv and the fixed-gear domain. `phase` (the modal
 # phase) and the foundation covariates (season means and shares of the
 # monthly values) are already columns of that table (02a).
-m_fx <- sdmTMB(afe_hours ~ 0 + phase * dist_band + season + s(season_year, k = 5) +
-                 s(depth_m, k = 4) + slope_z + bpi_z,
+# Bands pooled to near / mid, as the stage × season model's are on v4.
+m_fx <- sdmTMB(hours ~ construction + cx_near + cx_mid + development + dx_near + dx_mid +
+                 found_band + active + sz_share + dist_band +
+                 s(depth_m, k = 4) + slope_z + bpi_z + season + s(year_num, k = 5),
                data = afe_sy_fixed, mesh = mesh_f, family = delta_gamma(),
                offset = afe_sy_fixed$log_expo,
-               spatial = "on", spatiotemporal = "ar1", time = "season_year")
+               spatial = "on", spatiotemporal = "ar1", time = "time_year")
 
 # ---- Tweedie vs hurdle: spatial-block cross-validation ----------------------
 # Random folds would put each held-out cell next to its training neighbours
 # and reward overfitting the spatial field. Blocks at least rho0 across make
 # held-out cells roughly independent of the training data.
-# spatial_block_folds() is a planned helper in r/spatial_helpers.R that
-# returns one fold ID per row. With fold_ids given, k_folds must match the
-# number of distinct folds. `...` stands for the same formula and arguments
-# as the model being scored.
-cv_tw <- sdmTMB_cv(..., fold_ids = spatial_block_folds(d, size_km = rho0), k_folds = 5)
+# spatial_block_folds() (r/bag_helpers.R, D-077) deals whole square blocks
+# at least rho0 wide to folds, so a cell's rows are held out together; 10's
+# "Random-field check" already uses it for the field structures. With
+# fold_ids given, k_folds must match the number of distinct folds, and the
+# offset must be given as a column name. `...` stands for the same formula
+# and arguments as the model being scored; the same folds score the Tweedie
+# and hurdle fits, so their held-out log likelihoods compare directly.
+cv_tw <- sdmTMB_cv(..., offset = "log_expo", k_folds = 5,
+                   fold_ids = spatial_block_folds(d$x_km, d$y_km, size_km = ceiling(rho0), k = 5))
 ```
 
 ```{r}

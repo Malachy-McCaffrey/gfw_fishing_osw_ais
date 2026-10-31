@@ -178,6 +178,56 @@ test_that("spatial_block_folds() keeps blocks whole and deals them evenly (D-077
   expect_error(spatial_block_folds(x, y, 15, k = 5), "only 4 blocks")
 })
 
+test_that("bag_verdict() sorts decrease, increase, equivalence and inconclusive (D-078)", {
+  m <- 0.3   # margin on the log scale: |log(0.7)| = 0.357
+  expect_equal(bag_verdict(log(0.6), 0.05, m), "decrease")
+  expect_equal(bag_verdict(log(1.5), 0.05, m), "increase")
+  expect_equal(bag_verdict(0.02, 0.05, m), "no change ≥ MDE")
+  expect_equal(bag_verdict(0.02, 0.3, m), "inconclusive")
+  # no MDE: only the CI-excludes-1 readings are possible
+  expect_equal(bag_verdict(0.02, 0.05, NA), "inconclusive")
+  expect_true(is.na(bag_verdict(NA, 0.1, m)))
+})
+
+test_that("check_outcome() separates a shifted answer from lost precision", {
+  m <- 0.3
+  head <- bag_verdict(log(0.6), 0.05, m)   # "decrease"
+  expect_equal(check_outcome(log(0.62), 0.05, log(0.6), head, m), "same")      # wobble
+  expect_equal(check_outcome(log(0.62), 0.5, log(0.6), head, m), "weaker")     # wider CI, same estimate
+  expect_equal(check_outcome(log(0.35), 0.05, log(0.6), head, m), "shifted")   # moved > MDE
+  expect_equal(check_outcome(log(1.5), 0.05, log(1.2), "decrease", 0.9), "shifted")   # opposite direction
+  # a detected change against "no change ≥ MDE" is substantive, even within the MDE
+  expect_equal(check_outcome(log(0.85), 0.03, log(0.97), "no change ≥ MDE", m), "shifted")
+  expect_equal(check_outcome(log(0.85), 0.03, log(0.9), "inconclusive", m), "stronger")
+  expect_true(is.na(check_outcome(NA, NA, log(0.6), head, m)))                 # failed refit
+})
+
+test_that("bag_gate() ranks fail, hold, caution and pass", {
+  g <- bag_gate(converged = c(FALSE, TRUE, TRUE, TRUE, TRUE),
+                descriptive_only = c(FALSE, FALSE, FALSE, FALSE, FALSE),
+                pretrend = c("parallel", "non-parallel", "inconclusive", "parallel", "parallel"),
+                field_other = c(NA, NA, FALSE, TRUE, NA))
+  expect_equal(g$gate, c("fail", "hold", "caution", "caution", "pass"))
+  expect_match(g$gate_reasons[1], "did not converge")
+  expect_match(g$gate_reasons[4], "D-077")
+  expect_equal(g$gate_reasons[5], "")
+  expect_equal(bag_gate(TRUE, TRUE, "parallel", NA)$gate, "fail")
+})
+
+test_that("bag_final_verdict() combines gate, verdict and robustness", {
+  v <- bag_final_verdict(gate = c("pass", "pass", "caution", "fail", "hold", "pass"),
+                         verdict = c("decrease", "decrease", "no change ≥ MDE", "decrease", "decrease", "inconclusive"),
+                         checks_shifted = c(0, 1, 0, 0, 0, 0), mde = 0.3)
+  expect_equal(v, c("decrease detected, robust", "decrease detected, not robust",
+                    "no change larger than 30%, robust (provisional)", "not interpretable (descriptive only)",
+                    "withheld until the trend-adjusted fit", "inconclusive"))
+  # the exclusion bound qualifies a readable verdict without counting as a check
+  expect_equal(bag_final_verdict("pass", "decrease", 0, 0.3, bound = "shifted"),
+               "decrease detected, robust; classification-sensitive")
+  expect_equal(bag_final_verdict("pass", "decrease", 0, 0.3, bound = "weaker"), "decrease detected, robust")
+  expect_equal(bag_final_verdict("fail", "decrease", 0, 0.3, bound = "shifted"), "not interpretable (descriptive only)")
+})
+
 test_that("boot_band_rate() gives the pooled rate with an interval around it", {
   set.seed(3)
   d <- tibble(dist_band = rep(c("inside", "8-15"), each = 200),

@@ -314,6 +314,106 @@ spatial_block_folds <- function(x_km, y_km, size_km, k = 5, seed = 42) {
   fold_of_block[match(block, blocks)]
 }
 
+# Reading the results (D-078) ----------------------------------------------------
+# The plan's reading rules (@sec-bag-reading) as functions, so 10's verdict
+# table applies them mechanically and the rules cannot drift after the
+# estimates are seen. Estimates are on the log scale (log rate ratio), and
+# `mde` is the gear's minimum detectable effect as a proportional decrease
+# (0.3 = a 30% drop), so the equivalence margin is ±|log(1 − mde)| on the
+# log scale: a 30% drop or the matching 43% rise.
+
+# The verdict on one estimate:
+# - "decrease" / "increase": the 95% CI excludes no change;
+# - "no change ≥ MDE": the 90% CI lies inside ±MDE (the TOST reading used by
+#   the pre-trend test), so any change as large as the MDE is ruled out;
+# - "inconclusive": neither (the CI covers no change and an MDE-sized one).
+# A missing MDE leaves only the first two readings. NA estimates give NA.
+bag_verdict <- function(estimate, se, mde) {
+  m <- -log(1 - mde)
+  lo95 <- estimate - stats::qnorm(0.975) * se; hi95 <- estimate + stats::qnorm(0.975) * se
+  lo90 <- estimate - stats::qnorm(0.95) * se;  hi90 <- estimate + stats::qnorm(0.95) * se
+  dplyr::case_when(
+    is.na(estimate) | is.na(se) ~ NA_character_,
+    hi95 < 0 ~ "decrease",
+    lo95 > 0 ~ "increase",
+    !is.na(m) & lo90 > -m & hi90 < m ~ "no change ≥ MDE",
+    TRUE ~ "inconclusive")
+}
+
+# What a sensitivity variant does to the headline's conclusion. A variant on
+# a narrower sample (fixed cohort, no safety-zone cells) widens the CI, which
+# can turn "decrease" into "inconclusive" with the same point estimate: that
+# is lost precision, not a different answer. So the outcome separates the
+# two:
+# - "shifted": the estimate moves from the headline's by more than the MDE
+#   (log scale), or the verdict changes in substance: to the opposite
+#   direction, or between a detected change and "no change ≥ MDE". Only
+#   this makes a headline "not robust";
+# - "weaker" / "stronger": the verdict differs only because the CI is wider
+#   (now inconclusive) or narrower (was inconclusive), with the estimate
+#   within the MDE of the headline's. Reported, not counted;
+# - "same": same verdict, estimate within the MDE.
+# NA when the variant failed to fit.
+check_outcome <- function(estimate, se, est_head, verdict_head, mde) {
+  v <- bag_verdict(estimate, se, mde)
+  moved <- !is.na(mde) & abs(estimate - est_head) > -log(1 - mde)
+  change <- c("decrease", "increase")
+  substantive <- (v %in% change & verdict_head %in% change & v != verdict_head) |
+    (v %in% change & verdict_head == "no change ≥ MDE") |
+    (v == "no change ≥ MDE" & verdict_head %in% change)
+  dplyr::case_when(
+    is.na(v) ~ NA_character_,
+    moved | substantive ~ "shifted",
+    v == verdict_head ~ "same",
+    v == "inconclusive" ~ "weaker",
+    TRUE ~ "stronger")
+}
+
+# Question 1 of the reading order: can the headline be read? Returns one row
+# per model with `gate` and the reasons behind it, worst first:
+# - "fail": the headline fit did not converge, or the gear is descriptive
+#   only (MDE above 50% or never reached; plan, "Simulation power analysis");
+# - "hold": the pre-trend is non-parallel, so the headline must come from a
+#   model with the band × year trend term (Phase 7), not this one;
+# - "caution": the pre-trend is inconclusive (the trend-term model becomes
+#   co-primary), or the random-field check prefers another structure (D-077);
+# - "pass": none of these.
+# `field_other` may be NA (the check was skipped), which is not a caution.
+bag_gate <- function(converged, descriptive_only, pretrend, field_other) {
+  n <- length(converged)
+  out <- lapply(seq_len(n), function(i) {
+    fail <- c(if (!isTRUE(converged[i])) "headline fit did not converge",
+              if (isTRUE(descriptive_only[i])) "MDE above 50% or not reached")
+    hold <- if (identical(pretrend[i], "non-parallel")) "non-parallel pre-trend: needs the band × year term (Phase 7)"
+    caution <- c(if (identical(pretrend[i], "inconclusive")) "inconclusive pre-trend: trend-term model co-primary (Phase 7)",
+                 if (isTRUE(field_other[i])) "random-field check prefers another structure (D-077)")
+    gate <- if (length(fail)) "fail" else if (length(hold)) "hold" else if (length(caution)) "caution" else "pass"
+    c(gate, paste(c(fail, hold, caution), collapse = "; "))
+  })
+  tibble::tibble(gate = vapply(out, `[`, character(1), 1), gate_reasons = vapply(out, `[`, character(1), 2))
+}
+
+# The gear's one-line verdict, from the gate, the headline verdict and how
+# many of the counted robustness checks shifted it (plan, @sec-bag-reading).
+# A "caution" gate keeps the verdict but marks it provisional. `bound`: the
+# exclusion upper bound's check_outcome() (Phase 7; NA until it runs). It is
+# not a counted check, because restoring guard-vessel hours biases the
+# estimate away from a decrease by construction; a shifted bound adds
+# "classification-sensitive" instead.
+bag_final_verdict <- function(gate, verdict, checks_shifted, mde, bound = NA) {
+  robust <- ifelse(checks_shifted == 0, "robust", "not robust")
+  v <- dplyr::case_when(
+    gate == "fail" ~ "not interpretable (descriptive only)",
+    gate == "hold" ~ "withheld until the trend-adjusted fit",
+    is.na(verdict) ~ "not interpretable (no estimate)",
+    verdict == "inconclusive" ~ "inconclusive",
+    verdict %in% c("decrease", "increase") ~ paste0(verdict, " detected, ", robust),
+    verdict == "no change ≥ MDE" ~ paste0("no change larger than ", round(100 * mde), "%, ", robust))
+  # the bound only qualifies a readable verdict
+  v <- ifelse(gate %in% c("pass", "caution") & bound %in% "shifted", paste0(v, "; classification-sensitive"), v)
+  ifelse(gate == "caution", paste(v, "(provisional)"), v)
+}
+
 # Cell bootstrap of band rates (descriptive BAG) ---------------------------------
 # Resamples cells with replacement within each distance band, B times, and
 # returns the rate (hours per km² per month, summed hours over summed

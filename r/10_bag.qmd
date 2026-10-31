@@ -1499,6 +1499,186 @@ Gate (plan, Phase 4):
   the spatial structure and families, and the power analysis and Phase 3's
   criterion 5 are then re-run on its base model.
 
+### Reading the results (D-078)
+
+This report holds dozens of estimates. They answer four questions, in this
+order, and each question counts only if the one before it passed (plan,
+@sec-bag-reading):
+
+1. **Can the headline be read? (the gates)** Fitted under the support rule,
+   converged, MDE at most 50%, pre-trend parallel, random-field check
+   (D-077). DHARMa residuals are read by eye from Step 5's table: with tens
+   of thousands of rows the tests reject for trivial misfit, so they are not
+   automated here.
+2. **What is the headline?** Stage 3 × inside (or near, if pooled) per
+   dataset × gear, with its CI, read against the gear's MDE.
+3. **Does it survive?** Each robustness check re-estimates the headline
+   term and gets one outcome (`check_outcome()`): **shifted** if its
+   estimate moves by more than the MDE or its verdict changes in substance
+   (opposite direction, or between a detected change and "no change ≥
+   MDE"); **weaker** or **stronger** if the verdict differs only because the
+   CI is wider or narrower; otherwise **same**. Only a shifted check makes a
+   headline "not robust": a narrower sample losing significance with the
+   same estimate is lost precision, not a different answer. The counted
+   checks are a short fixed list (below), because the more checks are
+   counted, the more often one flips by chance.
+4. **Why and when?** The Stage 2 terms (anticipation), the timing and leads
+   models, foundation distance, the delta-Gamma parts and the gear contrast
+   explain a headline; they never replace one.
+
+The rules are applied mechanically by `bag_gate()`, `bag_verdict()`,
+`check_outcome()` and `bag_final_verdict()` (`r/bag_helpers.R`), so they
+were fixed before any estimate was seen. Each gear ends in one verdict:
+**change detected** (95% CI excludes 1), **no change larger than the MDE**
+(90% CI inside ±MDE, the pre-trend test's equivalence reading),
+**inconclusive** (neither), or **not interpretable** (a gate failed), each
+marked robust or not. Across this many estimates about 1 in 20 will exclude
+1 by chance, so a single surprising sensitivity row or lead bin is weak
+evidence; agreement across checks, bands and the two datasets is what
+counts.
+
+**Counted checks** (`counted_checks` below): without safety-zone cells,
+fleet-size covariate, leave one vessel out (here), and the fixed cohort
+(Phase 7, D-074). Three Phase 7 runs have other roles and are not counted:
+
+- **Exclusion upper bound** (D-074): its own column. Restoring the
+  guard-vessel hours, which sit inside and along the lease edges, biases
+  the estimate away from a decrease by construction. A shifted bound marks
+  the verdict **classification-sensitive**: a finding about the safety
+  vessels, not noise.
+- **Pre-trend-term models**: their role follows the pre-trend gate. They
+  **replace** the headline when the pre-trend is non-parallel (this is what
+  "hold" waits for), are **co-primary** when it is inconclusive (a firm
+  verdict needs both to agree), and are a reported sensitivity when it is
+  parallel. They are fitted in the monthly timing model, because the stage
+  × season model cannot hold a band × year trend alongside its Stage 2 and
+  Stage 3 × band terms (three stage points per band), so they are compared
+  with the timing model's construction × band term without the trend, not
+  with this headline.
+- **The rest of the Phase 7 sensitivity table** (2020 excluded, four
+  seasons, covariates, exposure radii, …) is read together for patterns,
+  not counted one by one.
+
+Phase 7 calls the same helpers, appends its rows to `bag_reading_checks`
+and writes the final `bag_reading`; this table is the interim one.
+
+```{r}
+# the random-field check's reading per model, if it ran (D-077): another
+# structure meets the rule when it scores higher in total, in all but one
+# fold, and has no failed fold
+field_other <- if (exists("cv_scores")) {
+  cv_scores |> filter(structure != "iid per stage") |> group_by(id) |>
+    summarise(field_other = any(d_loglik > 0 & folds_better >= qparams$cv_folds - 1 & folds_ok == folds),
+              .groups = "drop")
+} else tibble(id = character(), field_other = logical())
+
+# questions 1 and 2: the gate and the headline verdict per model
+reading_head <- headline_rows(bag_rr) |>
+  select(id, dataset, gear, bands, term, estimate, std.error, rr, rr_lo, rr_hi, mde, descriptive_only) |>
+  left_join(transmute(ss_fits, id, converged = map_lgl(fit, fit_ok)), by = "id") |>
+  left_join(select(pretrend_gate, id, pretrend = verdict), by = "id") |>
+  left_join(field_other, by = "id") |>
+  mutate(bag_gate(converged, descriptive_only, pretrend, field_other),
+         verdict = bag_verdict(estimate, std.error, mde))
+
+# question 4, the first piece: anticipation, from the Stage 2 term in the
+# headline's band, with the same verdict rule
+reading_s2 <- bag_rr |>
+  semi_join(transmute(reading_head, id, term = str_replace(term, "Stage 3", "Stage 2")), by = c("id", "term")) |>
+  left_join(select(reading_head, id, mde_h = mde), by = "id") |>
+  transmute(id, stage2 = bag_verdict(estimate, std.error, mde_h), stage2_rr = rr)
+
+# the checks that can make a headline "not robust", fixed before the
+# freeze (D-078); "fixed cohort" arrives with Phase 7's rows
+counted_checks <- c("without safety-zone cells", "fleet-size covariate", "leave one vessel out", "fixed cohort")
+
+# question 3: every robustness estimate of the headline term, on the log
+# scale with its standard error (the fleet table keeps the CI, so its SE is
+# recovered from it)
+se_of_ci <- \(lo, hi) (log(hi) - log(lo)) / (2 * qnorm(0.975))
+robust_rows <- bind_rows(
+  headline_rows(bag_rr_nozone) |>
+    transmute(id, check = "without safety-zone cells", label = check, estimate, se = std.error),
+  # a fleet refit that did not converge is shown as failed, not dropped
+  headline_rows(filter(fleet_res, model == "stage × season")) |>
+    transmute(id, check = "fleet-size covariate", label = check,
+              estimate = if_else(converged_fleet, log(rr_fleet), NA_real_),
+              se = if_else(converged_fleet, se_of_ci(rr_fleet_lo, rr_fleet_hi), NA_real_)),
+  # one row per vessel left out; failed refits are NA
+  lovo |> transmute(id, check = "leave one vessel out", label = paste("without", coalesce(vessel, MMSI)),
+                    estimate, se = std.error)) |>
+  left_join(select(reading_head, id, est_head = estimate, verdict_head = verdict, mde), by = "id") |>
+  mutate(outcome = check_outcome(estimate, se, est_head, verdict_head, mde),
+         counted = check %in% counted_checks)
+save_tab(robust_rows, "bag_reading_checks")
+
+# per model: how many counted checks ran, how many shifted the conclusion or
+# only weakened it, and which rows did (a check with several rows, like LOVO,
+# shifts it if any row does, and the vessel is named)
+robust_by_id <- robust_rows |>
+  filter(counted) |>
+  group_by(id, check) |>
+  summarise(failed = sum(is.na(outcome)), shifted = any(outcome %in% "shifted"),
+            weaker = any(outcome %in% "weaker"),
+            by = paste(label[outcome %in% "shifted"], collapse = "; "), .groups = "drop") |>
+  group_by(id) |>
+  summarise(checks = n(), checks_shifted = sum(shifted), checks_weaker = sum(weaker),
+            refits_failed = sum(failed), shifted_by = paste(by[nzchar(by)], collapse = "; "), .groups = "drop")
+
+# the verdict table: one line per dataset × gear. `bound` (the exclusion
+# upper bound's outcome) stays NA until Phase 7 adds it
+reading <- reading_head |>
+  left_join(reading_s2, by = "id") |>
+  left_join(robust_by_id, by = "id") |>
+  mutate(checks_shifted = coalesce(checks_shifted, 0L), bound = NA_character_,
+         final = bag_final_verdict(gate, verdict, checks_shifted, mde, bound)) |>
+  select(id, dataset, gear, bands, gate, gate_reasons, rr, rr_lo, rr_hi, mde, verdict,
+         stage2, stage2_rr, checks, checks_shifted, checks_weaker, refits_failed, shifted_by, bound, final)
+save_tab(reading, "bag_reading")
+reading |> select(id, bands, gate, rr, rr_lo, rr_hi, mde, verdict, stage2, checks, checks_shifted, checks_weaker, final) |>
+  kable_round(2)
+# the reasons and the rows that shifted a conclusion, where there are any
+reading |> filter(nzchar(gate_reasons) | nzchar(coalesce(shifted_by, ""))) |>
+  select(id, gate_reasons, shifted_by) |> knitr::kable()
+```
+
+One panel per dataset × gear: the headline (dark), each robustness variant
+(blue) and every leave-one-vessel-out refit (grey points), with 95% CIs.
+The shaded band is ±MDE around no change: an estimate inside it is smaller
+than the gear could reliably detect.
+
+```{r}
+#| fig-height: 8
+forest_rows <- c("headline", "without safety-zone cells", "fleet-size covariate", "leave one vessel out")
+forest <- bind_rows(
+  reading_head |> transmute(id, row = "headline", estimate, se = std.error),
+  robust_rows |> transmute(id, row = check, estimate, se)) |>
+  filter(!is.na(estimate)) |>
+  mutate(rr = exp(estimate), lo = exp(estimate - qnorm(0.975) * se), hi = exp(estimate + qnorm(0.975) * se),
+         kind = case_when(row == "headline" ~ "headline", row == "leave one vessel out" ~ "lovo", TRUE ~ "variant"),
+         row = factor(row, rev(forest_rows))) |>
+  # the panel title carries the band scheme, since a pooled headline is a
+  # different quantity (D-076), and the gear's verdict
+  left_join(transmute(reading, id, panel = paste0(id, " (", bands, "): ", final)), by = "id")
+mde_band <- reading |> filter(!is.na(mde)) |>
+  transmute(panel = paste0(id, " (", bands, "): ", final), lo = 1 - mde, hi = 1 / (1 - mde))
+p <- ggplot(forest, aes(rr, row)) +
+  geom_rect(data = mde_band, aes(xmin = lo, xmax = hi, ymin = -Inf, ymax = Inf),
+            inherit.aes = FALSE, fill = "grey85", alpha = 0.4) +
+  geom_vline(xintercept = 1, colour = "grey50") +
+  geom_point(data = filter(forest, kind == "lovo"), colour = "grey45", alpha = 0.6, size = 1,
+             position = position_jitter(width = 0, height = 0.15, seed = 1)) +
+  geom_pointrange(data = filter(forest, kind != "lovo"), aes(xmin = lo, xmax = hi, colour = kind), size = 0.3) +
+  scale_colour_manual(values = c(headline = "#0d366b", variant = "#2a78d6"), guide = "none") +
+  scale_x_log10() +
+  facet_wrap(~ panel, ncol = 1, scales = "free_x", labeller = label_wrap_gen(80)) +
+  labs(x = "headline rate ratio, Stage 3 × inside or near band (log scale)", y = NULL,
+       title = "Headline BAG estimate and its robustness checks",
+       subtitle = "shaded: ±MDE around no change; grey points: one vessel left out")
+save_fig(p, "bag_reading", height = 9)
+p
+```
+
 ## Manifest and provenance
 
 ```{r}

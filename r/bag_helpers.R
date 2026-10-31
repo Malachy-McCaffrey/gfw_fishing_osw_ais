@@ -127,6 +127,65 @@ pretrend_verdict <- function(outcomes) {
   else "inconclusive"
 }
 
+# Where a pre-trend comes from (D-075): compares the full pre-period verdict
+# (the gate) with the Stage 1-only and 2016–2019 diagnostic fits. Stage 2
+# holds site surveys and boulder clearance, and 2020 holds COVID, so a
+# departure seen over the full pre-period but not in Stage 1 points to Stage
+# 2 (anticipation or site work) rather than a long-run trend. `full`,
+# `stage1`, `pre_covid`: verdicts from pretrend_verdict(). Returns one
+# sentence for the reading table.
+pretrend_reading <- function(full, stage1, pre_covid) {
+  dplyr::case_when(
+    full == "parallel" & stage1 == "parallel" ~ "parallel in both: no sign of a problem",
+    full != "parallel" & stage1 == "parallel" ~
+      "departure arises in Stage 2 (anticipation or site work): read the development terms, not a straight-line trend",
+    full == "non-parallel" & stage1 == "non-parallel" ~ "long-run trend: the band × year term is the right fix",
+    full == "parallel" ~ paste0("Stage 1 noise or COVID: the 2016–2019 fit is ", pre_covid),
+    full == "non-parallel" ~ "departure over the full pre-period; Stage 1 alone is too short to place it",
+    stage1 == "non-parallel" ~ paste0("Stage 1 trend not resolved over the full pre-period: the 2016–2019 fit is ", pre_covid),
+    TRUE ~ "inconclusive in both: too little information to place a departure")
+}
+
+# Stage 2 terms for the timing model (D-075) -----------------------------------
+# Months from each pre-construction time step to the cell's first
+# construction step, so pre-period steps can be binned by how close the
+# works were (event-time leads). `cell_id`; `step`: an integer index of the
+# time step (t_index for months; 2 × season_year + OctMar for season-years);
+# `phase`: the nearest project's phase; `step_months`: months per step (1 or
+# 6). NA for steps not in "pre", and for cells never under construction in
+# the window. Relies on phase only moving forward (pre, then construction).
+months_to_works <- function(cell_id, step, phase, step_months = 1) {
+  pre <- as.character(phase) == "pre"
+  first_works <- stats::ave(ifelse(pre, NA_real_, step), cell_id,
+                            FUN = function(x) if (all(is.na(x))) rep(NA_real_, length(x)) else rep(min(x, na.rm = TRUE), length(x)))
+  ifelse(pre, (first_works - step) * step_months, NA_real_)
+}
+
+# The pre-construction bin of each time step (D-075): "baseline" (Stage 1),
+# "dev_early" (development, more than 24 months before the works, or no
+# works in the window), "lead_24_13" and "lead_12_1"; NA outside "pre".
+# `development`: logical, the step is pre-construction and in Stage 2 or
+# later. Leads count only inside development, so Stage 1 stays the baseline.
+pre_period_bin <- function(phase, development, lead_months) {
+  dplyr::case_when(
+    as.character(phase) != "pre" ~ NA_character_,
+    !development ~ "baseline",
+    !is.na(lead_months) & lead_months <= 12 ~ "lead_12_1",
+    !is.na(lead_months) & lead_months <= 24 ~ "lead_24_13",
+    TRUE ~ "dev_early")
+}
+
+# Indicator × distance-band columns, named `<prefix>_<band>` for the four
+# non-reference bands (inside, 0_2, 2_4, 4_8), as the timing model's cx_*
+# terms are. `d`: a model table with dist_band; `ind`: the name of a 0/1
+# column in it.
+band_interactions <- function(d, ind, prefix) {
+  bands <- c(inside = "inside", "0_2" = "0-2", "2_4" = "2-4", "4_8" = "4-8")
+  for (nm in names(bands))
+    d[[paste0(prefix, "_", nm)]] <- d[[ind]] * (as.character(d$dist_band) == bands[[nm]])
+  d
+}
+
 # Cell bootstrap of band rates (descriptive BAG) ---------------------------------
 # Resamples cells with replacement within each distance band, B times, and
 # returns the rate (hours per km² per month, summed hours over summed

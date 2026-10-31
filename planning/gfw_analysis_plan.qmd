@@ -508,6 +508,12 @@ the methods with numbers recomputed at render time, not typed.
       baseline: the 30 vessels have 73 AFE h in the AOI before their windows
       open (HUNTER 61 h in 2016–17), none of it in a lease. Any real fishing
       the windows hide is effort from vessels new to the AOI.
+    - **Limitation:** attraction by vessels new to the AOI cannot be
+      measured. If some boats began fishing near the turbines during
+      construction and also worked as guard vessels, the safety windows hide
+      that effort, and the fixed cohort leaves it out by design. Only the
+      exclusion upper bound shows it, mixed with guard work, so the study
+      may understate attraction.
 
     *Treatment:*
     - Keep the windows as they are.
@@ -1454,6 +1460,16 @@ $$
   starts. Only SFW reaches `post_construction` inside the window, so the
   operation-phase contrast rests on SFW's 76 nearest cells (count at render
   time); RWF and SRW inform the construction phase.
+- **Development as its own phase (D-075).** The model splits `pre` into
+  Stage 1 (the baseline) and **development**: pre-construction months from
+  Stage 2 on (October 2020 to the nearest project's first works), when site
+  surveys and boulder clearance ran. Development gets its own band terms,
+  so any anticipation is estimated rather than folded into the baseline,
+  and the construction terms measure change from Stage 1. A second fit
+  splits development into **event-time leads** by months to the works
+  (more than 24, 24–13 and 12–1), each with band terms, to show whether
+  and when effort moved before construction. For SFW, RWF and SRW the
+  leads start in March 2021, May 2022 and June 2023.
 - **SFW has no gradient of its own.** RWF and SRW surround it, so every
   SFW-nearest cell is `inside` (62) or `0–2` km (14); none falls in the
   2–15 km bands or the 8–15 km reference. A project-specific SFW gradient
@@ -1617,6 +1633,24 @@ for RWF-nearest cells and 26 for SRW-nearest cells. Seabed preparation dates
 were not supplied, so a pre-period may include some preparatory work just
 before the first foundation; dropping the last 3 pre months is a sensitivity.
 
+**Diagnostic windows (D-075).** Stage 2 holds site surveys, boulder
+clearance and, at its start, COVID, so the same test also runs on **Stage 1
+only** (January 2016 – September 2020) and on **2016–2019** (time steps
+ending by December 2019), with the same margin. The full pre-period verdict
+stays the gate. The diagnostics say where a departure comes from:
+
+| Full pre-period | Stage 1 only | Reading |
+|---|---|---|
+| Parallel | Parallel | No sign of a problem |
+| Non-parallel or inconclusive | Parallel | The departure arises in Stage 2 (anticipation or site work): read the timing model's development terms rather than a straight-line pre-trend term |
+| Non-parallel | Non-parallel | A long-run trend: the `band × year` term is the right fix |
+| Parallel | Non-parallel or inconclusive | Stage 1 noise or COVID: read the 2016–2019 fit |
+
+Stage 1 is 57 months and 2016–2019 is 48, so their intervals are wider and
+"inconclusive" is more likely; that is why they are diagnostics, not the
+gate. The stage × season BAG's Stage 2 × band terms are the matching
+anticipation estimate for that model.
+
 **Margin.** A pre-trend matters if, extrapolated over the gap between the
 before and after periods, it would bias the BAG effect by as much as half
 the smallest effect worth detecting:
@@ -1643,7 +1677,9 @@ so no multiplicity correction is needed.
 | Some 95% CI excludes 0 and its estimate lies outside ±*δ* | Non-parallel trends | Add the `band × year` pre-trend term to every BAG model for that gear (the Phase 1 rule), and report the extrapolated bias. |
 
 Report *θ*<sub>b</sub> with 90% and 95% CIs and *δ* on one forest plot per
-gear × dataset. Written to `models/pretrend_*.csv`.
+gear × dataset, all three windows side by side. Written to
+`bag_pretrend*.csv` in the BAG tables (`bag_pretrend_windows` and
+`bag_pretrend_reading` for the diagnostics).
 
 ### Limits of the within-AOI BAG {#sec-bag-limits}
 

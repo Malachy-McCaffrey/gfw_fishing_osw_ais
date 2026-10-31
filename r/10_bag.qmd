@@ -364,17 +364,51 @@ timing_data <- function(ds, g, step) {
                                c("none", "0-2", "2-5", "5-10")),
            active = if (step == "month") as.numeric(active_construction) else active_construction_share,
            year_num = if (step == "month") as.numeric(year) else as.numeric(season_year),
-           time_year = as.integer(year_num))
+           time_year = as.integer(year_num),
+           # Stage 2 as its own phase (D-075): pre-construction steps from
+           # Stage 2 on (site surveys, boulder clearance) are "development",
+           # so "pre" in the construction terms means Stage 1 only, and the
+           # dx_* terms estimate any anticipation instead of assuming none.
+           # For RWF- and SRW-nearest cells development runs into Stage 3,
+           # up to their own project's first works.
+           development = as.numeric(phase == "pre" & stage != "Stage 1"),
+           # last day of the time step, for the 2016–2019 pre-trend fit;
+           # season-year OctMar Y runs from October Y to March Y + 1
+           step_end = if (step == "month") ceiling_date(as.Date(year_month), "month") - 1
+                      else if_else(season == "AprSep", make_date(season_year, 9, 30), make_date(season_year + 1, 3, 31)),
+           # event-time leads (D-075): months to the cell's first
+           # construction step, binned inside development
+           step_idx = if (step == "month") t_index else 2L * season_year + (season == "OctMar"),
+           lead_months = months_to_works(cell_id, step_idx, phase, if (step == "month") 1 else 6),
+           pre_bin = pre_period_bin(phase, development == 1, lead_months),
+           dev_early = as.numeric(pre_bin %in% "dev_early"),
+           lead_24_13 = as.numeric(pre_bin %in% "lead_24_13"),
+           lead_12_1 = as.numeric(pre_bin %in% "lead_12_1")) |>
+    band_interactions("development", "dx") |>
+    band_interactions("dev_early", "de") |>
+    band_interactions("lead_24_13", "l24") |>
+    band_interactions("lead_12_1", "l12")
 }
-timing_cols <- c("cell_id", "hours", "log_expo", "dist_band", "phase", "year_c", "construction",
+# the development and lead × band columns made by band_interactions()
+band_x <- \(prefix) paste0(prefix, "_", c("inside", "0_2", "2_4", "4_8"))
+timing_cols <- c("cell_id", "hours", "log_expo", "dist_band", "phase", "stage", "step_end", "year_c", "construction",
                  "cx_inside", "cx_0_2", "cx_2_4", "cx_4_8", "post_inside", "post_0_2", "found_band",
+                 "development", band_x("dx"), "pre_bin", "dev_early", "lead_24_13", "lead_12_1",
+                 band_x("de"), band_x("l24"), band_x("l12"),
                  "active", "sz_share", "depth_m", "slope_z", "bpi_z", "year_num", "time_year", "x_km", "y_km")
 pretrend_formula <- function(step) {
   if (step == "month") hours ~ dist_band * year_c + s(moy, bs = "cc", k = 8) + s(depth_m, k = 4) + slope_z + bpi_z
   else hours ~ dist_band * year_c + season + s(depth_m, k = 4) + slope_z + bpi_z
 }
-timing_formula <- function(step) {
-  common <- "construction + cx_inside + cx_0_2 + cx_2_4 + cx_4_8 + post_inside + post_0_2 + found_band + active + sz_share + dist_band + s(depth_m, k = 4) + slope_z + bpi_z"
+# `pre_terms`: how the pre-construction period is split. The main timing
+# model gives development one set of band terms (D-075); the leads model
+# (`lead_terms`) splits it by months to the works instead.
+dev_terms  <- paste(c("development", band_x("dx")), collapse = " + ")
+lead_terms <- paste(c("dev_early", "lead_24_13", "lead_12_1", band_x("de"), band_x("l24"), band_x("l12")),
+                    collapse = " + ")
+timing_formula <- function(step, pre_terms = dev_terms) {
+  common <- paste("construction + cx_inside + cx_0_2 + cx_2_4 + cx_4_8 + post_inside + post_0_2 +", pre_terms,
+                  "+ found_band + active + sz_share + dist_band + s(depth_m, k = 4) + slope_z + bpi_z")
   as.formula(if (step == "month") paste("hours ~", common, "+ s(moy, bs = 'cc', k = 8) + s(year_num, k = 5)")
              else paste("hours ~", common, "+ season + s(year_num, k = 5)"))
 }
@@ -387,12 +421,29 @@ timing_sets <- timing_models |>
          spec_pre = pmap(list(id, data, step, family), \(id, d, step, fam)
            make_spec(paste(id, "pretrend"), filter(d, phase == "pre"), pretrend_formula(step), fam,
                      knots = month_knots(step))),
+         # diagnostic pre-trend fits (D-075): Stage 1 only, without the
+         # Stage 2 site work; and 2016–2019, without COVID as well
+         spec_pre_s1 = pmap(list(id, data, step, family), \(id, d, step, fam)
+           make_spec(paste(id, "pretrend stage 1"), filter(d, phase == "pre", stage == "Stage 1"),
+                     pretrend_formula(step), fam, knots = month_knots(step))),
+         spec_pre_1619 = pmap(list(id, data, step, family), \(id, d, step, fam)
+           make_spec(paste(id, "pretrend 2016-2019"), filter(d, phase == "pre", step_end <= as.Date("2019-12-31")),
+                     pretrend_formula(step), fam, knots = month_knots(step))),
          # timing BAG: persistent field plus an AR1 field over years
          spec_timing = pmap(list(id, data, step, family), \(id, d, step, fam)
            make_spec(paste(id, "timing"), d, timing_formula(step), fam, "ar1", "time_year",
+                     knots = month_knots(step))),
+         # the same with development split into event-time leads (D-075)
+         spec_timing_leads = pmap(list(id, data, step, family), \(id, d, step, fam)
+           make_spec(paste(id, "timing leads"), d, timing_formula(step, lead_terms), fam, "ar1", "time_year",
                      knots = month_knots(step))))
 timing_sets |> transmute(id, step, rows = map_int(data, nrow), cells = map_int(data, \(d) n_distinct(d$cell_id)),
-                         pre_rows = map_int(data, \(d) sum(d$phase == "pre"))) |> knitr::kable()
+                         pre_rows = map_int(data, \(d) sum(d$phase == "pre")),
+                         stage1_rows = map_int(data, \(d) sum(d$pre_bin %in% "baseline")),
+                         pre_2016_2019_rows = map_int(data, \(d) sum(d$phase == "pre" & d$step_end <= as.Date("2019-12-31"))),
+                         dev_early_rows = map_int(data, \(d) sum(d$pre_bin %in% "dev_early")),
+                         lead_24_13_rows = map_int(data, \(d) sum(d$pre_bin %in% "lead_24_13")),
+                         lead_12_1_rows = map_int(data, \(d) sum(d$pre_bin %in% "lead_12_1"))) |> knitr::kable()
 
 # --- fleet-size sensitivity (step 8; plan caveat 5) ---------------------------
 # AOI-wide fleet size per gear and time step: distinct Primary MMSIs of that
@@ -474,6 +525,8 @@ refits (steps 3 and 8) run in their own worker pool.
 ```{r}
 all_specs <- c(ss_sets$spec, ss_sets$spec_base, ss_sets$spec_nozone, compact(ss_sets$spec_dg),
                timing_sets$spec_pre, timing_sets$spec_timing, gc_specs,
+               # Stage 2 diagnostics (D-075)
+               timing_sets$spec_pre_s1, timing_sets$spec_pre_1619, timing_sets$spec_timing_leads,
                # fleet-size sensitivity (step 8): new fits; the ones above stay cached
                ss_sets$spec_fleet, timing_sets$spec_timing_fleet)
 run_specs <- function(specs, workers) {
@@ -638,43 +691,86 @@ the gap between the Stage 1 and Stage 3 midpoints (`pretrend_margin()`).
 The spatial field here is persistent only (no time-varying field), since
 the trend terms are the subject.
 
+**Two diagnostic windows (D-075).** Stage 2 (October 2020 to the first
+works) holds site surveys, boulder clearance and, at its start, COVID, so a
+departure in the full pre-period may be early disturbance rather than a
+long-run trend. The same test therefore runs on **Stage 1 only** (January
+2016 – September 2020) and on **2016–2019** (time steps ending by December
+2019, without COVID), with the same margin *δ*. The full pre-period verdict
+remains the gate; the two diagnostics only say where a departure comes from
+(`pretrend_reading()`). They are shorter, so "inconclusive" is more likely.
+
 ```{r}
 mid <- \(s) dev_stages$start[dev_stages$stage == s] + (dev_stages$end[dev_stages$stage == s] - dev_stages$start[dev_stages$stage == s]) / 2
 dt_years <- as.numeric(mid("Stage 3") - mid("Stage 1")) / 365.25
 dt_years
 
-pretrend <- timing_sets |>
-  mutate(res = pmap(list(id, spec_pre), function(id, sp) {
-    fit <- get_fit(sp)
+# band trends and their TOST outcomes from one pre-trend fit
+pretrend_tab <- function(sp, delta) {
+  tidy(get_fit(sp)) |> filter(str_detect(term, "^dist_band.*:year_c$")) |>
+    mutate(band = str_remove_all(term, "dist_band|:year_c")) |>
+    rowwise() |> mutate(tost_band(estimate, std.error, delta)) |> ungroup() |>
+    select(band, est, se, lo90, hi90, lo95, hi95, delta, outcome)
+}
+pretrend_windows <- c(full = "full pre-period", stage1 = "Stage 1 only", pre_covid = "2016–2019")
+pretrend_all <- timing_sets |>
+  mutate(res = pmap(list(id, spec_pre, spec_pre_s1, spec_pre_1619), function(id, s0, s1, s2) {
     m <- mde$mde[mde$id == id]
     delta <- pretrend_margin(if (length(m)) m else NA_real_, dt_years)
-    tidy(fit) |> filter(str_detect(term, "^dist_band.*:year_c$")) |>
-      mutate(band = str_remove_all(term, "dist_band|:year_c")) |>
-      rowwise() |> mutate(tost_band(estimate, std.error, delta)) |> ungroup() |>
-      select(band, est, se, lo90, hi90, lo95, hi95, delta, outcome)
+    bind_rows(full = pretrend_tab(s0, delta), stage1 = pretrend_tab(s1, delta),
+              pre_covid = pretrend_tab(s2, delta), .id = "window")
   })) |>
   select(id, dataset, gear, res) |> unnest(res)
+save_tab(pretrend_all, "bag_pretrend_windows")
+
+# the gate: the full pre-period, as before
+pretrend <- pretrend_all |> filter(window == "full") |> select(-window)
 save_tab(pretrend, "bag_pretrend")
 pretrend_gate <- pretrend |> group_by(id, dataset, gear) |>
   summarise(verdict = pretrend_verdict(outcome), delta = first(delta), .groups = "drop")
 save_tab(pretrend_gate, "bag_pretrend_verdict")
 pretrend_gate |> kable_round(4)
 
-p <- ggplot(pretrend, aes(est, band)) +
+# where a departure comes from: the gate's verdict next to the diagnostics
+pretrend_where <- pretrend_all |> group_by(id, dataset, gear, window) |>
+  summarise(verdict = pretrend_verdict(outcome), .groups = "drop") |>
+  pivot_wider(names_from = window, values_from = verdict) |>
+  mutate(reading = pretrend_reading(full, stage1, pre_covid))
+save_tab(pretrend_where, "bag_pretrend_reading")
+pretrend_where |> knitr::kable()
+
+# one row per band and window, offset vertically so the three windows sit
+# side by side; the margin is shaded as before
+win_cols <- c("full pre-period" = "black", "Stage 1 only" = "#2a78d6", "2016–2019" = "#eb6834")
+band_lv <- c("inside", "0-2", "2-4", "4-8")
+pt_plot <- pretrend_all |>
+  mutate(window = factor(pretrend_windows[window], pretrend_windows),
+         y = match(band, band_lv) + c(0.2, 0, -0.2)[as.integer(window)])
+p <- ggplot(pt_plot, aes(est, y, colour = window)) +
   geom_rect(aes(xmin = -delta, xmax = delta, ymin = -Inf, ymax = Inf), fill = "grey92", inherit.aes = FALSE,
-            data = distinct(pretrend, id, dataset, gear, delta)) +
+            data = distinct(pt_plot, id, dataset, gear, delta)) +
   geom_vline(xintercept = 0, colour = "grey50") +
-  geom_linerange(aes(xmin = lo95, xmax = hi95), colour = "grey55") +
-  geom_linerange(aes(xmin = lo90, xmax = hi90), linewidth = 1.2, colour = "black") +
-  geom_point(size = 2) +
+  geom_linerange(aes(xmin = lo95, xmax = hi95), linewidth = 0.4) +
+  geom_linerange(aes(xmin = lo90, xmax = hi90), linewidth = 1.2) +
+  geom_point(size = 1.8) +
+  scale_y_continuous(breaks = seq_along(band_lv), labels = band_lv, trans = "reverse") +
+  scale_colour_manual(values = win_cols, name = NULL) +
   facet_wrap(~ id, ncol = 3, scales = "free_x") +
   labs(x = "band trend relative to the 8–15 km ring (log scale per year)", y = NULL,
-       title = "Pre-construction trends: 90% (thick) and 95% (thin) CIs; grey = equivalence margin ±δ")
-save_fig(p, "bag_pretrend", height = 5)
+       title = "Pre-construction trends by window: 90% (thick) and 95% (thin) CIs; grey = equivalence margin ±δ") +
+  theme(legend.position = "top")
+save_fig(p, "bag_pretrend", height = 6)
 p
 ```
 
 ## Step 5: stage × season BAG
+
+The Stage 2 × band terms (`stageStage 2:dist_bandinside`, `…0-2`) compare
+Stage 2 with Stage 1 before any foundation or cable went in, so they are
+this model's **anticipation estimate** (D-075): a Stage 2 effect means
+fishers responded to site surveys, boulder clearance or the prospect of
+construction, and Stage 3's terms then measure change from a Stage 1
+baseline that Stage 2 had already moved away from.
 
 ```{r}
 ss_fits <- ss_sets |>
@@ -782,6 +878,11 @@ Stages are replaced by each cell's own exposure, from the Ørsted dates
   post-construction, and every SFW-nearest cell is inside a lease or within
   2 km, so the post terms exist for those two bands only and are relative to
   the area-wide trend, not to the outer ring;
+- `development` (D-075): pre-construction months from Stage 2 on (October
+  2020 to the nearest project's first works), with development × band
+  terms `dx_*`. So "pre" in the construction terms is Stage 1 only, and the
+  `dx_*` terms estimate any anticipation (site surveys, boulder clearance)
+  instead of folding it into the baseline;
 - `found_band`: distance to the nearest installed foundation, 0–2, 2–5 and
   5–10 km, against "none within 10 km" (the plan's *h*(·), as bands);
 - `active_construction`: a foundation going in that month within 5 km (*λ*);
@@ -795,7 +896,7 @@ The spatial field is persistent plus an AR1 field over years (plan, Phase
 6 sketch).
 
 ```{r}
-timing_terms <- c("cx_inside", "cx_0_2", "post_inside", "post_0_2", "found_band0-2", "found_band2-5",
+timing_terms <- c("cx_inside", "cx_0_2", "post_inside", "post_0_2", band_x("dx"), "found_band0-2", "found_band2-5",
                   "found_band5-10", "active", "sz_share")
 timing_fits <- timing_sets |> mutate(fit = map(spec_timing, get_fit))
 timing_fits |> transmute(id, step, converged = map_lgl(fit, fit_ok)) |> knitr::kable()
@@ -820,6 +921,45 @@ p <- timing_rr |> filter(str_detect(term, "found_band")) |>
        y = "rate ratio vs none within 10 km (log scale)", colour = NULL,
        title = "Turbine-distance response h(·), beyond the safety zones and active construction")
 save_fig(p, "bag_timing_found_distance", height = 4.5)
+p
+```
+
+### Anticipation: event-time leads (D-075)
+
+The timing model refitted with development split by months to the cell's
+first construction step: more than 24 months before (`dev_early`), 24–13
+(`lead_24_13`) and 12–1 (`lead_12_1`), each with band terms, against Stage 1.
+A band term near 1 in every bin means no anticipation; a fall that deepens
+toward the works means fishers moved off before construction began, and
+shows when. For fixed AFE (season-year steps) the bins are whole
+half-years. The construction and foundation terms are reported for the main
+timing model above; here only the lead terms are read.
+
+```{r}
+lead_bins <- c(de = "more than 24 months before", l24 = "24–13 months before", l12 = "12–1 months before")
+lead_rr <- timing_sets |>
+  mutate(fit = map(spec_timing_leads, get_fit),
+         converged = map_lgl(fit, fit_ok),
+         rr = map(fit, function(f) {
+           t <- tidy(f)
+           rate_ratios(t, intersect(unlist(map(names(lead_bins), band_x)), t$term))
+         })) |>
+  select(id, dataset, gear, step, converged, rr) |> unnest(rr) |>
+  mutate(bin = factor(lead_bins[str_extract(term, "^[a-z0-9]+")], lead_bins),
+         band = factor(str_replace(str_remove(term, "^[a-z0-9]+_"), "_", "-"), c("inside", "0-2", "2-4", "4-8")))
+save_tab(lead_rr, "bag_timing_leads")
+lead_rr |> select(id, converged, bin, band, rr, rr_lo, rr_hi, p) |> kable_round(3)
+
+p <- ggplot(lead_rr, aes(bin, rr, colour = band, group = band)) +
+  geom_hline(yintercept = 1, colour = "grey50") +
+  geom_pointrange(aes(ymin = rr_lo, ymax = rr_hi), position = position_dodge(0.5), size = 0.25) +
+  geom_line(position = position_dodge(0.5), linewidth = 0.4) +
+  scale_y_log10() +
+  facet_wrap(~ id, ncol = 3) +
+  labs(x = "time before the nearest project's first works", y = "rate ratio vs the 8–15 km ring, against Stage 1 (log scale)",
+       colour = "band", title = "Anticipation: band effects in the months before construction") +
+  theme(axis.text.x = element_text(angle = 20, hjust = 1))
+save_fig(p, "bag_timing_leads", height = 5)
 p
 ```
 

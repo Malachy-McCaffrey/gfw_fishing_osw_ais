@@ -137,6 +137,11 @@ query_end   <- as.character(max(dev_stages$end) + 1)
 port_rules |> as_tibble()
 
 api_pause <- 0.3 # seconds between vessel IDs, to be gentle with the API
+
+# GARFO review scope (D-087): disagreeing vessels with at least this many VP
+# hours outside the excluded windows; 20 per sheet
+review_min_vp_hours <- 100
+review_sheet_size   <- 20
 max_consecutive_errors <- 5 # stop the pull after this many failures in a row
 ```
 
@@ -179,6 +184,12 @@ tibble(primary_mmsi = n_distinct(primary$MMSI), n_vessel_ids = nrow(vessel_ids),
 
 communities <- read_port_communities(paths$port_communities)
 overrides   <- read_port_anchorages(paths$port_anchorages, communities)
+
+# crosswalk windows that take a vessel out of Primary (charters, non-fishing
+# hulls, gear markers): visits and hours inside them are not fishing (D-086)
+windows <- read_chr(paths$crosswalk) |> type_crosswalk() |> non_primary_windows()
+tibble(n_windows = nrow(windows), mmsi = n_distinct(windows$MMSI),
+       primary_mmsi_with_window = sum(unique(windows$MMSI) %in% primary$MMSI))
 count(communities, community, name = "points")
 ```
 
@@ -272,21 +283,32 @@ counted visit takes the community of the nearest reference point within
 10 km of its anchorage's position (the label is not used: it can be wrong),
 unless `port_anchorages.csv` overrides that anchorage.
 
+Visits that start inside one of the vessel's crosswalk windows outside
+Primary (a safety charter, say) are set aside first (D-086): they show where
+the charter work was based, not the fishing port. A vessel-year whose visits
+all fall in such a window gets status `excluded` instead of a port.
+
 ```{r}
-visits <- raw |>
-  port_visit_filter() |>
+counted <- port_visit_filter(raw)
+charter <- in_window(counted, windows, "start")
+dropped <- counted[charter, ]
+
+visits <- counted[!charter, ] |>
   assign_port_community(communities, overrides)
 
-tibble(raw = nrow(raw), counted = nrow(visits),
-       dropped = nrow(raw) - nrow(visits))
+tibble(raw = nrow(raw), counted = nrow(counted), in_excluded_windows = nrow(dropped),
+       assigned = nrow(visits))
 
 count(visits, port_rule)
 visits |> count(community, sort = TRUE)
 ```
 
 ```{r}
-# home port per MMSI x year (descriptive), and the Stage 1 group (Phase 7)
+# home port per MMSI x year (descriptive), and the Stage 1 group (Phase 7);
+# years with only excluded visits are listed as "excluded"
 port_year <- home_port_of(visits, by = c("MMSI", "year"))
+port_year <- bind_rows(port_year, excluded_port_years(dropped, port_year)) |>
+  arrange(MMSI, year)
 
 port_stage1 <- home_port_stage1(visits, select(primary, MMSI, first)) |>
   filter(MMSI %in% vessel_ids$MMSI)
@@ -301,11 +323,11 @@ count(port_stage1, window, status)
 dir.create(dirname(paths$port_year), recursive = TRUE, showWarnings = FALSE)
 
 port_year |>
-  mutate(dataset = dataset, rules = "D-080") |>
+  mutate(dataset = dataset, rules = "D-080; D-086") |>
   write_csv(paths$port_year, na = "")
 
 port_stage1 |>
-  mutate(dataset = dataset, rules = "D-080") |>
+  mutate(dataset = dataset, rules = "D-080; D-086") |>
   write_csv(paths$port_stage1, na = "")
 
 # anchorages outside every community: review, and add an override where one
@@ -325,6 +347,26 @@ anchorage_review
 
 Before any downstream use (D-080). These checks describe the tables; none of
 them changes a rule.
+
+Effort hours for the checks, per MMSI × year × stage from the raw pulls,
+Primary vessels only, without the hours inside a crosswalk window outside
+Primary (D-086), so they are the hours the analysis counts.
+
+```{r}
+hours_of <- function(path, dataset_name) {
+  d <- read_gfw(path) |>
+    in_analysis_window() |>
+    filter(MMSI %in% vessel_ids$MMSI)
+  d[!in_window(d, windows, "date"), ] |>
+    mutate(year = year(date)) |>
+    group_by(MMSI, year, stage = `Development Stage`) |>
+    summarise(hours = sum(hours), .groups = "drop") |>
+    left_join(select(primary, MMSI, gear_class), by = "MMSI") |>
+    mutate(dataset = dataset_name)
+}
+hours <- bind_rows(hours_of(paths$raw_vp, "VP"), hours_of(paths$raw_afe, "AFE"))
+hours |> group_by(dataset) |> summarise(hours = round(sum(hours)))
+```
 
 ### Against GARFO
 
@@ -397,18 +439,25 @@ if (file.exists(paths$garfo_match)) {
 
 The review sheet: the 20 highest-effort vessels with at least one year where
 GFW and GARFO principal ports disagree and no finding yet, so each session
-moves on to the next ones. Check each with MarineTraffic and PSIX, as for the
+moves on to the next ones. **The review covers disagreeing vessels with at
+least 100 VP hours** outside the excluded windows (D-087); below that the
+vessels are many and their effort small, so they are left unreviewed and the
+share of disagreeing effort reviewed is reported with the agreement. Check each with MarineTraffic and PSIX, as for the
 vessel review. `link_tier` says what to check first: a `confirmed` link that
 disagrees is most likely a real difference between the declared port and
 where the vessel lands; a `name_only` one may be the wrong hull. Fill in
 `finding` and `note`; leave `finding` blank to skip a vessel.
 
 ```{r}
-hours_total <- roster |>
-  transmute(MMSI, vp_hours = rowSums(across(starts_with("vp_hours_"), as.numeric)))
+# ranked by VP hours outside the excluded windows (D-086): the effort the
+# analysis counts, not a charter's
+hours_total <- hours |>
+  filter(dataset == "VP") |>
+  group_by(MMSI) |>
+  summarise(vp_hours = round(sum(hours), 1), .groups = "drop")
 
 if (!is.null(agreement)) {
-  garfo_review <- agreement |>
+  disagreeing <- agreement |>
     filter(agree_principal %in% FALSE) |>
     group_by(MMSI) |>
     summarise(link_tier = as.character(first(link_tier)),
@@ -419,9 +468,36 @@ if (!is.null(agreement)) {
               .groups = "drop") |>
     left_join(select(primary, MMSI, Vessel_Name, gear_class), by = "MMSI") |>
     left_join(hours_total, by = "MMSI") |>
-    # vessels already reviewed are not listed again
-    filter(!MMSI %in% port_findings$MMSI) |>
-    slice_max(vp_hours, n = 20, with_ties = FALSE) |>
+    mutate(vp_hours = coalesce(vp_hours, 0),
+           in_scope = vp_hours >= review_min_vp_hours,
+           reviewed = MMSI %in% port_findings$MMSI)
+
+  # progress through the review scope (D-087)
+  disagreeing |>
+    # output names differ from the in_scope / reviewed columns, which
+    # summarise() would otherwise overwrite before the later lines use them
+    summarise(disagreeing = n(), disagreeing_vp_hours = round(sum(vp_hours)),
+              n_in_scope = sum(in_scope), in_scope_vp_hours = round(sum(vp_hours[in_scope])),
+              n_reviewed = sum(in_scope & reviewed),
+              n_left = sum(in_scope & !reviewed),
+              share_of_disagreeing_hours_in_scope =
+                round(sum(vp_hours[in_scope]) / sum(vp_hours), 3)) |>
+    print()
+
+  # the vessels already reviewed, with their VP hours: findings on vessels
+  # below the cut-off (from sheets written before D-087) still stand, but
+  # they don't count toward the progress through the scope
+  disagreeing |>
+    filter(reviewed) |>
+    select(MMSI, Vessel_Name, link_tier, vp_hours, in_scope) |>
+    arrange(desc(vp_hours)) |>
+    print()
+
+  garfo_review <- disagreeing |>
+    # in scope and not reviewed yet
+    filter(in_scope, !reviewed) |>
+    select(-in_scope, -reviewed) |>
+    slice_max(vp_hours, n = review_sheet_size, with_ties = FALSE) |>
     mutate(marinetraffic = paste0("https://www.marinetraffic.com/en/ais/details/ships/mmsi:", MMSI),
            finding = NA_character_, note = NA_character_, checked_on = NA_character_) |>
     # the findings columns first, as in the other review sheets
@@ -448,19 +524,6 @@ synthesis. Stage 1 coverage under the Stage 1 group is also shown, since
 that is what Phase 7 uses.
 
 ```{r}
-# hours per MMSI x year x stage, from the raw pulls (Primary vessels only)
-hours_of <- function(path, dataset_name) {
-  read_gfw(path) |>
-    in_analysis_window() |>
-    filter(MMSI %in% vessel_ids$MMSI) |>
-    mutate(year = year(date)) |>
-    group_by(MMSI, year, stage = `Development Stage`) |>
-    summarise(hours = sum(hours), .groups = "drop") |>
-    left_join(select(primary, MMSI, gear_class), by = "MMSI") |>
-    mutate(dataset = dataset_name)
-}
-hours <- bind_rows(hours_of(paths$raw_vp, "VP"), hours_of(paths$raw_afe, "AFE"))
-
 coverage_year <- port_coverage(hours, port_year, by = c("dataset", "gear_class", "stage"))
 coverage_year
 
@@ -499,6 +562,7 @@ is the same as under the default rule.
 ```{r}
 sens <- list(
   confidence_4 = raw |> port_visit_filter(min_confidence = 4) |>
+    (\(v) v[!in_window(v, windows, "start"), ])() |>  # the D-086 windows, as above
     assign_port_community(communities, overrides) |> home_port_of(),
   duration_weighted = home_port_of(visits, weight = "duration_hrs"))
 

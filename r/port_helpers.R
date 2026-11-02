@@ -284,6 +284,51 @@ port_agreement <- function(gfw, garfo, communities) {
                                   gfw_port == garfo_home))
 }
 
+# Crosswalk windows outside Primary (D-086) ---------------------------------
+#
+# A vessel's port visits during a charter (e.g. a safety vessel staged near
+# the leases) say where its charter work was based, not its fishing port. So
+# 03b drops visits, and effort hours, that fall in a crosswalk window that
+# takes the vessel out of Primary, the same windows classify() applies
+# (r/vessel_helpers.R): activity_excluded, or a non_fishing or gear_marker
+# hull. Open window ends run to lo_date / hi_date, as in classify().
+
+# The typed crosswalk (type_crosswalk()) -> MMSI, from, to of every window
+# outside Primary
+non_primary_windows <- function(cw) {
+  cw |>
+    dplyr::filter(activity_excluded %in% TRUE |
+                    hull_class %in% c("non_fishing", "gear_marker")) |>
+    dplyr::transmute(MMSI, from = dplyr::coalesce(valid_from, lo_date),
+                     to = dplyr::coalesce(valid_to, hi_date))
+}
+
+# TRUE for each row of `df` whose `date_col` (a Date, or a time read as its
+# UTC date) falls in one of its MMSI's windows
+in_window <- function(df, windows, date_col) {
+  if (nrow(df) == 0) return(logical())
+  key <- tibble::tibble(.row = seq_len(nrow(df)), MMSI = df$MMSI,
+                        .d = as.Date(df[[date_col]]))
+  hit <- dplyr::inner_join(key, windows,
+                           by = dplyr::join_by(MMSI, dplyr::between(.d, from, to)))
+  key$.row %in% hit$.row
+}
+
+# Vessel-years whose counted visits all fell in a window outside Primary, as
+# home-port rows with status "excluded" (no community), so the per-year
+# table says why the year has no port instead of leaving it out. `dropped`
+# are the visits removed for a window; `port_year` the home ports from the
+# rest. A year with visits both inside and outside a window keeps the port
+# its outside visits give.
+excluded_port_years <- function(dropped, port_year) {
+  dropped |>
+    dplyr::count(MMSI, year, name = "visits") |>
+    dplyr::anti_join(port_year, by = c("MMSI", "year")) |>
+    dplyr::mutate(community = NA_character_, top_community = NA_character_,
+                  port_state = NA_character_, share = NA_real_, status = "excluded") |>
+    dplyr::select(dplyr::all_of(names(port_year)))
+}
+
 # GARFO port review findings (D-085) ----------------------------------------
 #
 # The GARFO review sheet (03b) is regenerated on every render, so findings

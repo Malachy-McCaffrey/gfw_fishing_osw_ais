@@ -30,6 +30,18 @@ Phase 4, frequentist models 5, INLA-SPDE 6, sensitivity 7 and synthesis 8.
 
 ---
 
+### 2026-11-02, scope of the GARFO port review
+
+| ID | Topic | Decision | Consequence | Status |
+|---|---|---|---|---|
+| D-087 | Which GFW–GARFO port disagreements get reviewed | **The GARFO port review covers the disagreeing vessels with at least 100 VP hours** outside the D-086 windows, 20 per sheet, highest VP hours first. Below the cut-off the vessels are many and their effort small: they stay unreviewed, and the share of disagreeing VP hours inside the scope is reported alongside the agreement rates. Findings on vessels below the cut-off (from sheets written before this decision) still stand and still feed the exclusions, but don't count toward the progress | 03b: `review_min_vp_hours` and `review_sheet_size` in the Parameters chunk; a progress table (disagreeing, in scope, reviewed, left, share of disagreeing hours in scope) and a table of the reviewed vessels with their VP hours. v4: 250 disagreeing vessels with 22,565 VP hours; 55 in scope with 16,491 (73.1%); 1 reviewed (HEATHER LYNN), 54 left. ANDREA A (67 h), KAREN NICOLE (24 h) and FLEET KING (2 h) were reviewed before the cut-off. Plan @sec-ports and data dictionary updated | |
+
+### 2026-11-02, charter windows in the port tables
+
+| ID | Topic | Decision | Consequence | Status |
+|---|---|---|---|---|
+| D-086 | Port visits and effort inside crosswalk windows outside Primary | **03b sets aside every port visit that starts inside one of the vessel's crosswalk windows outside Primary, and every effort hour inside one,** using the windows `classify()` applies: `activity_excluded`, or a `non_fishing` or `gear_marker` hull (open ends to `lo_date` / `hi_date`). A charter's visits show where the charter work was based, not the fishing port. A vessel-year whose visits all fall in such a window gets status `excluded` (no community) instead of a port; a year partly in a window takes its port from the visits outside it. The coverage checks and the GARFO review sheet's ranking use the hours outside the windows, the effort the analysis counts. The Stage 1 groups use the same visits, so a charter in Stage 1 no longer sets a vessel's group. Also recorded in the plan: the home port is where a vessel makes most of its port visits (usually its berth), not its landing port. Prompted by the user's review of AMELIA JOYCE (home port Newport News, VA; its 2024 Newport and New London visits are safety-charter work, excluded from 2021-05-01 in the crosswalk) and HEATHER LYNN (home port Point Judith; lands in New Bedford) | `r/port_helpers.R`: `non_primary_windows()`, `in_window()`, `excluded_port_years()` (tested). 03b reads `references/vessel_crosswalk_{pipeline}.csv`; the port tables' `rules` column reads "D-080; D-086". v4: 705 windows on 106 MMSIs, 34 of them Primary; 2,557 of 189,835 counted visits fall in a window; 87 vessel-years are `excluded` (port 79.9%, multiple 10.1%, unknown 9.0%); the checks use 94,894 VP and 27,252 AFE hours. AMELIA JOYCE is now `excluded` from 2023 on and has left the GARFO review sheet, so it needs no finding. Data dictionary and plan @sec-ports updated | |
+
 ### 2026-11-02, recording the GARFO port review
 
 | ID | Topic | Decision | Consequence | Status |

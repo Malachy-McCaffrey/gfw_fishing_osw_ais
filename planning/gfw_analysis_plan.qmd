@@ -841,6 +841,16 @@ every MMSI in the pull and record where a vessel actually goes.
 | Robustness groups | Port communities (or states, if communities are too thin) that pass the D-076 support rule; the rest pooled as "other" |
 | Definition sensitivity | Confidence 4 only; visits weighted by duration instead of counted |
 
+**What the home port measures.** The community where a vessel makes most of
+its port visits, which is usually where it ties up. It is **not the landing
+port**: a vessel based in Point Judith that lands in New Bedford makes short
+landing visits there against many nights at home (HEATHER LYNN, GARFO
+review, 2026-11-02). The synthesis calls it the home port. Landing ports
+would need dealer data. **Charter windows are left out (D-086):** visits
+inside a crosswalk window that takes the vessel out of Primary (a safety
+charter, a non-fishing hull) are not counted, and a year with only such
+visits is `excluded`.
+
 **Port communities** (`references/port_communities.csv`, D-081): one row
 per reference point (a USGS GNIS harbour or village, cited by `gnis_id`),
 several points per community where it spans more than one harbour. The
@@ -889,7 +899,9 @@ review (D-083), Greenport / North Fork, City Island, Plymouth, Old Saybrook
      Stage 1);
    - **review sheet:** the 20 highest-effort vessels where GFW and GARFO
      disagree, checked with MarineTraffic and PSIX as for the vessel
-     review.
+     review. **The scope is the disagreeing vessels with at least 100 VP
+     hours (D-087)**; the share of disagreeing VP hours inside it is
+     reported with the agreement rates.
 
 **Where the tables are used.** The synthesis (14): Primary hours by port
 community × band × stage, per gear and dataset, with the share of hours

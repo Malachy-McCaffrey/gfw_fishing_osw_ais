@@ -223,3 +223,39 @@ test_that("collect_port_findings() works with no sheet and no file yet", {
   expect_equal(names(f), port_finding_cols)
   expect_equal(nrow(f), 0)
 })
+
+# Crosswalk windows outside Primary (D-086) ----------------------------------
+
+test_that("non_primary_windows() keeps charters, non-fishing hulls and gear markers", {
+  cw <- bind_rows(
+    cw_row("1", valid_from = "2021-05-01", activity_excluded = TRUE),   # open-ended charter
+    cw_row("2", hull_class = "non_fishing"),                            # whole record
+    cw_row("3", valid_from = "2020-01-01", valid_to = "2020-12-31"),    # fishing, kept in
+    cw_row("4", hull_class = "gear_marker"))
+  w <- non_primary_windows(cw)
+  expect_equal(w$MMSI, c("1", "2", "4"))
+  expect_equal(w$from, c(as.Date("2021-05-01"), lo_date, lo_date))
+  expect_equal(w$to, rep(hi_date, 3))
+})
+
+test_that("in_window() flags rows inside their own MMSI's window only", {
+  w <- tibble(MMSI = "1", from = as.Date("2021-05-01"), to = as.Date("2021-12-31"))
+  d <- tibble(MMSI = c("1", "1", "1", "2"),
+              start = as.POSIXct(c("2021-04-30 23:00", "2021-05-01 01:00", "2022-01-01 00:00",
+                                   "2021-06-01 00:00"), tz = "UTC"))
+  expect_equal(in_window(d, w, "start"), c(FALSE, TRUE, FALSE, FALSE))
+  expect_equal(in_window(d[0, ], w, "start"), logical())
+})
+
+test_that("excluded_port_years() lists years with only excluded visits", {
+  port_year <- tibble(MMSI = "1", year = 2021, community = "Newport", top_community = "Newport",
+                      port_state = "RI", visits = 4L, share = 1, status = "port")
+  dropped <- tibble(MMSI = "1", year = c(2021, 2024, 2024))
+  ex <- excluded_port_years(dropped, port_year)
+  # 2021 keeps the port from its visits outside the window; 2024 is excluded
+  expect_equal(ex$year, 2024)
+  expect_equal(ex$status, "excluded")
+  expect_equal(ex$visits, 2L)
+  expect_true(is.na(ex$community))
+  expect_equal(names(ex), names(port_year))
+})

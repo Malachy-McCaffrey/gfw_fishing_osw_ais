@@ -162,3 +162,18 @@ test_that("every fishing_roster_*.csv is valid", {
                  info = f)
   }
 })
+
+test_that("port_communities.csv and port_anchorages.csv are valid (D-080, D-081)", {
+  # read_port_communities() carries the schema checks; it stops on a failure
+  pc <- read_port_communities(root_paths$port_communities)
+  expect_true(all(grepl("^[0-9]+$", pc$gnis_id)))   # every point cites a GNIS feature
+  # the probe's ports all have a community (planning/gfw_analysis_plan.qmd, @sec-ports)
+  expect_true(all(c("Point Judith / Galilee", "New Bedford / Fairhaven", "Montauk",
+                    "New London / Mystic", "Block Island") %in% pc$community))
+  # one state per point, and a community's points within 100 km of each other
+  # (Cape Cod is the widest, Woods Hole to Provincetown)
+  span <- pc |> group_by(community) |>
+    summarise(km = 111 * sqrt(diff(range(lat))^2 + (diff(range(lon)) * cos(41 * pi / 180))^2))
+  expect_true(all(span$km < 100), info = paste(span$community[span$km >= 100], collapse = ", "))
+  expect_no_error(read_port_anchorages(root_paths$port_anchorages, pc))
+})

@@ -212,3 +212,115 @@ gfw_4wings_pinned <- function(dataset, start_date, end_date, region, ...) {
   readr::read_csv(unz(zip, csv), show_col_types = FALSE,
                   col_types = readr::cols(.default = readr::col_character()))
 }
+
+# Port visits from the GFW Events API (03b_port_visits.qmd, D-080) -------------
+#
+# gfwr 3.0's get_event(event_type = "PORT_VISIT") asks for
+# "public-global-port-visits-c2-events:latest", which the API now answers with
+# HTTP 404 (probe, 2026-11-01). The working dataset is
+# "public-global-port-visits-events", served at ":latest" and at pinned
+# versions, and v4.0 and v5.0 differ slightly for the same vessel ID. So, as
+# for 4Wings above, the request is built here with the version pinned to the
+# pipeline's, and every parsed row records the dataset it came from.
+
+# Port-visit dataset ID at a pinned version: port_visits_dataset("v5.0") ->
+# "public-global-port-visits-events:v5.0". ":latest" is refused, as above.
+port_visits_dataset <- function(version) {
+  if (!grepl("^v[0-9]+[.][0-9]+$", version)) {
+    stop("dataset version must look like v5.0, not '", version, "'", call. = FALSE)
+  }
+  sprintf("public-global-port-visits-events:%s", version)
+}
+
+# The httr2 request for one page of one vessel ID's port visits, built but not
+# sent. Dates are "YYYY-MM-DD"; `offset` pages through the results (the API
+# returns `nextOffset` while more remain). One vessel ID per request, so a
+# failure or an empty answer is recorded against that ID in the queried log.
+gfw_port_visits_request <- function(vessel_id, dataset, start_date, end_date,
+                                    offset = 0, limit = 500,
+                                    key = Sys.getenv("GFW_TOKEN")) {
+  stopifnot("one vessel ID per request" = is.character(vessel_id) && length(vessel_id) == 1,
+            "start_date must come before end_date" = as.Date(start_date) < as.Date(end_date))
+  httr2::request(gfw_api_base) |>
+    httr2::req_url_path_append("events") |>
+    httr2::req_url_query(`datasets[0]` = dataset, `vessels[0]` = vessel_id,
+                         `start-date` = start_date, `end-date` = end_date,
+                         limit = limit, offset = offset) |>
+    httr2::req_headers(Authorization = paste("Bearer", key)) |>
+    httr2::req_user_agent(gfwr::gfw_user_agent())
+}
+
+# Every port visit of one vessel ID: sends the request page by page and returns
+# the API's entries as a list (one element per visit), for parse_port_visits().
+# Transient failures (HTTP 429/503) are retried; an API error stops with GFW's
+# own message, which 03b catches and logs as an error for that ID.
+gfw_port_visits <- function(vessel_id, dataset, start_date, end_date,
+                            key = Sys.getenv("GFW_TOKEN"), pause = 0.3) {
+  entries <- list()
+  offset <- 0
+  repeat {
+    page <- gfw_port_visits_request(vessel_id, dataset, start_date, end_date,
+                                    offset = offset, key = key) |>
+      httr2::req_retry(max_tries = 3) |>
+      httr2::req_error(body = \(resp) tryCatch(
+        paste(unlist(httr2::resp_body_json(resp)$messages), collapse = "; "),
+        error = \(e) NULL)) |>
+      httr2::req_perform() |>
+      httr2::resp_body_json()
+    entries <- c(entries, page$entries)
+    if (is.null(page$nextOffset)) break
+    offset <- page$nextOffset
+    Sys.sleep(pause)   # be gentle with the API between pages
+  }
+  entries
+}
+
+# Columns of the raw port-visit cache, in order (one row per visit)
+port_visit_cols <- c("event_id", "visit_id", "vessel_id", "MMSI", "vessel_name",
+                     "start", "end", "confidence", "duration_hrs",
+                     paste0(rep(c("start", "int", "end"), each = 6),
+                            c("_anchorage_id", "_label", "_name", "_lat", "_lon", "_at_dock")),
+                     "dataset", "pulled_on")
+
+# API entries for one vessel ID -> one row per visit, every column character
+# (as the other raw caches are; port_visit_filter() types what it needs). The
+# GFW vessel type on the events is not kept: the roster's classification is
+# used instead (D-080). Stops if any event's MMSI (`ssvid`) differs from
+# `mmsi`, the MMSI the vessel ID was queried for, since a mismatch means the
+# vessel ID does not belong to that MMSI in this pipeline.
+parse_port_visits <- function(entries, vessel_id, mmsi, dataset, pulled_on = Sys.Date()) {
+  if (length(entries) == 0) {
+    # no visits: an empty table with the cache's columns, so appends line up
+    return(tibble::as_tibble(stats::setNames(
+      rep(list(character()), length(port_visit_cols)), port_visit_cols)))
+  }
+  # a JSON field as text; absent or null fields (e.g. an unnamed anchorage's
+  # `name`) become NA rather than dropping the column
+  chr <- function(x) if (is.null(x)) NA_character_ else as.character(x)
+  # the six fields kept for one anchorage (start, intermediate or end)
+  anchorage <- function(a, prefix) {
+    stats::setNames(list(chr(a$anchorageId), chr(a$id), chr(a$name), chr(a$lat),
+                         chr(a$lon), chr(a$atDock)),
+                    paste0(prefix, c("_anchorage_id", "_label", "_name", "_lat", "_lon",
+                                     "_at_dock")))
+  }
+  rows <- lapply(entries, \(e) {
+    pv <- e$port_visit
+    tibble::as_tibble(c(
+      list(event_id = chr(e$id), visit_id = chr(pv$visitId),
+           vessel_id = vessel_id, MMSI = chr(e$vessel$ssvid),
+           vessel_name = chr(e$vessel$name), start = chr(e$start), end = chr(e$end),
+           confidence = chr(pv$confidence), duration_hrs = chr(pv$durationHrs)),
+      anchorage(pv$startAnchorage, "start"),
+      anchorage(pv$intermediateAnchorage, "int"),
+      anchorage(pv$endAnchorage, "end"),
+      list(dataset = dataset, pulled_on = as.character(pulled_on))))
+  })
+  out <- dplyr::bind_rows(rows)
+  wrong <- setdiff(unique(out$MMSI), mmsi)
+  if (length(wrong) > 0) {
+    stop("vessel ID ", vessel_id, " was queried for MMSI ", mmsi,
+         " but its events carry ", paste(wrong, collapse = ", "), call. = FALSE)
+  }
+  out[port_visit_cols]
+}

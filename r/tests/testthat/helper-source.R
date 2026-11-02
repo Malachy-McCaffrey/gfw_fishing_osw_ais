@@ -15,6 +15,7 @@ source(file.path(root, "r/infra_helpers.R"))
 source(file.path(root, "r/spatial_helpers.R"))
 source(file.path(root, "r/bag_helpers.R"))
 source(file.path(root, "r/compare_helpers.R"))
+source(file.path(root, "r/port_helpers.R"))
 
 # project paths made absolute, for the reference-file tests; `pipeline` is a
 # version name, not a path, so it is kept as it is

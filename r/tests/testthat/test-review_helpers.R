@@ -124,9 +124,20 @@ test_that("read_garfo() never reads personal fields and splits fishery codes", {
   f <- tempfile(fileext = ".csv")
   write_csv(tibble(PERMIT = "123", `PERMIT YEAR` = "2022", `VESSEL NAME` = "LADY ANN",
                    `HULL ID` = "555555", LENGTH = "40", `OWNER NAME` = "A PERSON",
-                   TELEPHONE = "000", LOBSTER = "A1, A2", SCALLOP = NA), f, na = "")
+                   TELEPHONE = "000", CITY = "OWNER TOWN", STATE = "ZZ",
+                   `HOME PORT CITY` = "GALILEE", `HOME PORT STATE` = "RI",
+                   `PRINCIPAL PORT CITY` = "POINT JUDITH", `PRINCIPAL PORT STATE` = "RI",
+                   LOBSTER = "A1, A2", SCALLOP = NA), f, na = "")
   g <- read_garfo(f)
-  expect_false(any(c("OWNER NAME", "TELEPHONE") %in% c(names(g$permits), names(g$codes))))
+  expect_false(any(c("OWNER NAME", "TELEPHONE", "CITY", "STATE") %in%
+                     c(names(g$permits), names(g$codes))))
+  # the owner's address never appears; the vessel's port cities do (D-081)
+  expect_false("OWNER TOWN" %in% unlist(g$permits))
+  expect_equal(g$permits$principal_port_city, "POINT JUDITH")
+  expect_equal(g$permits$home_port_city, "GALILEE")
+  expect_equal(g$permits$principal_port_state, "RI")
+  # port columns are vessel fields, not fisheries
+  expect_false(any(grepl("PORT", g$codes$fishery)))
   expect_equal(g$permits$source, "garfo_permits")
   expect_equal(g$permits$permit_year, 2022L)
   expect_equal(sort(g$codes$code), c("A1", "A2"))

@@ -841,14 +841,17 @@ every MMSI in the pull and record where a vessel actually goes.
 | Robustness groups | Port communities (or states, if communities are too thin) that pass the D-076 support rule; the rest pooled as "other" |
 | Definition sensitivity | Confidence 4 only; visits weighted by duration instead of counted |
 
-**Port communities** (`references/port_communities.csv`: community,
-state, reference position, source): expected from the probe and the GARFO
-lists, Point Judith / Galilee, Newport, Sakonnet / Little Compton, Block
-Island, Quonset / Davisville, New Bedford / Fairhaven, Cuttyhunk, Martha's Vineyard,
-Nantucket, Hyannis / Cape Cod, Stonington / Watch Hill, New London /
-Mystic, Montauk, Shinnecock / Hampton Bays, New York harbour, and New
-Jersey. Each row also gives the matching GARFO `PRINCIPAL PORT CITY`
-spellings, so the two sources compare directly.
+**Port communities** (`references/port_communities.csv`, D-081): one row
+per reference point (a USGS GNIS harbour or village, cited by `gnis_id`),
+several points per community where it spans more than one harbour. The
+communities: Point Judith / Galilee, Newport, Sakonnet / Little Compton,
+Westport, Block Island, Quonset / Davisville, New Bedford / Fairhaven,
+Cuttyhunk, Martha's Vineyard, Nantucket, Hyannis / Cape Cod, Stonington /
+Watch Hill, New London / Mystic, Montauk, Shinnecock / Hampton Bays, New
+York harbour, Belford / Raritan Bay, Point Pleasant / Manasquan, Barnegat
+Light, Atlantic City and Cape May. Each point also lists the GARFO
+`PRINCIPAL PORT CITY` / `HOME PORT CITY` spellings nearest it
+(`garfo_cities`), so the two sources compare directly.
 
 **Steps in 03b.**
 
@@ -863,9 +866,12 @@ spellings, so the two sources compare directly.
    to `data/raw/vessel_evidence/{v}/gfw_port_visits.csv`, with a
    provenance sidecar. Guards: every event's `ssvid` matches the MMSI
    queried, and every row carries the pinned version.
-3. **Assign ports** (`vessel_helpers.R`, tested): `parse_port_visits()`,
+3. **Assign ports** (`port_helpers.R`, tested; the API functions and
+   `parse_port_visits()` are in `gfw_helpers.R`, D-081):
    `port_visit_filter()`, `assign_port_community()` (position, then
-   overrides), `home_port_of(visits, unit, min_visits, min_share)`.
+   overrides), `home_port_of(visits, by, min_visits, min_share, weight)`,
+   `home_port_stage1()`; the checks use `garfo_port_community()`,
+   `port_agreement()` and `port_coverage()`.
 4. **Write** `data/processed/vessel_review/{v}/vessel_port_year.csv`
    (MMSI, year, community, state, visits, share, status) and
    `vessel_port_stage1.csv` (MMSI, Stage 1 group, flag), plus an

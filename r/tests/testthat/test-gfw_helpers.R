@@ -126,3 +126,64 @@ test_that("union_grid_cells() unions cells across pulls and records which pull h
   expect_equal(u$in_pulls[u$cell_id == "-7100_4099"], "v5")
   expect_error(union_grid_cells(c(f4, f5)), "named by pipeline version")
 })
+
+# Pinned port-visit events: built requests and parsing only, nothing is sent --
+
+test_that("port_visits_dataset() pins a release and refuses latest", {
+  expect_equal(port_visits_dataset("v5.0"), "public-global-port-visits-events:v5.0")
+  expect_error(port_visits_dataset("latest"), "must look like v5.0")
+})
+
+test_that("gfw_port_visits_request() asks the Events API for one pinned vessel ID", {
+  r <- gfw_port_visits_request("abc-123", port_visits_dataset("v5.0"),
+                               "2016-01-01", "2026-09-01", offset = 500, key = "k")
+  expect_match(r$url, "^https://gateway.api.globalfishingwatch.org/v3/events[?]")
+  expect_match(r$url, "datasets%5B0%5D=public-global-port-visits-events%3Av5.0", fixed = TRUE)
+  expect_match(r$url, "vessels%5B0%5D=abc-123", fixed = TRUE)
+  expect_match(r$url, "start-date=2016-01-01&end-date=2026-09-01&limit=500&offset=500", fixed = TRUE)
+  # httr2 redacts the token in the request object; reveal it to check it
+  expect_equal(httr2::req_get_headers(r, "reveal")$Authorization, "Bearer k")
+  expect_null(r$body)   # a GET, unlike the 4Wings report
+  expect_error(gfw_port_visits_request(c("a", "b"), "d", "2016-01-01", "2017-01-01"), "one vessel ID")
+  expect_error(gfw_port_visits_request("a", "d", "2017-01-01", "2016-01-01"), "before end_date")
+})
+
+# one API entry shaped as the Events API returns it (probe, 2026-11-01)
+api_entry <- function(ssvid = "367000001", id = "e1", int = list(
+  anchorageId = "89e5be27", atDock = FALSE, id = "usa-judithpoint", lat = 41.37,
+  lon = -71.51, name = "JUDITH POINT")) {
+  list(id = id, start = "2018-06-01T10:00:00.000Z", end = "2018-06-02T08:00:00.000Z",
+       vessel = list(id = "vid-1", name = "LADY X", ssvid = ssvid, type = "passenger"),
+       port_visit = list(visitId = paste0("v", id), confidence = "4", durationHrs = 22,
+                         startAnchorage = int, intermediateAnchorage = int,
+                         endAnchorage = int))
+}
+
+test_that("parse_port_visits() keeps one character row per visit, with the dataset", {
+  # an unnamed anchorage (name null in the JSON) gives NA, not a dropped column
+  unnamed <- list(anchorageId = "aa11", atDock = TRUE, id = "usa-usa-1225",
+                  lat = 41.3, lon = -72.1, name = NULL)
+  p <- parse_port_visits(list(api_entry(), api_entry(id = "e2", int = unnamed)),
+                         "vid-1", "367000001", "public-global-port-visits-events:v5.0",
+                         pulled_on = as.Date("2026-11-01"))
+  expect_equal(names(p), port_visit_cols)
+  expect_true(all(map_lgl(p, is.character)))
+  expect_equal(p$int_label, c("usa-judithpoint", "usa-usa-1225"))
+  expect_equal(p$int_name, c("JUDITH POINT", NA))
+  expect_equal(p$int_at_dock, c("FALSE", "TRUE"))
+  expect_equal(unique(p$dataset), "public-global-port-visits-events:v5.0")
+  expect_equal(unique(p$pulled_on), "2026-11-01")
+  # the GFW vessel type is not kept (the roster's classification is used)
+  expect_false(any(grepl("type", names(p))))
+})
+
+test_that("parse_port_visits() stops when an event belongs to another MMSI", {
+  expect_error(parse_port_visits(list(api_entry(ssvid = "367999999")), "vid-1", "367000001", "d"),
+               "queried for MMSI 367000001")
+})
+
+test_that("parse_port_visits() gives an empty table with the cache's columns for no visits", {
+  p <- parse_port_visits(list(), "vid-1", "367000001", "d")
+  expect_equal(names(p), port_visit_cols)
+  expect_equal(nrow(p), 0)
+})

@@ -4,7 +4,8 @@
 versioned <- c("raw_gfw", "raw_vp", "raw_afe", "pull_info", "processed_gfw",
                "interim_gfw", "fishnet", "grid", "evidence", "review",
                "crosswalk", "permit_groups", "analysis", "rasters", "models",
-               "explore", "spatial", "bag")
+               "explore", "spatial", "bag", "garfo_match", "port_visits",
+               "port_visits_queried", "port_year", "port_stage1")
 
 test_that("make_gfw_paths() puts each version's outputs in its own place", {
   p4 <- make_gfw_paths("v4")
@@ -21,7 +22,11 @@ test_that("make_gfw_paths() puts each version's outputs in its own place", {
   expect_equal(p4[shared], p5[shared])
   # hand-made inputs and non-GFW caches are among the shared ones
   expect_true(all(c("decisions", "gear", "removals", "psix", "registries",
-                    "roster", "bathy", "infra") %in% shared))
+                    "roster", "bathy", "infra", "port_communities",
+                    "port_anchorages") %in% shared))
+  # port visits sit with the identity cache, port tables with the review sheets
+  expect_equal(p5$port_visits, "data/raw/vessel_evidence/v5/gfw_port_visits.csv")
+  expect_equal(p5$port_stage1, "data/processed/vessel_review/v5/vessel_port_stage1.csv")
 })
 
 test_that("make_gfw_paths() rejects a version that is not a folder name", {

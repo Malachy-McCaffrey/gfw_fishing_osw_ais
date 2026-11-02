@@ -105,15 +105,17 @@ profile_mmsi <- function(vp, afe, cell_lease, gfw_labels) {
 # Phase 2: GARFO permit matches ---------------------------------------------
 
 # Only vessel fields are read from the GARFO permit lists; owner names,
-# telephone numbers and addresses are never loaded.
+# telephone numbers and addresses are never loaded. The port cities (where
+# the vessel is based, not where its owner lives) are vessel fields, read
+# for 03b's port check (D-081); the owner's CITY and STATE stay excluded.
 garfo_personal <- c("OWNER NAME", "TELEPHONE", "ADDRESS LINE 1", "ADDRESS LINE 2",
-                    "CITY", "STATE", "ZIP CODE", "HOME PORT CITY",
-                    "PRINCIPAL PORT CITY")
+                    "CITY", "STATE", "ZIP CODE")
 
 # vessel fields; every other column of an annual file is a fishery holding
 # that permit-year's codes
 garfo_vessel_cols <- c("PERMIT", "HMS PERMIT", "PERMIT YEAR", "VESSEL NAME",
-                       "HULL ID", "HOME PORT STATE", "PRINCIPAL PORT STATE",
+                       "HULL ID", "HOME PORT CITY", "HOME PORT STATE",
+                       "PRINCIPAL PORT CITY", "PRINCIPAL PORT STATE",
                        "LENGTH", "GROSS TONS", "HORSEPOWER", "MAX TRAP LIMIT",
                        "CATEGORY", "CML CHB ENDORSEMENT", "ISSUEDDATE")
 
@@ -151,7 +153,10 @@ read_garfo <- function(f) {
     permit_year = suppressWarnings(as.integer(col_or_na(d, "PERMIT YEAR"))),
     vessel_name = col_or_na(d, "VESSEL NAME"),
     hull_id     = col_or_na(d, "HULL ID"),
+    home_port_city  = col_or_na(d, "HOME PORT CITY"),
     home_port_state = col_or_na(d, "HOME PORT STATE"),
+    principal_port_city  = col_or_na(d, "PRINCIPAL PORT CITY"),
+    principal_port_state = col_or_na(d, "PRINCIPAL PORT STATE"),
     length_ft   = suppressWarnings(as.numeric(col_or_na(d, "LENGTH"))),
     trap_limit  = suppressWarnings(as.numeric(col_or_na(d, "MAX TRAP LIMIT"))))
 

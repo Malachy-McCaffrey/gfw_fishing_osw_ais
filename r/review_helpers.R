@@ -471,6 +471,62 @@ psix_query <- function(call_sign = "", official_no = "") {
          psix_status      = field("StatusLookupName"))
 }
 
+# Look up each key (key_type "call_sign" or "official_no", key) in PSIX and
+# append every result to the cache at `psix_path`: one row per PSIX record,
+# or one "not_found" / "error" row. Each lookup is written as soon as it
+# returns, so an interrupted run keeps what it fetched; errors are retried on
+# the next run (only ok / not_found keys count as done). Moved out of 03's
+# PSIX chunk unchanged (D-082), so the port check can reuse it.
+psix_fetch <- function(keys, psix_path, pause = 1) {
+  for (i in seq_len(nrow(keys))) {
+    k   <- keys[i, ]
+    res <- tryCatch(
+      if (k$key_type == "call_sign") psix_query(call_sign = k$key)
+      else psix_query(official_no = k$key),
+      error = function(e) e)
+
+    status <- if (inherits(res, "error")) "error" else if (is.null(res)) "not_found" else "ok"
+    out <- (if (status == "ok") res else tibble(psix_official_no = NA_character_)) |>
+      mutate(key_type = k$key_type, key = k$key,
+             queried_on = as.character(Sys.Date()), status = status)
+    out[setdiff(psix_cols, names(out))] <- NA_character_
+    append_csv(select(out, all_of(psix_cols)), psix_path)
+    Sys.sleep(pause) # be gentle with CGMIX
+  }
+  invisible(nrow(keys))
+}
+
+# The keys from psix_keys() targets that the cache does not yet answer (an
+# "ok" or "not_found" row counts as answered; an "error" row does not)
+psix_missing <- function(targets, psix) {
+  bind_rows(
+    tibble(key_type = "call_sign",   key = targets$ais_cs),
+    tibble(key_type = "official_no", key = targets$hull)) |>
+    filter(!is.na(key)) |>
+    distinct() |>
+    anti_join(filter(psix, status %in% c("ok", "not_found")), by = c("key_type", "key"))
+}
+
+# How far a GARFO name match is backed by independent evidence (D-082), per
+# MMSI. In order:
+#   contradicted      PSIX shows the AIS call sign belongs to another hull, or
+#                     the matched hull's service type is not fishing
+#   confirmed         PSIX ties the AIS call sign to the GARFO hull's official
+#                     number (psix_link "match")
+#   length_differs    no PSIX tie, and the GFW registry length disagrees with
+#                     GARFO's beyond the tolerance
+#   length_consistent no PSIX tie, and the lengths agree
+#   name_only         nothing beyond the unique name match (most state-
+#                     registered hulls and vessels without a US call sign)
+garfo_link_tier <- function(psix_link, psix_contradicts, length_agree) {
+  case_when(
+    psix_contradicts %in% TRUE   ~ "contradicted",
+    psix_link %in% "match"       ~ "confirmed",
+    length_agree %in% FALSE      ~ "length_differs",
+    length_agree %in% TRUE       ~ "length_consistent",
+    TRUE                         ~ "name_only")
+}
+
 # AIS call signs in US format (K, N, W or AA-AL prefix); others are not looked up
 us_call_sign <- function(cs) {
   x <- str_remove_all(toupper(coalesce(cs, "")), "\\s")

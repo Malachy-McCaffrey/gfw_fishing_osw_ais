@@ -39,7 +39,8 @@ tables describe which communities fish near the leases (the synthesis, 14),
 and they group vessels for one Phase 7 robustness check (13). **Port is never
 a covariate in the main models** (D-076). The rules were fixed before any
 port-split result was seen (D-080; planning/gfw_analysis_plan.qmd,
-@sec-ports), and the references and helpers are logged in D-081.
+section "Vessel home ports: GFW port visits"), and the references and
+helpers are logged in D-081.
 
 | Input | Role |
 |---|---|
@@ -318,24 +319,48 @@ GARFO principal and home port per permit year, for the unique name matches
 03 makes. Principal port (where the vessel lands most) is expected to agree
 better than home port.
 
+A name match can link an MMSI to the wrong hull, which shows up here as a
+disagreement. So agreement is reported by **link tier** (D-082, written by
+03): the headline is the `confirmed` tier, where PSIX ties the AIS call sign
+to the GARFO hull; `length_consistent` and `name_only` are shown beside it;
+`length_differs` is shown but not pooled; `contradicted` links are left out.
+Both sides being "outside region" is not counted as agreement, since it says
+nothing about which port.
+
 ```{r}
+tier_order <- c("confirmed", "length_consistent", "name_only", "length_differs", "contradicted")
+
 if (file.exists(paths$garfo_match)) {
   garfo_ports <- read_chr(paths$garfo_match) |> mutate(year = as.numeric(year))
-  agreement <- port_agreement(port_year, garfo_ports, communities)
+  if (!"link_tier" %in% names(garfo_ports)) {
+    warning(paths$garfo_match, " has no link_tier (written before D-082); ",
+            "re-render 03. Every link is treated as name_only.", call. = FALSE)
+    garfo_ports$link_tier <- "name_only"
+  }
+  agreement <- port_agreement(port_year, garfo_ports, communities) |>
+    filter(link_tier != "contradicted") |>
+    mutate(link_tier = factor(link_tier, tier_order),
+           # both sides outside the region: not evidence of the same port
+           across(c(agree_principal, agree_home),
+                  \(a) if_else(gfw_port %in% outside_region & a %in% TRUE, NA, a)))
 
-  # agreement rates where both sides have a port
-  agreement |>
-    summarise(mmsi_years = n(),
-              gfw_port = sum(gfw_status == "port"),
+  # agreement rates where both sides have a port, by tier; the confirmed tier
+  # is the headline, and the sensitivities pool confirmed + length_consistent
+  agree_summary <- \(d) d |>
+    summarise(mmsi = n_distinct(MMSI), mmsi_years = n(),
               principal_compared = sum(!is.na(agree_principal)),
               principal_agree = mean(agree_principal, na.rm = TRUE),
               home_compared = sum(!is.na(agree_home)),
-              home_agree = mean(agree_home, na.rm = TRUE)) |>
+              home_agree = mean(agree_home, na.rm = TRUE), .groups = "drop")
+  bind_rows(
+    agreement |> group_by(link_tier) |> agree_summary() |> mutate(link_tier = as.character(link_tier)),
+    agreement |> filter(link_tier %in% c("confirmed", "length_consistent")) |>
+      agree_summary() |> mutate(link_tier = "confirmed + length_consistent")) |>
     print()
 
-  # confusion table, GFW home port vs GARFO principal port
+  # confusion table, GFW home port vs GARFO principal port, confirmed links
   agreement |>
-    filter(!is.na(agree_principal)) |>
+    filter(link_tier == "confirmed", !is.na(agree_principal)) |>
     count(gfw_port, garfo_principal, sort = TRUE) |>
     print(n = 40)
 } else {
@@ -347,7 +372,10 @@ if (file.exists(paths$garfo_match)) {
 
 The review sheet: the 20 highest-effort vessels with at least one year where
 GFW and GARFO principal ports disagree. Check each with MarineTraffic and
-PSIX, as for the vessel review.
+PSIX, as for the vessel review. `link_tier` says what to check first: a
+`confirmed` link that disagrees is most likely a real difference between the
+declared port and where the vessel lands; a `name_only` one may be the wrong
+hull.
 
 ```{r}
 hours_total <- roster |>
@@ -357,7 +385,8 @@ if (!is.null(agreement)) {
   garfo_review <- agreement |>
     filter(agree_principal %in% FALSE) |>
     group_by(MMSI) |>
-    summarise(years = paste(sort(unique(year)), collapse = ","),
+    summarise(link_tier = as.character(first(link_tier)),
+              years = paste(sort(unique(year)), collapse = ","),
               gfw_port = paste(sort(unique(gfw_port)), collapse = "|"),
               garfo_principal = paste(sort(unique(garfo_principal)), collapse = "|"),
               garfo_home = paste(sort(unique(garfo_home)), collapse = "|"),
@@ -368,7 +397,8 @@ if (!is.null(agreement)) {
     mutate(marinetraffic = paste0("https://www.marinetraffic.com/en/ais/details/ships/mmsi:", MMSI),
            finding = NA_character_)
   write_csv(garfo_review, paths$port_garfo_review, na = "")
-  select(garfo_review, Vessel_Name, gear_class, vp_hours, years, gfw_port, garfo_principal)
+  select(garfo_review, Vessel_Name, gear_class, link_tier, vp_hours, years, gfw_port,
+         garfo_principal)
 }
 ```
 

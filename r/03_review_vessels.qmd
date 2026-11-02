@@ -1083,31 +1083,12 @@ psix_targets <- assessed |>
 
 psix <- read_ev(psix_path, psix_cols)
 
-to_psix <- bind_rows(
-  tibble(key_type = "call_sign",   key = psix_targets$ais_cs),
-  tibble(key_type = "official_no", key = psix_targets$hull)) |>
-  filter(!is.na(key)) |>
-  distinct() |>
-  anti_join(filter(psix, status %in% c("ok", "not_found")), by = c("key_type", "key"))
+to_psix <- psix_missing(psix_targets, psix)
 
 message(nrow(to_psix), " PSIX lookups not yet made")
 
 if (run_psix_api && nrow(to_psix) > 0) {
-  for (i in seq_len(nrow(to_psix))) {
-    k   <- to_psix[i, ]
-    res <- tryCatch(
-      if (k$key_type == "call_sign") psix_query(call_sign = k$key)
-      else psix_query(official_no = k$key),
-      error = function(e) e)
-
-    status <- if (inherits(res, "error")) "error" else if (is.null(res)) "not_found" else "ok"
-    out <- (if (status == "ok") res else tibble(psix_official_no = NA_character_)) |>
-      mutate(key_type = k$key_type, key = k$key,
-             queried_on = as.character(Sys.Date()), status = status)
-    out[setdiff(psix_cols, names(out))] <- NA_character_
-    append_csv(select(out, all_of(psix_cols)), psix_path)
-    Sys.sleep(1)
-  }
+  psix_fetch(to_psix, psix_path) # r/review_helpers.R: one lookup per key, cached
   psix <- read_ev(psix_path, psix_cols)
 }
 
@@ -1390,9 +1371,76 @@ The groups are written to `references/vessel_permit_groups_{pipeline}.csv` so th
 run without the GARFO files. Only the MMSI and the permit group are written;
 no GARFO hull, permit number or owner field leaves this step.
 
+### GARFO link tiers
+
+**Link tiers (D-082).** A name match can tie an MMSI to the wrong hull, e.g.
+a state-registered or recreational boat sharing a name with a permitted one,
+or an MMSI moved to a replacement boat. The screens above check PSIX and
+length only for vessels that reach a review sheet, so most matches would
+rest on the name alone. Here every unique, year-overlapping match not
+already contradicted above is checked: its AIS call sign and its GARFO hull
+(when that is a USCG official number) are looked up in PSIX
+(`run_psix_api: true` for any not yet cached), and the GFW registry length
+is compared where 03 has one. `link_tier` records the result
+(`garfo_link_tier()`: `confirmed`, `length_consistent`, `name_only`,
+`length_differs`, `contradicted`), and 03b reports port agreement by tier,
+headline on `confirmed`.
+
+**Contradicted links leave the permit groups (D-084).** PSIX contradicting a
+link already removes it from the permit groups for vessels on a review sheet
+(`not_hull`); the same rule now applies to every link the tiers find
+contradicted. On v4 that removed 21 MMSIs: 7 Primary vessels, all
+`commercial` (so 04's dual-permit check is unchanged), and 14 non-Primary
+vessels, all on the roster through their permit group alone. The
+three Primary vessels among them whose gear correction rests on a GARFO
+permit (STORMY ELIZABETH, F/V LADY PATRICIA, ADVENTURESS) were checked on
+MarineTraffic on 2026-11-02 and their gear classes hold, so
+`vessel_gear.csv` is unchanged. The list below is for the next review.
+
+```{r}
+# PSIX keys for every unique, year-overlapping match not already contradicted:
+# the US-format AIS call sign and a numeric GARFO hull ID (psix_keys(), as for
+# the review sheet)
+link_targets <- profiles |>
+  filter(garfo_match == "unique_years", !MMSI %in% not_hull) |>
+  select(MMSI, flag, call_sign, garfo_match, garfo_hull_id, garfo_length_ft) |>
+  psix_keys()
+
+to_psix_links <- psix_missing(link_targets, psix)
+message(nrow(to_psix_links), " PSIX lookups not yet made for the GARFO link tiers")
+if (run_psix_api && nrow(to_psix_links) > 0) {
+  psix_fetch(to_psix_links, psix_path)
+  psix <- read_ev(psix_path, psix_cols)
+}
+
+links <- psix_evaluate(link_targets, psix) |>
+  select(MMSI, psix_link, psix_contradicts) |>
+  left_join(select(profiles, MMSI, garfo_length_ft), by = "MMSI") |>
+  # the GFW registry length exists only for MMSIs 03 looked up in the identity API
+  left_join(select(gfw_evidence, MMSI, reg_length_m), by = "MMSI") |>
+  # length_agrees() is FALSE when either length is missing; NA here instead,
+  # so an unknown length is not read as a disagreement
+  mutate(length_agree = if_else(is.na(garfo_length_ft) | is.na(reg_length_m), NA,
+                                length_agrees(garfo_length_ft, reg_length_m,
+                                              screen$length_tolerance)),
+         link_tier = garfo_link_tier(psix_link, psix_contradicts, length_agree))
+
+count(links, link_tier, psix_link)
+
+# links contradicted only here (not on a review sheet): they leave the permit
+# groups below (D-084); listed for the next review
+links_contradicted <- links$MMSI[links$link_tier == "contradicted"]
+links |>
+  filter(link_tier == "contradicted") |>
+  left_join(select(profiles, MMSI, names), by = "MMSI")
+```
+
+### Write the permit groups
+
 ```{r}
 permit_groups <- profiles |>
-  filter(garfo_match == "unique_years", !MMSI %in% not_hull) |>
+  filter(garfo_match == "unique_years", !MMSI %in% not_hull,
+         !MMSI %in% links_contradicted) |>
   transmute(MMSI, permit_group = garfo_permit_type, pull_date = as.character(pull_date)) |>
   arrange(MMSI)
 
@@ -1406,12 +1454,11 @@ count(permit_groups, permit_group)
 `03b_port_visits.qmd` compares each vessel's home port from GFW port visits
 with its GARFO principal and home port (D-080). It reads them from
 `data/processed/vessel_review/{pipeline}/garfo_match.csv`, so 03b needs no
-GARFO file. The same MMSIs as the permit groups qualify: a unique,
-year-overlapping name match that PSIX does not contradict. One row per MMSI ×
-permit year, from the annual permit lists (the HMS list carries no port
-city). Only the port city and state leave this step: they say where the
-vessel is based, not who owns it (D-081). No hull, permit number or owner
-field is written. The file is regenerated on every run.
+GARFO file. The same MMSIs as the permit groups qualify, each with its link
+tier. One row per MMSI × permit year, from the annual permit lists (the HMS
+list carries no port city). Only the port city and state leave this step:
+they say where the vessel is based, not who owns it (D-081). No hull, permit
+number or owner field is written. The file is regenerated on every run.
 
 ```{r}
 garfo_ports <- garfo_matches |>
@@ -1423,6 +1470,7 @@ garfo_ports <- garfo_matches |>
   # does not, the row with a principal port is kept
   arrange(MMSI, year, is.na(principal_port_city)) |>
   distinct(MMSI, year, .keep_all = TRUE) |>
+  left_join(select(links, MMSI, link_tier, psix_link), by = "MMSI") |>
   mutate(garfo_match = "unique_years", pull_date = as.character(pull_date))
 
 dir.create(dirname(paths$garfo_match), recursive = TRUE, showWarnings = FALSE)

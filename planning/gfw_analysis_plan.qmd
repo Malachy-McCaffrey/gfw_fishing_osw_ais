@@ -849,7 +849,9 @@ Westport, Block Island, Quonset / Davisville, New Bedford / Fairhaven,
 Cuttyhunk, Martha's Vineyard, Nantucket, Hyannis / Cape Cod, Stonington /
 Watch Hill, New London / Mystic, Montauk, Shinnecock / Hampton Bays, New
 York harbour, Belford / Raritan Bay, Point Pleasant / Manasquan, Barnegat
-Light, Atlantic City and Cape May. Each point also lists the GARFO
+Light, Atlantic City and Cape May; and, after the first v4 run's anchorage
+review (D-083), Greenport / North Fork, City Island, Plymouth, Old Saybrook
+/ Westbrook and Onset / Wareham / Marion. Each point also lists the GARFO
 `PRINCIPAL PORT CITY` / `HOME PORT CITY` spellings nearest it
 (`garfo_cities`), so the two sources compare directly.
 

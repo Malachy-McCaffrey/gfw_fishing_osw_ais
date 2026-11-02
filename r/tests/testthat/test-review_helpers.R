@@ -166,6 +166,25 @@ test_that("has_fishing_gear() and has_rfmo_source() read '|'-separated codes", {
 
 # Phase 4: review sheet and PSIX --------------------------------------------
 
+test_that("garfo_link_tier() ranks PSIX evidence above length above the name (D-082)", {
+  expect_equal(
+    garfo_link_tier(psix_link = c("ais_is_other_hull", "match", "match", "call_sign_differs",
+                                  NA, "no_link", NA),
+                    psix_contradicts = c(TRUE, TRUE, FALSE, FALSE, FALSE, FALSE, NA),
+                    length_agree = c(TRUE, TRUE, FALSE, FALSE, TRUE, NA, NA)),
+    c("contradicted", "contradicted", "confirmed", "length_differs",
+      "length_consistent", "name_only", "name_only"))
+})
+
+test_that("psix_missing() lists keys the cache has not answered", {
+  targets <- tibble(MMSI = c("1", "2"), ais_cs = c("WDA1234", NA), hull = c("555555", "666666"))
+  psix <- tibble(key_type = c("call_sign", "official_no"), key = c("WDA1234", "666666"),
+                 status = c("ok", "error"))
+  # an error is retried; an ok key is not
+  expect_equal(psix_missing(targets, psix),
+               tibble(key_type = "official_no", key = c("555555", "666666")))
+})
+
 test_that("length_agrees() compares feet with metres within the tolerance", {
   # 40 ft = 12.19 m
   expect_equal(length_agrees(c(40, 40, NA), c(12, 15, 12), tolerance = 0.15),

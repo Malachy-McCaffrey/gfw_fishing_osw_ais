@@ -781,6 +781,129 @@ Each gear is modelled **separately**. A joint gear-interaction model is fitted
 only to test formally whether the BAG effect differs between mobile and fixed
 gear (@sec-models).
 
+### Vessel home ports: GFW port visits (`03b_port_visits.qmd`) {#sec-ports}
+
+**Why (D-079, D-080).** Which port communities fish near the leases is a
+policy-relevant description, and a change in the port mix by band could
+look like a gradient effect (Phase 7). GARFO permit files carry principal
+and home port, but they link to an MMSI only through a unique vessel-name
+match (03's `garfo_match == "unique_years"`). GFW port-visit events cover
+every MMSI in the pull and record where a vessel actually goes.
+
+**Principles.**
+
+1. Port is a **vessel attribute keyed by MMSI × year**. GFW vessel IDs are
+   only the query key, so v4 and v5 share one port table.
+2. **Never in the main models**, and never a covariate (D-076). Port
+   feeds the synthesis (descriptive) and Phase 7 (robustness) only.
+3. **Robustness groups come from Stage 1 behaviour.** A port measured
+   during or after construction may itself respond to the projects (a
+   post-treatment variable). Per-year ports are for description only.
+4. **Rules are fixed before any port-split result is seen** (below).
+5. The pull runs inside `03b` with an opt-in API switch, like 03's
+   identity queries. Raw events are append-only.
+
+**Probe (2026-11-01, 10 high-effort Primary vessels, scratchpad only).**
+
+- `gfwr` 3.0's `get_event()` / `gfw_event()` query
+  `public-global-port-visits-c2-events:latest`, which now returns HTTP 404.
+  The working dataset is `public-global-port-visits-events`, which answers
+  for `:latest` and for pinned versions. **03b calls the Events API
+  directly with `httr2`** (as `gfw_helpers.R` already does for 4Wings),
+  pinned to the pipeline version (`:v5.0`, D-070), and records the version
+  on every row. v4.0 and v5.0 differ slightly for the same vessel ID (1,874
+  vs 1,880 events), so the version matters.
+- 10 vessels, 17 vessel IDs, 5,876 visits in 19 s. The secondary vessel IDs
+  of an MMSI carry few visits and no name; all are queried.
+- Confidence 4 is almost every visit (5,854 of 5,876), so the confidence
+  rule barely binds. Median visit 17 h; 5% are under 1.5 h.
+- Daily-trip vessels make 20–140 qualifying visits a year. Under the
+  default rule, 90 of 99 vessel-years get a port, 8 are "multiple" and 1
+  is "unknown".
+- **Anchorage labels are not port names.** One port appears under several
+  labels (`usa-judithpointanchorage`, `usa-judithpoint`); 8 anchorages are
+  unnamed (`usa-usa-1225`, 95 visits, off New London); and one is
+  mislabelled (`usa-lahainaanchorage` "LAHAINA ANCHORAGE" sits at 40.8 N,
+  72.5 W, Shinnecock). **Ports are therefore assigned from the anchorage
+  position**, not its label.
+- GFW's own `vessel.type` on the events can disagree with the roster
+  (e.g. "passenger" for pole-and-line charter boats). The roster's
+  classification is kept; the event field is ignored.
+
+**Rules (D-080), fixed now.**
+
+| Item | Rule |
+|---|---|
+| Visits counted | Confidence 3 or 4, and at least 2 h in port |
+| Port of a visit | The intermediate anchorage's position, assigned to the nearest **port community** in `references/port_communities.csv` within 10 km; anchorages farther than that are "other" with their state. A hand-curated `references/port_anchorages.csv` (anchorage ID → community, with a source) overrides the distance rule where needed |
+| Home port per MMSI × calendar year | The community with the most counted visits, if it has at least 3 visits and at least 50% of the year's visits; else **multiple** (no dominant port) or **unknown** (fewer than 3 visits) |
+| Stage 1 port group | The same rule over all of Stage 1 (January 2016 – September 2020); vessels first active later are grouped from their first 12 months, flagged |
+| Robustness groups | Port communities (or states, if communities are too thin) that pass the D-076 support rule; the rest pooled as "other" |
+| Definition sensitivity | Confidence 4 only; visits weighted by duration instead of counted |
+
+**Port communities** (`references/port_communities.csv`: community,
+state, reference position, source): expected from the probe and the GARFO
+lists, Point Judith / Galilee, Newport, Sakonnet / Little Compton, Block
+Island, Quonset / Davisville, New Bedford / Fairhaven, Cuttyhunk, Martha's Vineyard,
+Nantucket, Hyannis / Cape Cod, Stonington / Watch Hill, New London /
+Mystic, Montauk, Shinnecock / Hampton Bays, New York harbour, and New
+Jersey. Each row also gives the matching GARFO `PRINCIPAL PORT CITY`
+spellings, so the two sources compare directly.
+
+**Steps in 03b.**
+
+1. **Query.** Every Primary MMSI in the roster, all its vessel IDs from the
+   pipeline's pull, January 2016 to the end of the pull, all ports
+   (outside the AOI too). Batched, with a `port_visits_queried.csv` log
+   (ok / none / error), so a render resumes; `run_gfw_api: false` by
+   default.
+2. **Cache.** Raw events (one row per visit: vessel ID, MMSI, start, end,
+   confidence, duration, start / intermediate / end anchorage IDs,
+   positions and labels, at-dock flag, dataset version, pull date) append
+   to `data/raw/vessel_evidence/{v}/gfw_port_visits.csv`, with a
+   provenance sidecar. Guards: every event's `ssvid` matches the MMSI
+   queried, and every row carries the pinned version.
+3. **Assign ports** (`vessel_helpers.R`, tested): `parse_port_visits()`,
+   `port_visit_filter()`, `assign_port_community()` (position, then
+   overrides), `home_port_of(visits, unit, min_visits, min_share)`.
+4. **Write** `data/processed/vessel_review/{v}/vessel_port_year.csv`
+   (MMSI, year, community, state, visits, share, status) and
+   `vessel_port_stage1.csv` (MMSI, Stage 1 group, flag), plus an
+   unmatched-anchorage sheet for review.
+5. **Validate**, before anything downstream reads the tables:
+   - **against GARFO:** for `unique_years` matches, GFW home port vs GARFO
+     principal and home port per permit year: agreement rate and a
+     confusion table (principal port is expected to agree better);
+   - **coverage:** share of Primary VP and AFE hours, per gear × stage,
+     whose vessel has a port; a gear with low coverage stays descriptive;
+   - **stability:** share of vessels whose port changes between years, and
+     whether changes concentrate in Stages 2–3 (which supports grouping by
+     Stage 1);
+   - **review sheet:** the 20 highest-effort vessels where GFW and GARFO
+     disagree, checked with MarineTraffic and PSIX as for the vessel
+     review.
+
+**Where the tables are used.** The synthesis (14): Primary hours by port
+community × band × stage, per gear and dataset, with the share of hours
+with a known port, from GFW and from GARFO side by side. Phase 7 (13): the
+BAG per Stage 1 port group under the support rule, and port community as
+a cluster in the vessel bootstrap. Not 10, not any main model.
+
+**Freeze.** `port_communities.csv`, `port_anchorages.csv` and the two port
+tables are tagged with the frozen crosswalk, before 13 runs.
+
+**Known problems and their handling.**
+
+| Problem | Handling |
+|---|---|
+| AIS off in port (more likely on small fixed-gear boats), so visits are missing | "unknown" status and coverage reported per gear; nothing imputed |
+| Fuel, ice or weather stops | The 2 h minimum, the most-visits rule and the duration-weighted sensitivity |
+| Seasonal migrants | A yearly port outside the region is kept, as its own group |
+| One MMSI on several vessel IDs, or an MMSI reused by a new hull | All vessel IDs queried; a port change that coincides with a name change on the events is flagged |
+| The `:latest` dataset moves | Version pinned and stored per row; re-pulls append, never overwrite |
+| Post-treatment port changes | Robustness groups from Stage 1 only |
+| Attribution | The port-visits dataset and version cited in the data dictionary and synthesis |
+
 ## Workflow overview {#sec-workflow}
 
 New qmds continue the numbered `r/` sequence and the conventions already in
@@ -795,6 +918,7 @@ place:
 | Step | File | Phase | Writes (gitignored) |
 |---|---|---|---|
 | 02a | `02a_infrastructure.qmd` | 0: Ørsted turbines and cables → time-varying covariates (split out of `05`, decision 2026-10-28, D-060) | `data/sf/infra/`, `data/processed/analysis/infra_cell_*.csv` |
+| 03b | `03b_port_visits.qmd` | Vessel home ports from GFW port-visit events, validated against GARFO (@sec-ports, D-080). Feeds 13 and 14 only | `data/raw/vessel_evidence/{v}/gfw_port_visits.csv`, `data/processed/vessel_review/{v}/vessel_port_*.csv` |
 | 05 | `05_prepare_analysis.qmd` | 0: analysis tables, covariates, weights; joins 02a's covariates | `data/processed/analysis/` |
 | 06 | `06_explore.qmd` | 1: EDA | figures, tables |
 | 07 | `07_spatial_global.qmd` | 2: Global Moran's I, General G, correlograms | `spatial/global_*.csv` |
@@ -836,6 +960,7 @@ same commit as the code that first uses it.
 | `marginaleffects` | 5–6 | CRAN | Marginal predictions and contrasts from the two hurdle parts |
 | `INLA` | 7 | **not on CRAN**: `https://inla.r-inla-download.org/R/stable` | Bayesian SPDE |
 | `inlabru` | 7 (optional) | CRAN | Simpler syntax for joint hurdle likelihoods |
+| `fixest` | 7 | CRAN; **installed 2026-11-01** (0.14.2), recorded in `renv.lock` with `13`, its first user | Poisson pseudo-likelihood with cell and stage × season fixed effects (D-079) |
 
 ## Phase 0: Analysis tables, covariates and weights (`05_prepare_analysis.qmd`) {#sec-phase0}
 
@@ -2310,13 +2435,21 @@ grid: variant × outcome, with the estimate and CI.
 | Stage × season BAG without the cells ever inside a safety zone | Mandated exclusion driving the inside-band *γ* (caveat 17) |
 | Drop the last 3 months of each cell's pre-period | Unrecorded seabed preparation before the first foundation |
 | `d_found_final_km` in place of `dist_lease_km` for the stage × season BAG gradient | Distance to the structures vs to the lease line |
+| Cell and stage × season fixed effects, Poisson pseudo-likelihood (`fixest::fepois`): the stage × band terms, with a fixed effect per cell and per stage × season, the exposure offset, and SEs clustered by spatial block (D-079) | Whether the BAG estimate depends on the random-field machinery (issue 1: a field can absorb part of the effect). A fixed effect per cell replaces the spatial field, so each cell is compared only with itself; the static covariates drop out with it. Poisson pseudo-likelihood is consistent for non-negative continuous hours with zeros (only the mean needs to be right), the econometric standard for difference-in-differences on effort. Standard errors clustered by the D-077 spatial blocks |
+| Port group: the stage × season BAG with vessels grouped by their **Stage 1** port community from GFW port visits, GARFO principal port as the check (D-079, D-080, @sec-ports) | Whether a change in which port communities fish the AOI drives a band effect. State rules differ (e.g. NY vs RI fluke seasons), so if the port mix differs by band, a port-driven shift in who fishes can look like a gradient change. Refit per port group with enough support (D-076 rule), and use port community as the cluster in the vessel bootstrap. Groups from Stage 1, because a later port may respond to the projects |
 
 ## Phase 8: Synthesis (`14_synthesis.qmd`) {#sec-synthesis}
 
 - **Headline results:**
   - BAG rate ratios by gear × dataset, from `sdmTMB` with INLA alongside;
   - turbine-distance response curves;
-  - Gi\* change maps by gear, with LISA outliers overlaid inside the leases.
+  - Gi\* change maps by gear, with LISA outliers overlaid inside the leases;
+  - **port communities** (D-079, D-080, @sec-ports): Primary hours by port
+    community × distance band × stage, per gear and dataset, showing which
+    ports fish near the leases and how their shares changed. Descriptive
+    only. Ports per year from GFW port visits (`vessel_port_year`), with
+    GARFO principal port per permit year beside it for matched vessels,
+    and the share of hours with a known port reported for each.
 - **Methods contribution:**
   - Strict vs Primary;
   - the season-composition confound;
@@ -2395,6 +2528,11 @@ first power, per-route cable dates, the remaining SRW foundations) update
       (@sec-infra), now in `02a_infrastructure.qmd`.
 - [ ] Sharing terms for the Ørsted foundation data, noted in
       `references/`.
+- [ ] Vessel home ports (@sec-ports, D-080): build
+      `references/port_communities.csv`, write `03b_port_visits.qmd` and its
+      `vessel_helpers.R` functions with tests, run the pull on v5, review
+      the unmatched-anchorage and GARFO-disagreement sheets, and tag the
+      port tables with the frozen crosswalk before 13.
 - [x] SFW crosswalk from the PSO ids (A01–A15) to layout positions:
       received from Ørsted (`sfw_monopile_install_orsted.csv`) and built in
       `05`, 2026-10-20. Replaces the shared turbine window.

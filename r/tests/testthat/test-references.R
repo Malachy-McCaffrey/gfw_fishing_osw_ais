@@ -177,3 +177,10 @@ test_that("port_communities.csv and port_anchorages.csv are valid (D-080, D-081)
   expect_true(all(span$km < 100), info = paste(span$community[span$km >= 100], collapse = ", "))
   expect_no_error(read_port_anchorages(root_paths$port_anchorages, pc))
 })
+
+test_that("port_garfo_findings.csv is valid (D-085)", {
+  f <- read_chr(root_paths$port_garfo_findings)
+  expect_no_error(validate_port_findings(f))
+  expect_true(all(mmsi_ok(f$MMSI)))
+  expect_true(all(iso_or_blank(f$checked_on)))
+})

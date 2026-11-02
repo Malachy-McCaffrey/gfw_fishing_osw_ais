@@ -128,6 +128,7 @@ source("r/paths.R")
 source("r/gfw_helpers.R")
 source("r/vessel_helpers.R")
 source("r/review_helpers.R") # the review's own functions
+source("r/port_helpers.R")   # validate_port_findings(), for the port review findings (D-085)
 
 # Quarto parameters (header); `params` is read-only while rendering. Run chunk
 # by chunk (Positron, RStudio), `params` is missing or left over from another
@@ -1437,10 +1438,23 @@ links |>
 
 ### Write the permit groups
 
+A link the GARFO port review found to be another hull (`wrong_hull` in
+`references/port_garfo_findings.csv`, filled from 03b's review sheet; D-085)
+is dropped too, like a link PSIX contradicts.
+
 ```{r}
+# reviewed links that are another hull (the file is checked on read)
+port_findings <- if (file.exists(paths$port_garfo_findings)) {
+  read_chr(paths$port_garfo_findings) |> validate_port_findings()
+} else {
+  tibble(MMSI = character(), finding = character())
+}
+review_wrong_hull <- port_findings$MMSI[port_findings$finding == "wrong_hull"]
+message(length(review_wrong_hull), " GARFO links found to be another hull in the port review")
+
 permit_groups <- profiles |>
   filter(garfo_match == "unique_years", !MMSI %in% not_hull,
-         !MMSI %in% links_contradicted) |>
+         !MMSI %in% links_contradicted, !MMSI %in% review_wrong_hull) |>
   transmute(MMSI, permit_group = garfo_permit_type, pull_date = as.character(pull_date)) |>
   arrange(MMSI)
 

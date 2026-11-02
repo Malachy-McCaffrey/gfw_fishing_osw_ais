@@ -74,6 +74,7 @@ make_gfw_paths <- function(pipeline = gfw_pipeline_default) {
     # tables built from them belong to the pull's version.
     port_communities    = "references/port_communities.csv",  # community reference points (GNIS)
     port_anchorages     = "references/port_anchorages.csv",   # anchorage -> community overrides
+    port_garfo_findings = "references/port_garfo_findings.csv", # GARFO port review findings (D-085)
     port_visits         = v("data/raw/vessel_evidence", "gfw_port_visits.csv"),          # raw events, append-only
     port_visits_queried = v("data/raw/vessel_evidence", "gfw_port_visits_queried.csv"),  # ok / none / error log
     port_year           = v("data/processed/vessel_review", "vessel_port_year.csv"),

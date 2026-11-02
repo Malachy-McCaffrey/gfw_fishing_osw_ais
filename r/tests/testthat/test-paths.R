@@ -24,7 +24,7 @@ test_that("make_gfw_paths() puts each version's outputs in its own place", {
   # hand-made inputs and non-GFW caches are among the shared ones
   expect_true(all(c("decisions", "gear", "removals", "psix", "registries",
                     "roster", "bathy", "infra", "port_communities",
-                    "port_anchorages") %in% shared))
+                    "port_anchorages", "port_garfo_findings") %in% shared))
   # port visits sit with the identity cache, port tables with the review sheets
   expect_equal(p5$port_visits, "data/raw/vessel_evidence/v5/gfw_port_visits.csv")
   expect_equal(p5$port_stage1, "data/processed/vessel_review/v5/vessel_port_stage1.csv")

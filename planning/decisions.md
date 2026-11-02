@@ -30,6 +30,12 @@ Phase 4, frequentist models 5, INLA-SPDE 6, sensitivity 7 and synthesis 8.
 
 ---
 
+### 2026-11-02, recording the GARFO port review
+
+| ID | Topic | Decision | Consequence | Status |
+|---|---|---|---|---|
+| D-085 | Where the GARFO port review's findings are kept, and what they change | **Findings go in a new hand-made file, `references/port_garfo_findings.csv` (one row per MMSI, shared by every version), filled through 03b's review sheet.** 03b rewrites `port_garfo_review.csv` on every render, so a finding typed into the sheet would be lost; as 03 does for vessel decisions, 03b first copies every row with a `finding` from the last sheet into the file (never overwriting an MMSI already there), then lists the next 20 highest-effort disagreements without a finding. Findings, from a fixed list: `declared_port_differs` (right hull, lands away from its declared port), `wrong_hull` (the MMSI is not the GARFO hull; a note with the evidence is required), `gfw_port_wrong` (fixed by an anchorage override), `seasonal`, `unresolved`. **A `wrong_hull` finding drops the link, as D-084 does for PSIX-contradicted links:** at once from 03b's agreement, and from the permit groups and `garfo_match.csv` when 03 is next rendered. The other findings are descriptive and change no table. Prompted by the user asking how to complete the two port review sheets | `r/port_helpers.R`: `port_finding_cols`, `port_finding_values`, `validate_port_findings()`, `collect_port_findings()` (tested). New path `port_garfo_findings`; the file starts with a header only and is schema-checked in `test-references.R`. 03b's review sheet now puts `MMSI`, `Vessel_Name`, `finding`, `note`, `checked_on` first and leaves reviewed vessels off. 03 sources `port_helpers.R` and reads the file before writing the permit groups. Like every `references/` file, it must be committed before 03 writes a roster | |
+
 ### 2026-11-02, contradicted GARFO links leave the permit groups
 
 | ID | Topic | Decision | Consequence | Status |

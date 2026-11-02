@@ -184,3 +184,42 @@ test_that("port_coverage() gives the share of hours with a known port", {
   expect_equal(cv$hours_with_port, 60)
   expect_equal(cv$coverage, 0.6)
 })
+
+# GARFO port review findings (D-085) -----------------------------------------
+
+# a review sheet with the findings columns first, as 03b writes it
+test_sheet <- function(path, finding, note = NA_character_, checked_on = NA_character_) {
+  write_csv(tibble(MMSI = c("1", "2", "3"), Vessel_Name = c("A", "B", "C"), finding, note,
+                   checked_on, link_tier = "name_only", vp_hours = "10"), path, na = "")
+}
+
+test_that("collect_port_findings() copies marked rows and keeps existing ones", {
+  sheet <- tempfile(fileext = ".csv"); input <- tempfile(fileext = ".csv")
+  test_sheet(sheet, c("declared_port_differs", NA, "wrong_hull"),
+             note = c(NA, NA, "PSIX call sign is another hull"))
+  f <- collect_port_findings(sheet, input)
+  expect_equal(f$MMSI, c("1", "3"))
+  expect_equal(names(f), port_finding_cols)
+  expect_equal(f$checked_on, rep(as.character(Sys.Date()), 2))   # blank -> today
+  expect_true(file.exists(input))
+
+  # a second sheet: an MMSI already in the file is not overwritten
+  test_sheet(sheet, c("seasonal", "unresolved", NA))
+  f <- collect_port_findings(sheet, input)
+  expect_equal(f$finding, c("declared_port_differs", "unresolved", "wrong_hull"))
+})
+
+test_that("collect_port_findings() refuses unknown findings and bare wrong_hull rows", {
+  sheet <- tempfile(fileext = ".csv"); input <- tempfile(fileext = ".csv")
+  test_sheet(sheet, c("wrong hull", NA, NA))
+  expect_error(collect_port_findings(sheet, input), "unknown findings: wrong hull")
+  test_sheet(sheet, c("wrong_hull", NA, NA))
+  expect_error(collect_port_findings(sheet, input), "needs a note")
+  expect_false(file.exists(input))   # nothing written when the sheet is invalid
+})
+
+test_that("collect_port_findings() works with no sheet and no file yet", {
+  f <- collect_port_findings(tempfile(), tempfile())
+  expect_equal(names(f), port_finding_cols)
+  expect_equal(nrow(f), 0)
+})

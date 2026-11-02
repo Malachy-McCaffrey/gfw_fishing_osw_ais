@@ -414,7 +414,23 @@ anchorage outside the communities, with its label, position, distance to the
 nearest reference point, visits, vessels and at-dock flag; one that belongs
 to a community goes into `port_anchorages.csv`. `port_garfo_review.csv`: the
 20 highest-effort vessels with a year where the GFW home port and the GARFO
-principal port disagree, with a MarineTraffic link and a blank `finding`.
+principal port disagree and no finding yet, with the findings columns first
+(`MMSI`, `Vessel_Name`, `finding`, `note`, `checked_on`, blank to fill in),
+then `link_tier`, the years, both ports, gear, VP hours and a MarineTraffic
+link. Neither sheet keeps anything: 03b rewrites both on every render.
+
+### `references/port_garfo_findings.csv`
+
+Hand-made through 03b's GARFO review sheet (D-085), shared by every
+version; commit it after each review session. One row per MMSI: `MMSI`,
+`Vessel_Name`, `finding` (`declared_port_differs`: right hull, lands away
+from its declared port; `wrong_hull`: the MMSI is not the GARFO hull, and a
+`note` with the evidence is required; `gfw_port_wrong`: GFW's port is wrong,
+fixed with an anchorage override; `seasonal`: moves between ports with the
+season; `unresolved`), `note`, `checked_on`. 03b adds new rows from the
+sheet and never overwrites one; edit the file to change a finding. A
+`wrong_hull` link is left out of 03b's agreement, and 03 drops it from the
+permit groups and `garfo_match.csv`.
 
 ### `data/processed/gfw/{pipeline}/gfw_{vp,afe}_id_classified.csv`
 

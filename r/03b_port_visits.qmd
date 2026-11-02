@@ -19,6 +19,7 @@ params:
   port_stage1: ""
   port_anchorage_review: ""
   port_garfo_review: ""
+  port_garfo_findings: ""
   garfo_match: ""
 ---
 
@@ -49,6 +50,7 @@ helpers are logged in D-081.
 | `references/port_communities.csv` | Community reference points (USGS GNIS) and GARFO city spellings |
 | `references/port_anchorages.csv` | Hand overrides, anchorage ID → community, each with a reason and source |
 | `data/processed/vessel_review/{pipeline}/garfo_match.csv` | GARFO principal and home port per MMSI × permit year (unique matches), written by 03 |
+| `references/port_garfo_findings.csv` | Findings from the GARFO review sheet, one per MMSI (D-085). 03b adds new ones from the sheet |
 
 | Output | |
 |---|---|
@@ -69,11 +71,22 @@ helpers are logged in D-081.
 3. **Read the validation section** before anything downstream uses the port
    tables: GARFO agreement, coverage of hours, year-to-year stability, and
    the definition sensitivities.
-4. **Review the two sheets.** An anchorage that belongs to a community goes
-   into `references/port_anchorages.csv` (anchorage ID, label, community,
-   reason, source); re-render to apply it. Check GARFO disagreements with
-   MarineTraffic and PSIX, as for the vessel review. A rule change is a new
-   decision, not an edit here.
+4. **Review the two sheets.** Both are regenerated on every render, so
+   nothing is kept in them.
+   - **Anchorages:** one that belongs to a community goes into
+     `references/port_anchorages.csv` (anchorage ID, label, community,
+     reason, source); re-render to apply it.
+   - **GARFO disagreements** (D-085): check each vessel with MarineTraffic
+     and PSIX, as for the vessel review, and fill in `finding` (one of
+     `declared_port_differs`, `wrong_hull`, `gfw_port_wrong`, `seasonal`,
+     `unresolved`) and `note` (the evidence; required for `wrong_hull`).
+     The next render copies them into `references/port_garfo_findings.csv`
+     and lists the next 20 unreviewed vessels. A `wrong_hull` link is left
+     out of the agreement here at once, and out of the permit groups and
+     `garfo_match.csv` once 03 is re-rendered. Commit the findings file
+     after each session.
+
+   A rule change is a new decision, not an edit here.
 5. **Freeze.** `port_communities.csv`, `port_anchorages.csv` and the two
    port tables are tagged with the frozen crosswalk, before 13 runs.
 
@@ -327,6 +340,17 @@ to the GARFO hull; `length_consistent` and `name_only` are shown beside it;
 Both sides being "outside region" is not counted as agreement, since it says
 nothing about which port.
 
+Findings from the last review sheet are collected first (D-085), before the
+sheet is regenerated below. A link found to be the `wrong_hull` is left out
+of the agreement, like a `contradicted` one.
+
+```{r}
+# copy the findings marked in the last sheet into the findings file
+port_findings <- collect_port_findings(paths$port_garfo_review, paths$port_garfo_findings)
+wrong_hull <- port_findings$MMSI[port_findings$finding == "wrong_hull"]
+count(port_findings, finding)
+```
+
 ```{r}
 tier_order <- c("confirmed", "length_consistent", "name_only", "length_differs", "contradicted")
 
@@ -338,7 +362,8 @@ if (file.exists(paths$garfo_match)) {
     garfo_ports$link_tier <- "name_only"
   }
   agreement <- port_agreement(port_year, garfo_ports, communities) |>
-    filter(link_tier != "contradicted") |>
+    # links PSIX contradicts (D-082), or a review found to be another hull (D-085)
+    filter(link_tier != "contradicted", !MMSI %in% wrong_hull) |>
     mutate(link_tier = factor(link_tier, tier_order),
            # both sides outside the region: not evidence of the same port
            across(c(agree_principal, agree_home),
@@ -371,11 +396,12 @@ if (file.exists(paths$garfo_match)) {
 ```
 
 The review sheet: the 20 highest-effort vessels with at least one year where
-GFW and GARFO principal ports disagree. Check each with MarineTraffic and
-PSIX, as for the vessel review. `link_tier` says what to check first: a
-`confirmed` link that disagrees is most likely a real difference between the
-declared port and where the vessel lands; a `name_only` one may be the wrong
-hull.
+GFW and GARFO principal ports disagree and no finding yet, so each session
+moves on to the next ones. Check each with MarineTraffic and PSIX, as for the
+vessel review. `link_tier` says what to check first: a `confirmed` link that
+disagrees is most likely a real difference between the declared port and
+where the vessel lands; a `name_only` one may be the wrong hull. Fill in
+`finding` and `note`; leave `finding` blank to skip a vessel.
 
 ```{r}
 hours_total <- roster |>
@@ -393,12 +419,24 @@ if (!is.null(agreement)) {
               .groups = "drop") |>
     left_join(select(primary, MMSI, Vessel_Name, gear_class), by = "MMSI") |>
     left_join(hours_total, by = "MMSI") |>
+    # vessels already reviewed are not listed again
+    filter(!MMSI %in% port_findings$MMSI) |>
     slice_max(vp_hours, n = 20, with_ties = FALSE) |>
     mutate(marinetraffic = paste0("https://www.marinetraffic.com/en/ais/details/ships/mmsi:", MMSI),
-           finding = NA_character_)
+           finding = NA_character_, note = NA_character_, checked_on = NA_character_) |>
+    # the findings columns first, as in the other review sheets
+    relocate(MMSI, Vessel_Name, finding, note, checked_on)
   write_csv(garfo_review, paths$port_garfo_review, na = "")
   select(garfo_review, Vessel_Name, gear_class, link_tier, vp_hours, years, gfw_port,
          garfo_principal)
+}
+
+# what the reviews have found so far, by link tier (the tier says how far the
+# name match was trusted before the check)
+if (!is.null(agreement) && nrow(port_findings) > 0) {
+  port_findings |>
+    left_join(distinct(garfo_ports, MMSI, link_tier), by = "MMSI") |>
+    count(link_tier, finding)
 }
 ```
 

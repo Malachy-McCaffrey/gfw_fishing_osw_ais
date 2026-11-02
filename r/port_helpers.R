@@ -284,6 +284,82 @@ port_agreement <- function(gfw, garfo, communities) {
                                   gfw_port == garfo_home))
 }
 
+# GARFO port review findings (D-085) ----------------------------------------
+#
+# The GARFO review sheet (03b) is regenerated on every render, so findings
+# are kept in references/port_garfo_findings.csv, one row per MMSI, shared by
+# every pipeline version (the finding is about a vessel and its GARFO hull,
+# not about a pull). 03b copies new findings from the sheet into the file;
+# 03 reads `wrong_hull` findings and drops those links from the permit groups
+# and garfo_match.csv, as D-084 does for links PSIX contradicts.
+
+port_finding_cols <- c("MMSI", "Vessel_Name", "finding", "note", "checked_on")
+
+# The allowed findings and what each means:
+#   declared_port_differs  right hull; the vessel lands away from its declared
+#                          GARFO port (descriptive; supports GFW as the source)
+#   wrong_hull             the MMSI is not the GARFO hull (link dropped by 03)
+#   gfw_port_wrong         GFW's port is wrong, e.g. a mislabelled anchorage
+#                          (fix with an override in port_anchorages.csv)
+#   seasonal               the vessel moves between ports with the season;
+#                          both sources are right (descriptive)
+#   unresolved             checked, but the evidence does not settle it
+port_finding_values <- c("declared_port_differs", "wrong_hull", "gfw_port_wrong",
+                         "seasonal", "unresolved")
+
+# Checks a findings table (all character columns); stops naming the problem
+validate_port_findings <- function(f, source = "port_garfo_findings.csv") {
+  missing <- setdiff(port_finding_cols, names(f))
+  if (length(missing) > 0) {
+    stop(source, " is missing columns: ", paste(missing, collapse = ", "), call. = FALSE)
+  }
+  bad <- setdiff(f$finding, port_finding_values)
+  if (length(bad) > 0) {
+    stop(source, " has unknown findings: ", paste(bad, collapse = ", "),
+         " (allowed: ", paste(port_finding_values, collapse = ", "), ")", call. = FALSE)
+  }
+  if (anyDuplicated(f$MMSI)) {
+    stop(source, " lists an MMSI twice: ",
+         paste(unique(f$MMSI[duplicated(f$MMSI)]), collapse = ", "), call. = FALSE)
+  }
+  if (any(f$finding %in% "wrong_hull" & is.na(f$note))) {
+    stop(source, ": a wrong_hull finding needs a note giving the evidence", call. = FALSE)
+  }
+  invisible(f)
+}
+
+# Copies the rows with a `finding` in the review sheet into the findings
+# file, skipping MMSIs the file already has (edit the file itself to change
+# a finding), and returns the file's table. A blank checked_on becomes
+# today. Mirrors collect_marked() in r/review_helpers.R for vessel decisions.
+collect_port_findings <- function(sheet, input) {
+  read <- \(p) readr::read_csv(p, col_types = readr::cols(.default = "c"), na = c("", "NA"),
+                               show_col_types = FALSE)
+  current <- if (file.exists(input)) read(input) else
+    tibble::as_tibble(stats::setNames(rep(list(character()), length(port_finding_cols)),
+                                      port_finding_cols))
+  validate_port_findings(current, basename(input))
+
+  if (file.exists(sheet)) {
+    s <- read(sheet)
+    for (col in setdiff(port_finding_cols, names(s))) s[[col]] <- NA_character_
+    marked <- s |>
+      dplyr::mutate(finding = stringr::str_trim(finding)) |>
+      dplyr::filter(!is.na(finding), finding != "") |>
+      dplyr::mutate(checked_on = dplyr::coalesce(checked_on, as.character(Sys.Date()))) |>
+      dplyr::select(dplyr::all_of(port_finding_cols))
+    validate_port_findings(marked, basename(sheet))
+
+    new_rows <- dplyr::anti_join(marked, current, by = "MMSI")
+    if (nrow(new_rows) > 0) {
+      current <- dplyr::bind_rows(current, new_rows) |> dplyr::arrange(MMSI)
+      readr::write_csv(current, input, na = "")
+      message("Added ", nrow(new_rows), " findings to ", input)
+    }
+  }
+  current
+}
+
 # Share of effort hours whose vessel has a home port, per group. `hours` has
 # MMSI, the `join` columns, the `by` columns and `hours`; `ports` is a
 # home-port table keyed by `join` (by default MMSI x year). Returns the `by`

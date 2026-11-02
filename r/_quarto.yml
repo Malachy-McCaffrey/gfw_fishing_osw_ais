@@ -21,6 +21,7 @@ project:
     - 02_build_grid.qmd
     - 02a_infrastructure.qmd
     - 03_review_vessels.qmd
+    - 03b_port_visits.qmd
     - 04_classify_aggregate.qmd
     - 05_prepare_analysis.qmd
     - 05a_export_rasters.qmd

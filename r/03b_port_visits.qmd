@@ -1,0 +1,449 @@
+---
+title: "MM GFW Vessel Home Ports: GFW Port Visits"
+author: "Malachy McCaffrey"
+date: today
+format: html
+params:
+  run_gfw_api: false # true to query uncached vessel IDs in the GFW Events API
+  # GFW pipeline version to render against (r/paths.R); blank = the default.
+  # It picks the roster, the vessel IDs and the port-visit dataset version.
+  pipeline: ""
+  # port-visit dataset version, e.g. "v5.0"; blank = the pipeline's ("v5" -> "v5.0")
+  dataset_version: ""
+  # query at most this many roster MMSIs (0 = all); for a dry run only
+  max_vessels: 0
+  # Path overrides (see r/paths.R); leave blank to use the project paths.
+  port_visits: ""
+  port_visits_queried: ""
+  port_year: ""
+  port_stage1: ""
+  port_anchorage_review: ""
+  port_garfo_review: ""
+  garfo_match: ""
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# run from the repo root (the folder holding renv.lock) so the relative paths
+# in r/paths.R resolve whether the qmd is rendered or run chunk by chunk
+root <- getwd()
+while (!file.exists(file.path(root, "renv.lock")) && dirname(root) != root) root <- dirname(root)
+knitr::opts_knit$set(root.dir = root)
+```
+
+## Objective
+
+Give each Primary fishing vessel a **port community**, per calendar year and
+for Stage 1, from the port visits GFW detects in its AIS track. The port
+tables describe which communities fish near the leases (the synthesis, 14),
+and they group vessels for one Phase 7 robustness check (13). **Port is never
+a covariate in the main models** (D-076). The rules were fixed before any
+port-split result was seen (D-080; planning/gfw_analysis_plan.qmd,
+@sec-ports), and the references and helpers are logged in D-081.
+
+| Input | Role |
+|---|---|
+| `references/fishing_roster_{pipeline}.csv` | The vessels (Primary MMSIs), their GFW vessel IDs in this pull, gear class and first active date. Written by 03 |
+| `data/raw/gfw/{pipeline}/gfw_vp_id.csv`, `gfw_afe_id.csv` | Hours per MMSI × year, for coverage (read only) |
+| `references/port_communities.csv` | Community reference points (USGS GNIS) and GARFO city spellings |
+| `references/port_anchorages.csv` | Hand overrides, anchorage ID → community, each with a reason and source |
+| `data/processed/vessel_review/{pipeline}/garfo_match.csv` | GARFO principal and home port per MMSI × permit year (unique matches), written by 03 |
+
+| Output | |
+|---|---|
+| `data/raw/vessel_evidence/{pipeline}/gfw_port_visits.csv` | Raw events, one row per visit, append-only, with the dataset version and pull date on every row |
+| `data/raw/vessel_evidence/{pipeline}/gfw_port_visits_queried.csv` | One row per vessel ID query: ok / none / error. Doubles as the pull's provenance record |
+| `data/processed/vessel_review/{pipeline}/vessel_port_year.csv` | Home port per MMSI × year |
+| `data/processed/vessel_review/{pipeline}/vessel_port_stage1.csv` | Stage 1 port group per MMSI, for Phase 7 |
+| `data/processed/vessel_review/{pipeline}/port_anchorage_review.csv` | Anchorages outside every community, for review |
+| `data/processed/vessel_review/{pipeline}/port_garfo_review.csv` | The highest-effort vessels where GFW and GARFO ports disagree, for review |
+
+## How to use this workflow
+
+1. **Render with the API off** (the default) to see how many vessel IDs are
+   still unqueried.
+2. **Render once with `-P run_gfw_api:true`.** Each vessel ID is queried once
+   for the pinned dataset and logged; a render that stops partway resumes
+   where it left off. Set it back to `false` afterwards.
+3. **Read the validation section** before anything downstream uses the port
+   tables: GARFO agreement, coverage of hours, year-to-year stability, and
+   the definition sensitivities.
+4. **Review the two sheets.** An anchorage that belongs to a community goes
+   into `references/port_anchorages.csv` (anchorage ID, label, community,
+   reason, source); re-render to apply it. Check GARFO disagreements with
+   MarineTraffic and PSIX, as for the vessel review. A rule change is a new
+   decision, not an edit here.
+5. **Freeze.** `port_communities.csv`, `port_anchorages.csv` and the two
+   port tables are tagged with the frozen crosswalk, before 13 runs.
+
+## Libraries and shared code
+
+```{r}
+library(tidyverse)
+library(sf)
+
+source("r/paths.R")
+source("r/gfw_helpers.R")
+source("r/vessel_helpers.R")
+source("r/review_helpers.R") # append_csv(), read_ev()
+source("r/port_helpers.R")   # the port rules and checks (D-080, D-081)
+
+# Quarto parameters (header); `params` is read-only while rendering. Run chunk
+# by chunk, `params` is missing or left over from another session, so the
+# header is read from this file directly instead
+qparams <- if (isTRUE(getOption("knitr.in.progress"))) params else {
+  hdr <- knitr::knit_params(readLines(
+    file.path(root, "r/03b_port_visits.qmd"), warn = FALSE))
+  lapply(hdr, function(p) p$value)
+}
+paths <- gfw_paths_with(qparams)
+
+run_gfw_api <- isTRUE(qparams$run_gfw_api)
+message("GFW Events API lookups are ", if (run_gfw_api) "ON" else "OFF")
+```
+
+## Parameters
+
+```{r}
+# the port-visit dataset, pinned to the pipeline version (D-080): "v5" ->
+# "public-global-port-visits-events:v5.0"; ":latest" is never used
+dataset_version <- if (nzchar(qparams$dataset_version %||% "")) {
+  qparams$dataset_version
+} else {
+  paste0(paths$pipeline, ".0")
+}
+dataset <- port_visits_dataset(dataset_version)
+dataset
+
+# the query window: the first day of Stage 1 to the day after Stage 3 ends
+query_start <- as.character(dev_stages$start[1])
+query_end   <- as.character(max(dev_stages$end) + 1)
+
+# the D-080 rules (r/port_helpers.R); any change is a new decision
+port_rules |> as_tibble()
+
+api_pause <- 0.3 # seconds between vessel IDs, to be gentle with the API
+max_consecutive_errors <- 5 # stop the pull after this many failures in a row
+```
+
+## Read the roster and references
+
+```{r}
+roster_path <- sprintf(paths$roster, paths$pipeline)
+if (!file.exists(roster_path)) {
+  stop("No fishing roster for ", paths$pipeline, " (", roster_path, "). ",
+       "Finish the vessel review and render 03 with -P write_roster:true first.",
+       call. = FALSE)
+}
+roster <- read_chr(roster_path)
+
+# Primary vessels only: the effort the models use
+primary <- roster |>
+  filter(in_primary == "TRUE") |>
+  transmute(MMSI, Vessel_Name, gear_class, first = as.Date(first), vessel_ids)
+
+# one row per vessel ID; an MMSI can have several (all are queried, D-080)
+vessel_ids <- primary |>
+  separate_longer_delim(vessel_ids, "|") |>
+  filter(!is.na(vessel_ids), vessel_ids != "") |>
+  transmute(MMSI, vessel_id = vessel_ids)
+
+if (qparams$max_vessels > 0) {
+  # a dry run: the highest-effort MMSIs only
+  keep <- roster |>
+    filter(in_primary == "TRUE") |>
+    mutate(h = rowSums(across(starts_with("vp_hours_"), as.numeric))) |>
+    slice_max(h, n = qparams$max_vessels, with_ties = FALSE) |>
+    pull(MMSI)
+  vessel_ids <- filter(vessel_ids, MMSI %in% keep)
+  warning("max_vessels = ", qparams$max_vessels, ": a dry run, not the full roster",
+          call. = FALSE)
+}
+
+tibble(primary_mmsi = n_distinct(primary$MMSI), n_vessel_ids = nrow(vessel_ids),
+       mmsi_to_query = n_distinct(vessel_ids$MMSI))
+
+communities <- read_port_communities(paths$port_communities)
+overrides   <- read_port_anchorages(paths$port_anchorages, communities)
+count(communities, community, name = "points")
+```
+
+## Query the GFW Events API
+
+One request per vessel ID (paged), so a failure is logged against that ID.
+Every event's MMSI must equal the MMSI the vessel ID was queried for
+(`parse_port_visits()` stops otherwise). Events are appended to the raw cache
+straight after each vessel ID, with the log row, so an interrupted render
+loses nothing and the next one resumes.
+
+```{r}
+queried_cols <- c("vessel_id", "MMSI", "dataset", "queried_on", "status",
+                  "n_events", "message")
+queried <- read_ev(paths$port_visits_queried, queried_cols)
+
+# an ID counts as done for this dataset once it returned events or none;
+# errors are retried on the next render
+done <- queried |> filter(dataset == !!dataset, status %in% c("ok", "none"))
+to_query <- anti_join(vessel_ids, done, by = "vessel_id")
+message(nrow(to_query), " vessel IDs not yet queried for ", dataset)
+```
+
+```{r}
+if (run_gfw_api && nrow(to_query) > 0) {
+  stopifnot("GFW_TOKEN is not set (project .Renviron)" = nzchar(Sys.getenv("GFW_TOKEN")))
+  dir.create(dirname(paths$port_visits), recursive = TRUE, showWarnings = FALSE)
+  errors_in_row <- 0
+  for (i in seq_len(nrow(to_query))) {
+    id <- to_query$vessel_id[i]
+    mmsi <- to_query$MMSI[i]
+    res <- tryCatch({
+      entries <- gfw_port_visits(id, dataset, query_start, query_end)
+      parse_port_visits(entries, id, mmsi, dataset)
+    }, error = function(e) e)
+
+    if (inherits(res, "error")) {
+      errors_in_row <- errors_in_row + 1
+      log_row <- tibble(vessel_id = id, MMSI = mmsi, dataset = dataset,
+                        queried_on = as.character(Sys.Date()), status = "error",
+                        n_events = "0", message = conditionMessage(res))
+    } else {
+      errors_in_row <- 0
+      append_csv(res, paths$port_visits)
+      log_row <- tibble(vessel_id = id, MMSI = mmsi, dataset = dataset,
+                        queried_on = as.character(Sys.Date()),
+                        status = if (nrow(res) > 0) "ok" else "none",
+                        n_events = as.character(nrow(res)), message = NA_character_)
+    }
+    append_csv(log_row, paths$port_visits_queried)
+
+    if (errors_in_row >= max_consecutive_errors) {
+      stop(max_consecutive_errors, " vessel IDs failed in a row (last: ",
+           conditionMessage(res), "); the pull stopped. Rows so far are cached.",
+           call. = FALSE)
+    }
+    Sys.sleep(api_pause)
+  }
+  queried <- read_ev(paths$port_visits_queried, queried_cols)
+}
+
+# the log for this dataset and the vessels in this render
+queried |>
+  filter(dataset == !!dataset, vessel_id %in% vessel_ids$vessel_id) |>
+  count(status)
+```
+
+## Read the cache
+
+```{r}
+raw <- read_ev(paths$port_visits, port_visit_cols)
+
+# guards (D-080): the folder holds one pipeline's pull, so every row must
+# carry the pinned dataset, and every MMSI must be a roster MMSI
+other_versions <- setdiff(unique(raw$dataset), dataset)
+if (length(other_versions) > 0) {
+  stop(paths$port_visits, " holds rows from ", paste(other_versions, collapse = ", "),
+       ", not only ", dataset, call. = FALSE)
+}
+stopifnot("cached visits for MMSIs not on the roster" = all(raw$MMSI %in% roster$MMSI))
+
+raw <- semi_join(raw, vessel_ids, by = c("MMSI", "vessel_id"))
+tibble(raw_visits = nrow(raw), mmsi = n_distinct(raw$MMSI),
+       n_vessel_ids = n_distinct(raw$vessel_id))
+```
+
+## Assign ports
+
+Visits count if their confidence is 3 or 4 and they last at least 2 h. Each
+counted visit takes the community of the nearest reference point within
+10 km of its anchorage's position (the label is not used: it can be wrong),
+unless `port_anchorages.csv` overrides that anchorage.
+
+```{r}
+visits <- raw |>
+  port_visit_filter() |>
+  assign_port_community(communities, overrides)
+
+tibble(raw = nrow(raw), counted = nrow(visits),
+       dropped = nrow(raw) - nrow(visits))
+
+count(visits, port_rule)
+visits |> count(community, sort = TRUE)
+```
+
+```{r}
+# home port per MMSI x year (descriptive), and the Stage 1 group (Phase 7)
+port_year <- home_port_of(visits, by = c("MMSI", "year"))
+
+port_stage1 <- home_port_stage1(visits, select(primary, MMSI, first)) |>
+  filter(MMSI %in% vessel_ids$MMSI)
+
+count(port_year, status)
+count(port_stage1, window, status)
+```
+
+## Write the port tables
+
+```{r}
+dir.create(dirname(paths$port_year), recursive = TRUE, showWarnings = FALSE)
+
+port_year |>
+  mutate(dataset = dataset, rules = "D-080") |>
+  write_csv(paths$port_year, na = "")
+
+port_stage1 |>
+  mutate(dataset = dataset, rules = "D-080") |>
+  write_csv(paths$port_stage1, na = "")
+
+# anchorages outside every community: review, and add an override where one
+# belongs to a community
+anchorage_review <- visits |>
+  filter(port_rule %in% c("other", "outside", "no position")) |>
+  group_by(anchorage_id, anchorage_label, community, port_rule) |>
+  summarise(lat = first(lat), lon = first(lon), km_to_nearest = round(first(port_km), 1),
+            visits = n(), vessels = n_distinct(MMSI),
+            at_dock = paste(sort(unique(int_at_dock)), collapse = "|"), .groups = "drop") |>
+  arrange(desc(visits))
+write_csv(anchorage_review, paths$port_anchorage_review, na = "")
+anchorage_review
+```
+
+## Validate
+
+Before any downstream use (D-080). These checks describe the tables; none of
+them changes a rule.
+
+### Against GARFO
+
+GARFO principal and home port per permit year, for the unique name matches
+03 makes. Principal port (where the vessel lands most) is expected to agree
+better than home port.
+
+```{r}
+if (file.exists(paths$garfo_match)) {
+  garfo_ports <- read_chr(paths$garfo_match) |> mutate(year = as.numeric(year))
+  agreement <- port_agreement(port_year, garfo_ports, communities)
+
+  # agreement rates where both sides have a port
+  agreement |>
+    summarise(mmsi_years = n(),
+              gfw_port = sum(gfw_status == "port"),
+              principal_compared = sum(!is.na(agree_principal)),
+              principal_agree = mean(agree_principal, na.rm = TRUE),
+              home_compared = sum(!is.na(agree_home)),
+              home_agree = mean(agree_home, na.rm = TRUE)) |>
+    print()
+
+  # confusion table, GFW home port vs GARFO principal port
+  agreement |>
+    filter(!is.na(agree_principal)) |>
+    count(gfw_port, garfo_principal, sort = TRUE) |>
+    print(n = 40)
+} else {
+  agreement <- NULL
+  message(paths$garfo_match, " not found; render 03 for ", paths$pipeline,
+          " to write it. The GARFO check is skipped.")
+}
+```
+
+The review sheet: the 20 highest-effort vessels with at least one year where
+GFW and GARFO principal ports disagree. Check each with MarineTraffic and
+PSIX, as for the vessel review.
+
+```{r}
+hours_total <- roster |>
+  transmute(MMSI, vp_hours = rowSums(across(starts_with("vp_hours_"), as.numeric)))
+
+if (!is.null(agreement)) {
+  garfo_review <- agreement |>
+    filter(agree_principal %in% FALSE) |>
+    group_by(MMSI) |>
+    summarise(years = paste(sort(unique(year)), collapse = ","),
+              gfw_port = paste(sort(unique(gfw_port)), collapse = "|"),
+              garfo_principal = paste(sort(unique(garfo_principal)), collapse = "|"),
+              garfo_home = paste(sort(unique(garfo_home)), collapse = "|"),
+              .groups = "drop") |>
+    left_join(select(primary, MMSI, Vessel_Name, gear_class), by = "MMSI") |>
+    left_join(hours_total, by = "MMSI") |>
+    slice_max(vp_hours, n = 20, with_ties = FALSE) |>
+    mutate(marinetraffic = paste0("https://www.marinetraffic.com/en/ais/details/ships/mmsi:", MMSI),
+           finding = NA_character_)
+  write_csv(garfo_review, paths$port_garfo_review, na = "")
+  select(garfo_review, Vessel_Name, gear_class, vp_hours, years, gfw_port, garfo_principal)
+}
+```
+
+### Coverage of effort
+
+The share of Primary VP and AFE hours, per gear × stage, whose vessel has a
+home port in that year. A gear with low coverage stays descriptive in the
+synthesis. Stage 1 coverage under the Stage 1 group is also shown, since
+that is what Phase 7 uses.
+
+```{r}
+# hours per MMSI x year x stage, from the raw pulls (Primary vessels only)
+hours_of <- function(path, dataset_name) {
+  read_gfw(path) |>
+    in_analysis_window() |>
+    filter(MMSI %in% vessel_ids$MMSI) |>
+    mutate(year = year(date)) |>
+    group_by(MMSI, year, stage = `Development Stage`) |>
+    summarise(hours = sum(hours), .groups = "drop") |>
+    left_join(select(primary, MMSI, gear_class), by = "MMSI") |>
+    mutate(dataset = dataset_name)
+}
+hours <- bind_rows(hours_of(paths$raw_vp, "VP"), hours_of(paths$raw_afe, "AFE"))
+
+coverage_year <- port_coverage(hours, port_year, by = c("dataset", "gear_class", "stage"))
+coverage_year
+
+coverage_stage1 <- hours |>
+  filter(stage == "Stage 1") |>
+  port_coverage(port_stage1, by = c("dataset", "gear_class"), join = "MMSI")
+coverage_stage1
+```
+
+### Stability
+
+How often a vessel's home port changes from one year to the next, by the
+stage of the later year. Changes concentrated in Stages 2–3 support grouping
+by Stage 1 (a later port may respond to the projects).
+
+```{r}
+port_year |>
+  filter(status == "port") |>
+  arrange(MMSI, year) |>
+  group_by(MMSI) |>
+  mutate(prev = lag(community), prev_year = lag(year)) |>
+  ungroup() |>
+  filter(!is.na(prev), year == prev_year + 1) |>
+  mutate(stage = stage_of(as.Date(sprintf("%d-07-01", year)))) |>
+  group_by(stage) |>
+  summarise(year_pairs = n(), changed = sum(community != prev),
+            share_changed = changed / year_pairs, .groups = "drop")
+```
+
+### Definition sensitivities
+
+The D-080 sensitivities: confidence 4 only, and visits weighted by hours in
+port instead of counted. Shown as the share of vessel-years whose home port
+is the same as under the default rule.
+
+```{r}
+sens <- list(
+  confidence_4 = raw |> port_visit_filter(min_confidence = 4) |>
+    assign_port_community(communities, overrides) |> home_port_of(),
+  duration_weighted = home_port_of(visits, weight = "duration_hrs"))
+
+imap_dfr(sens, \(s, name) {
+  full_join(select(port_year, MMSI, year, default = community),
+            select(s, MMSI, year, alt = community), by = c("MMSI", "year")) |>
+    summarise(rule = name, mmsi_years = n(),
+              same = mean(coalesce(default, "none") == coalesce(alt, "none")))
+})
+```
+
+## Session info
+
+```{r}
+sessionInfo()
+```

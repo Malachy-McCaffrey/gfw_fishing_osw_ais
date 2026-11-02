@@ -46,7 +46,10 @@ test_that("read_port_communities() checks the schema and GARFO city uniqueness",
 test_that("port_visit_filter() keeps confidence 3-4 and >= 2 h, once per event", {
   raw <- raw_visits("1", "2019-05-01T10:00:00.000Z", "a1", 41.37, -71.51,
                     confidence = c("4", "3", "2", "4"), duration_hrs = c("2", "5", "9", "1.9"))
+  raw <- raw |> mutate(start = sprintf("2019-05-0%dT10:00:00.000Z", 1:4))
   raw <- bind_rows(raw, raw[1, ])   # a re-pull caches the same event twice
+  # a second vessel ID of the same MMSI returns visit e2 under another event ID
+  raw <- bind_rows(raw, mutate(raw[2, ], event_id = "e9", vessel_id = "other-id"))
   v <- port_visit_filter(raw)
   expect_equal(v$event_id, c("e1", "e2"))
   expect_equal(v$year, c(2019, 2019))

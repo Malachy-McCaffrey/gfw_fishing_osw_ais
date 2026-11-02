@@ -78,6 +78,9 @@ make_gfw_paths <- function(pipeline = gfw_pipeline_default) {
     port_visits_queried = v("data/raw/vessel_evidence", "gfw_port_visits_queried.csv"),  # ok / none / error log
     port_year           = v("data/processed/vessel_review", "vessel_port_year.csv"),
     port_stage1         = v("data/processed/vessel_review", "vessel_port_stage1.csv"),
+    # review sheets 03b writes for the anchorage and GARFO checks
+    port_anchorage_review = v("data/processed/vessel_review", "port_anchorage_review.csv"),
+    port_garfo_review     = v("data/processed/vessel_review", "port_garfo_review.csv"),
     # write-once snapshot of the fishing vessels in one GFW pipeline version,
     # written by 03; %s is the version, e.g. sprintf(roster, "v4"). Left as a
     # template because a later version's run reads an earlier version's roster.

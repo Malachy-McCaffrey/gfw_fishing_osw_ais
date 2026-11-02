@@ -95,12 +95,14 @@ read_port_anchorages <- function(path, communities) {
 # least min_hours in port. Adds `year` (calendar year of the visit's start)
 # and the position used to place the visit: the intermediate anchorage's,
 # else the start anchorage's when GFW gives no intermediate one. A visit
-# returned twice (re-pulls append, so the same event can be cached twice) is
-# kept once.
+# returned twice is kept once: re-pulls append, so the same event can be
+# cached twice, and two vessel IDs of one MMSI that overlap in time can each
+# return the same visit under a different event ID (same start and anchorage).
 port_visit_filter <- function(raw, min_confidence = port_rules$min_confidence,
                               min_hours = port_rules$min_hours) {
   raw |>
     dplyr::distinct(MMSI, event_id, .keep_all = TRUE) |>
+    dplyr::distinct(MMSI, start, int_anchorage_id, start_anchorage_id, .keep_all = TRUE) |>
     dplyr::mutate(
       start = lubridate::ymd_hms(start, quiet = TRUE),
       end = lubridate::ymd_hms(end, quiet = TRUE),

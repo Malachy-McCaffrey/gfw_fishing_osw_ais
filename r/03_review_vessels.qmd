@@ -19,6 +19,7 @@ params:
   review: ""
   evidence: ""
   grid: ""
+  garfo_match: ""
 ---
 
 ```{r setup, include=FALSE}
@@ -77,6 +78,7 @@ on the raw pull, the GARFO files, the API cache and these files:
 | `references/fishing_roster_{pipeline}.csv` | Written **once** per GFW pipeline version with `-P write_roster:true`: every MMSI that counted as fishing in that pull -- never edit or regenerate |
 | `data/processed/vessel_review/{pipeline}/vessel_review.csv` | Generated each run: hull/activity candidates, evidence and a suggested decision |
 | `data/processed/vessel_review/{pipeline}/gear_review.csv` | Generated each run: fishing vessels whose gear needs checking, with a suggested gear class |
+| `data/processed/vessel_review/{pipeline}/garfo_match.csv` | Generated each run: GARFO principal and home port per MMSI × permit year for unique matches, read by `03b_port_visits.qmd` (D-080, D-081) |
 
 Each pass:
 
@@ -424,7 +426,8 @@ hull ID in `evidence_ref`. State-registered hull IDs (e.g. `MS6930PP`) cannot
 be linked to a call sign this way.
 
 Only vessel fields are read; owner names, telephone numbers and addresses are
-never loaded.
+never loaded. The home and principal port cities are vessel fields (where the
+vessel is based) and are read for the port check (D-081).
 
 ```{r}
 garfo_files <- list.files(paths$registries,
@@ -1396,6 +1399,40 @@ permit_groups <- profiles |>
 write_csv(permit_groups, paths$permit_groups, na = "")
 
 count(permit_groups, permit_group)
+```
+
+### GARFO ports for the port-visit check
+
+`03b_port_visits.qmd` compares each vessel's home port from GFW port visits
+with its GARFO principal and home port (D-080). It reads them from
+`data/processed/vessel_review/{pipeline}/garfo_match.csv`, so 03b needs no
+GARFO file. The same MMSIs as the permit groups qualify: a unique,
+year-overlapping name match that PSIX does not contradict. One row per MMSI ×
+permit year, from the annual permit lists (the HMS list carries no port
+city). Only the port city and state leave this step: they say where the
+vessel is based, not who owns it (D-081). No hull, permit number or owner
+field is written. The file is regenerated on every run.
+
+```{r}
+garfo_ports <- garfo_matches |>
+  # the same MMSIs as the permit groups above
+  filter(MMSI %in% permit_groups$MMSI, source == "garfo_permits") |>
+  transmute(MMSI, year = permit_year,
+            principal_port_city, principal_port_state, home_port_city, home_port_state) |>
+  # a vessel holding two permits in a year usually repeats its ports; when it
+  # does not, the row with a principal port is kept
+  arrange(MMSI, year, is.na(principal_port_city)) |>
+  distinct(MMSI, year, .keep_all = TRUE) |>
+  mutate(garfo_match = "unique_years", pull_date = as.character(pull_date))
+
+dir.create(dirname(paths$garfo_match), recursive = TRUE, showWarnings = FALSE)
+write_csv(garfo_ports, paths$garfo_match, na = "")
+
+# how many matched vessels and years carry a port
+garfo_ports |>
+  summarise(mmsi = n_distinct(MMSI), mmsi_years = n(),
+            with_principal = sum(!is.na(principal_port_city)),
+            with_home = sum(!is.na(home_port_city)))
 ```
 
 ### Snapshot the fishing roster

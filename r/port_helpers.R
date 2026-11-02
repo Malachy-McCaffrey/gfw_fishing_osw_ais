@@ -191,7 +191,10 @@ assign_port_community <- function(visits, communities, overrides = NULL,
 # and no other community ties it; a unit with fewer than min_visits visits in
 # all is "unknown", and any other unit "multiple". Visits without a position
 # are not counted. Returns the unit columns, community (the home port, NA
-# unless status is "port"), top_community, port_state, visits, share, status.
+# unless status is "port"), top_community, port_state, visits, share, status,
+# top_visits (the top community's visits) and tied (another community ties
+# the top one); the last two let distance_origin() take the top community of
+# a "multiple" unit (D-088).
 home_port_of <- function(visits, by = c("MMSI", "year"),
                          min_visits = port_rules$min_visits,
                          min_share = port_rules$min_share, weight = NULL) {
@@ -218,7 +221,8 @@ home_port_of <- function(visits, by = c("MMSI", "year"),
                                 TRUE ~ "multiple"),
       community = dplyr::if_else(status == "port", top_community, NA_character_),
       port_state = dplyr::if_else(status == "port", port_state, NA_character_)) |>
-    dplyr::select(dplyr::all_of(by), community, top_community, port_state, visits, share, status)
+    dplyr::select(dplyr::all_of(by), community, top_community, port_state, visits, share, status,
+                  top_visits, tied)
 }
 
 # The Stage 1 port group per MMSI, for Phase 7 (D-080): the home-port rule
@@ -247,6 +251,121 @@ home_port_stage1 <- function(visits, first_active,
     dplyr::mutate(visits = dplyr::coalesce(visits, 0L),
                   status = dplyr::coalesce(status, "unknown")) |>
     dplyr::arrange(MMSI)
+}
+
+# Distance from home port (D-088) --------------------------------------------
+
+# The origin each vessel-year's distance is measured from: its GFW home port,
+# with a fixed rule for years without one, so nothing is settled by hand.
+#   1. status "port": that community (origin_source "year");
+#   2. status "multiple" whose top community has at least min_visits visits
+#      and no tie: the top community ("top_community");
+#   3. any other year, including "unknown", "excluded" (D-086: its visits were
+#      all charter work, so they say nothing about the fishing port) and a
+#      year with effort but no counted visits at all: the vessel's Stage 1
+#      port, if that has status "port" ("stage1");
+#   4. otherwise no origin ("none").
+# The origin point is the most-visited anchorage inside the chosen community:
+# among that year's visits for rules 1-2, among all the vessel's visits for
+# rule 3 (ties go to the lower anchorage ID). So "other (<state>)" and
+# "outside region" ports have a position too, and a community with several
+# reference points is measured from the harbour the vessel actually uses.
+# `units` lists the MMSI x year to give an origin (e.g. every vessel-year with
+# effort); `port_year` is home_port_of() by MMSI x year (plus any excluded
+# rows), `port_stage1` is home_port_stage1(), `visits` the assigned visits.
+# Returns one row per unit: MMSI, year, origin_community, origin_source,
+# origin_anchorage_id, origin_lat, origin_lon.
+distance_origin <- function(units, port_year, port_stage1, visits,
+                            min_visits = port_rules$min_visits) {
+  # the most-visited anchorage per group of the chosen community's visits
+  top_anchorage <- function(by) {
+    visits |>
+      dplyr::filter(!is.na(community), !is.na(lat), !is.na(lon)) |>
+      dplyr::count(dplyr::across(dplyr::all_of(c(by, "community"))),
+                   anchorage_id, lat, lon, name = "n") |>
+      dplyr::arrange(dplyr::desc(n), anchorage_id) |>
+      dplyr::distinct(dplyr::across(dplyr::all_of(c(by, "community"))), .keep_all = TRUE) |>
+      dplyr::select(dplyr::all_of(by), origin_community = community,
+                    origin_anchorage_id = anchorage_id, origin_lat = lat, origin_lon = lon)
+  }
+
+  stage1_port <- port_stage1 |>
+    dplyr::filter(status == "port") |>
+    dplyr::select(MMSI, stage1_community = community)
+
+  py <- port_year |>
+    dplyr::select(MMSI, year, status, community, top_community, top_visits, tied)
+
+  picked <- units |>
+    dplyr::distinct(MMSI, year) |>
+    dplyr::left_join(py, by = c("MMSI", "year")) |>
+    dplyr::left_join(stage1_port, by = "MMSI") |>
+    dplyr::mutate(
+      origin_source = dplyr::case_when(
+        status %in% "port" ~ "year",
+        status %in% "multiple" & top_visits >= min_visits & tied %in% FALSE ~ "top_community",
+        !is.na(stage1_community) ~ "stage1",
+        TRUE ~ "none"),
+      origin_community = dplyr::case_when(
+        origin_source == "year" ~ community,
+        origin_source == "top_community" ~ top_community,
+        origin_source == "stage1" ~ stage1_community,
+        TRUE ~ NA_character_))
+
+  # rules 1-2 take the year's anchorage, rule 3 the vessel's over all years
+  from_year <- picked |>
+    dplyr::filter(origin_source %in% c("year", "top_community")) |>
+    dplyr::left_join(top_anchorage(c("MMSI", "year")),
+                     by = c("MMSI", "year", "origin_community"))
+  from_stage1 <- picked |>
+    dplyr::filter(origin_source == "stage1") |>
+    dplyr::left_join(top_anchorage("MMSI"), by = c("MMSI", "origin_community"))
+  no_origin <- dplyr::filter(picked, origin_source == "none")
+
+  dplyr::bind_rows(from_year, from_stage1, no_origin) |>
+    dplyr::select(MMSI, year, origin_community, origin_source,
+                  origin_anchorage_id, origin_lat, origin_lon) |>
+    dplyr::arrange(MMSI, year)
+}
+
+# Hours-weighted straight-line distance (km, in `crs`) from each vessel-year's
+# origin (distance_origin()) to the positions of its effort records. `effort`
+# has MMSI, year, lat, lon, hours and the `by` columns (e.g. stage and
+# dataset); the records are the AOI pull, so this is the distance from home
+# port to the effort inside the AOI. Returns the `by` columns with MMSI and
+# year, hours, the origin columns (community, source), hours_with_origin and
+# mean_km (NA without an origin). A descriptive outcome for 13 and 14, never
+# a model covariate (D-088).
+port_distance <- function(effort, origins, by = c("stage", "dataset"),
+                          crs = port_rules$crs) {
+  # project lon/lat to metres; NA positions stay NA
+  xy <- function(lon, lat) {
+    out <- matrix(NA_real_, length(lon), 2)
+    ok <- !is.na(lon) & !is.na(lat)
+    if (any(ok)) out[ok, ] <- sf::sf_project("EPSG:4326", paste0("EPSG:", crs), cbind(lon[ok], lat[ok]))
+    out
+  }
+
+  e <- effort |>
+    dplyr::left_join(dplyr::select(origins, MMSI, year, origin_community, origin_source,
+                                   origin_lat, origin_lon),
+                     by = c("MMSI", "year"))
+  p_effort <- xy(e$lon, e$lat)
+  p_origin <- xy(e$origin_lon, e$origin_lat)
+  e$km <- sqrt(rowSums((p_effort - p_origin)^2)) / 1000
+
+  e |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(c("MMSI", "year", by))),
+                    origin_community, origin_source) |>
+    # hours_with_origin and mean_km come before hours = sum(hours), which
+    # would otherwise replace the per-record hours they use
+    dplyr::summarise(
+      hours_with_origin = sum(hours[!is.na(km)]),
+      mean_km = if (any(!is.na(km))) stats::weighted.mean(km[!is.na(km)], hours[!is.na(km)]) else NA_real_,
+      hours = sum(hours),
+      .groups = "drop") |>
+    dplyr::relocate(hours, .before = hours_with_origin) |>
+    dplyr::mutate(origin_source = dplyr::coalesce(origin_source, "none"))
 }
 
 # Checks ---------------------------------------------------------------------
@@ -325,8 +444,11 @@ excluded_port_years <- function(dropped, port_year) {
     dplyr::count(MMSI, year, name = "visits") |>
     dplyr::anti_join(port_year, by = c("MMSI", "year")) |>
     dplyr::mutate(community = NA_character_, top_community = NA_character_,
-                  port_state = NA_character_, share = NA_real_, status = "excluded") |>
-    dplyr::select(dplyr::all_of(names(port_year)))
+                  port_state = NA_character_, share = NA_real_, status = "excluded",
+                  top_visits = NA_integer_, tied = NA) |>
+    # the columns of port_year, in its order (tables built before D-088 lack
+    # top_visits and tied)
+    dplyr::select(dplyr::any_of(names(port_year)))
 }
 
 # GARFO port review findings (D-085) ----------------------------------------

@@ -259,3 +259,61 @@ test_that("excluded_port_years() lists years with only excluded visits", {
   expect_true(is.na(ex$community))
   expect_equal(names(ex), names(port_year))
 })
+
+# assigned visits with an anchorage and its position, for the distance origin
+anchored <- function(MMSI, year, community, anchorage_id, lat = 41.48, lon = -71.33) {
+  tibble(MMSI, year, community, anchorage_id, lat, lon,
+         duration_hrs = 10, port_state = "RI")
+}
+
+test_that("distance_origin() follows the D-088 rule for years without a port", {
+  v <- bind_rows(
+    # 1: a home port; a1 is its most-visited anchorage there
+    anchored("1", 2019, "Newport", c("a1", "a1", "a1", "a2")),
+    # 2: multiple, top community 3 of 7 visits with no tie
+    anchored("2", 2019, c(rep("Newport", 3), rep("New London / Mystic", 2), "x", "y"),
+             c("a1", "a1", "a1", "b1", "b1", "c1", "d1")),
+    # 3: Stage 1 visits at b2 in New London, then a 2-2 tie in 2019
+    anchored("3", 2018, "New London / Mystic", c("b2", "b2", "b2"), lat = 41.35, lon = -71.97),
+    anchored("3", 2019, c("Newport", "Newport", "New London / Mystic", "New London / Mystic"),
+             c("a1", "a1", "b1", "b1")))
+  port_year <- home_port_of(v) |>
+    bind_rows(tibble(MMSI = "3", year = 2021, status = "excluded"))  # D-086
+  port_stage1 <- tibble(MMSI = c("1", "3", "4"), community = c("Newport", "New London / Mystic", NA),
+                        status = c("port", "port", "unknown"))
+  # vessel 4 has effort in 2020 but no visits and no Stage 1 port
+  units <- tibble(MMSI = c("1", "2", "3", "3", "4"), year = c(2019, 2019, 2019, 2021, 2020))
+
+  o <- distance_origin(units, port_year, port_stage1, v)
+  expect_equal(o$origin_source, c("year", "top_community", "stage1", "stage1", "none"))
+  expect_equal(o$origin_community,
+               c("Newport", "Newport", "New London / Mystic", "New London / Mystic", NA))
+  # the year's anchorage for rules 1-2; the vessel's over all years for Stage 1
+  # (b2 has 3 visits against b1's 2)
+  expect_equal(o$origin_anchorage_id, c("a1", "a1", "b2", "b2", NA))
+  expect_equal(o$origin_lon[3], -71.97)
+})
+
+test_that("distance_origin() leaves a short multiple year to the Stage 1 port", {
+  # the top community has only 2 visits: below min_visits, so no top_community
+  v <- anchored("1", 2019, c("Newport", "Newport", "x", "y"), c("a1", "a1", "c1", "d1"))
+  o <- distance_origin(tibble(MMSI = "1", year = 2019), home_port_of(v),
+                       tibble(MMSI = "1", community = "Newport", status = "port"), v)
+  expect_equal(o$origin_source, "stage1")
+})
+
+test_that("port_distance() weights the distance to effort by hours", {
+  origins <- tibble(MMSI = c("1", "2"), year = 2019, origin_community = c("Newport", NA),
+                    origin_source = c("year", "none"), origin_anchorage_id = c("a1", NA),
+                    origin_lat = c(41, NA), origin_lon = c(-71, NA))
+  # vessel 1: 1 h at the origin, 3 h 0.1 degree north (about 11.1 km)
+  effort <- tibble(MMSI = c("1", "1", "2"), year = 2019, stage = "Stage 1", dataset = "VP",
+                   lat = c(41, 41.1, 41), lon = -71, hours = c(1, 3, 5))
+  d <- port_distance(effort, origins)
+  expect_equal(d$hours, c(4, 5))
+  expect_equal(d$mean_km[1], 0.75 * 11.12, tolerance = 0.01)
+  # no origin: hours counted, no distance
+  expect_equal(d$hours_with_origin, c(4, 0))
+  expect_true(is.na(d$mean_km[2]))
+  expect_equal(d$origin_source, c("year", "none"))
+})

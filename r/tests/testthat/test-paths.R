@@ -5,7 +5,7 @@ versioned <- c("raw_gfw", "raw_vp", "raw_afe", "pull_info", "processed_gfw",
                "interim_gfw", "fishnet", "grid", "evidence", "review",
                "crosswalk", "permit_groups", "analysis", "rasters", "models",
                "explore", "spatial", "bag", "garfo_match", "port_visits",
-               "port_visits_queried", "port_year", "port_stage1",
+               "port_visits_queried", "port_year", "port_stage1", "port_distance",
                "port_anchorage_review", "port_garfo_review")
 
 test_that("make_gfw_paths() puts each version's outputs in its own place", {

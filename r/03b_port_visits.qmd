@@ -17,6 +17,7 @@ params:
   port_visits_queried: ""
   port_year: ""
   port_stage1: ""
+  port_distance: ""
   port_anchorage_review: ""
   port_garfo_review: ""
   port_garfo_findings: ""
@@ -58,6 +59,7 @@ helpers are logged in D-081.
 | `data/raw/vessel_evidence/{pipeline}/gfw_port_visits_queried.csv` | One row per vessel ID query: ok / none / error. Doubles as the pull's provenance record |
 | `data/processed/vessel_review/{pipeline}/vessel_port_year.csv` | Home port per MMSI × year |
 | `data/processed/vessel_review/{pipeline}/vessel_port_stage1.csv` | Stage 1 port group per MMSI, for Phase 7 |
+| `data/processed/vessel_review/{pipeline}/vessel_port_distance_year.csv` | Hours-weighted distance from the GFW home port to the effort, per MMSI × year × stage × dataset (D-088) |
 | `data/processed/vessel_review/{pipeline}/port_anchorage_review.csv` | Anchorages outside every community, for review |
 | `data/processed/vessel_review/{pipeline}/port_garfo_review.csv` | The highest-effort vessels where GFW and GARFO ports disagree, for review |
 
@@ -87,7 +89,7 @@ helpers are logged in D-081.
      after each session.
 
    A rule change is a new decision, not an edit here.
-5. **Freeze.** `port_communities.csv`, `port_anchorages.csv` and the two
+5. **Freeze.** `port_communities.csv`, `port_anchorages.csv` and the three
    port tables are tagged with the frozen crosswalk, before 13 runs.
 
 ## Libraries and shared code
@@ -353,18 +355,21 @@ Primary vessels only, without the hours inside a crosswalk window outside
 Primary (D-086), so they are the hours the analysis counts.
 
 ```{r}
-hours_of <- function(path, dataset_name) {
+# the effort records with their positions, kept for the distance from home
+# port (D-088); `hours` sums them per MMSI x year x stage for the checks
+effort_of <- function(path, dataset_name) {
   d <- read_gfw(path) |>
     in_analysis_window() |>
     filter(MMSI %in% vessel_ids$MMSI)
   d[!in_window(d, windows, "date"), ] |>
-    mutate(year = year(date)) |>
-    group_by(MMSI, year, stage = `Development Stage`) |>
-    summarise(hours = sum(hours), .groups = "drop") |>
-    left_join(select(primary, MMSI, gear_class), by = "MMSI") |>
-    mutate(dataset = dataset_name)
+    transmute(MMSI, year = year(date), stage = `Development Stage`,
+              lat = Lat, lon = Lon, hours, dataset = dataset_name)
 }
-hours <- bind_rows(hours_of(paths$raw_vp, "VP"), hours_of(paths$raw_afe, "AFE"))
+effort <- bind_rows(effort_of(paths$raw_vp, "VP"), effort_of(paths$raw_afe, "AFE"))
+hours <- effort |>
+  group_by(MMSI, year, stage, dataset) |>
+  summarise(hours = sum(hours), .groups = "drop") |>
+  left_join(select(primary, MMSI, gear_class), by = "MMSI")
 hours |> group_by(dataset) |> summarise(hours = round(sum(hours)))
 ```
 
@@ -572,6 +577,62 @@ imap_dfr(sens, \(s, name) {
     summarise(rule = name, mmsi_years = n(),
               same = mean(coalesce(default, "none") == coalesce(alt, "none")))
 })
+```
+
+## Distance from home port
+
+The hours-weighted straight-line distance (km, EPSG:32619) from each
+vessel-year's GFW home port to its effort inside the AOI, per stage and
+dataset (D-088): a **descriptive outcome** for the synthesis (14) and Phase 7
+(13), never a model covariate (D-079 stands). The GARFO ports sit beside it
+in the synthesis but are not used for distance.
+
+A year without a single port takes its origin by rule, with no hand checks:
+the top community of a `multiple` year with at least 3 visits there and no
+tie; otherwise (a short or tied `multiple` year, an `unknown` or `excluded`
+year, or effort with no counted visits) the vessel's Stage 1 port. The origin
+point is the vessel's most-visited anchorage in that community.
+
+```{r}
+# one origin per vessel-year with effort outside the D-086 windows
+origins <- distance_origin(distinct(effort, MMSI, year), port_year, port_stage1, visits)
+count(origins, origin_source)
+
+port_dist <- port_distance(effort, origins, by = c("stage", "dataset")) |>
+  left_join(select(primary, MMSI, gear_class), by = "MMSI") |>
+  # origin_anchorage_id, so a distance can be traced to its harbour
+  left_join(select(origins, MMSI, year, origin_anchorage_id), by = c("MMSI", "year")) |>
+  # .env$dataset: the port-visit dataset version, not this table's VP / AFE column
+  mutate(mean_km = round(mean_km, 2), port_visit_dataset = .env$dataset,
+         rules = "D-080; D-086; D-088") |>
+  arrange(MMSI, year, stage, dataset)
+write_csv(port_dist, paths$port_distance, na = "")
+
+# coverage: the share of hours with an origin, and how much of it comes from
+# each step of the rule, per dataset x gear x stage
+port_dist |>
+  group_by(dataset, gear_class, stage) |>
+  # total_hours, not hours: summarise() would otherwise replace the hours
+  # column the share lines below use
+  summarise(total_hours = round(sum(hours)),
+            with_origin = round(sum(hours_with_origin) / sum(hours), 3),
+            from_year_port = round(sum(hours[origin_source == "year"]) / sum(hours), 3),
+            from_top_community = round(sum(hours[origin_source == "top_community"]) / sum(hours), 3),
+            from_stage1 = round(sum(hours[origin_source == "stage1"]) / sum(hours), 3),
+            .groups = "drop") |>
+  print(n = 60)
+```
+
+A first look only, the hours-weighted mean distance by dataset, gear and
+stage; the comparisons belong to 13 and 14.
+
+```{r}
+port_dist |>
+  filter(!is.na(mean_km)) |>
+  group_by(dataset, gear_class, stage) |>
+  summarise(vessels = n_distinct(MMSI),
+            mean_km = round(weighted.mean(mean_km, hours_with_origin), 1), .groups = "drop") |>
+  print(n = 60)
 ```
 
 ## Session info

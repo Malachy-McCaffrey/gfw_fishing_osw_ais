@@ -909,7 +909,22 @@ with a known port, from GFW and from GARFO side by side. Phase 7 (13): the
 BAG per Stage 1 port group under the support rule, and port community as
 a cluster in the vessel bootstrap. Not 10, not any main model.
 
-**Freeze.** `port_communities.csv`, `port_anchorages.csv` and the two port
+**Distance from home port (D-088).** The GFW home port is the origin; the
+GARFO ports sit beside it in the synthesis but are not used for distance,
+since the GFW port is where trips start and end, which is what steaming
+cost and displacement depend on. 03b writes the hours-weighted
+straight-line distance (km) from each vessel-year's home port to its VP and
+AFE effort inside the AOI (`vessel_port_distance_year.csv`), measured from
+the vessel's most-visited anchorage in that community. A year without a
+single port takes its origin by rule: a `multiple` year's top community if
+it has at least 3 visits and no tie, else the vessel's Stage 1 port; v4
+leaves 0.8% of Primary VP hours without one. It is a **descriptive
+outcome**, compared by gear × stage × Stage 1 port group in 14 and 13. It
+is not a covariate: as one, distance to port is a static cell property,
+absorbed by the cell fixed effects and confounded with the spatial field
+(D-079 stands).
+
+**Freeze.** `port_communities.csv`, `port_anchorages.csv` and the three port
 tables are tagged with the frozen crosswalk, before 13 runs.
 
 **Known problems and their handling.**

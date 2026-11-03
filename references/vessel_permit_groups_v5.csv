@@ -1,10 +1,7 @@
 MMSI,permit_group,pull_date
 191283710,commercial,2026-10-28
 303392000,for-hire,2026-10-28
-303535000,commercial,2026-10-28
 303591000,commercial,2026-10-28
-338023443,commercial,2026-10-28
-338034966,commercial,2026-10-28
 338036788,commercial + for-hire,2026-10-28
 338037678,for-hire,2026-10-28
 338073619,commercial,2026-10-28
@@ -13,7 +10,6 @@ MMSI,permit_group,pull_date
 338096424,commercial,2026-10-28
 338098173,commercial,2026-10-28
 338100764,commercial,2026-10-28
-338103233,for-hire + open-access commercial,2026-10-28
 338104105,commercial,2026-10-28
 338106421,commercial,2026-10-28
 338107136,commercial,2026-10-28
@@ -164,7 +160,6 @@ MMSI,permit_group,pull_date
 366212000,for-hire,2026-10-28
 366215330,commercial,2026-10-28
 366222630,commercial,2026-10-28
-366231180,commercial,2026-10-28
 366235840,commercial,2026-10-28
 366274490,commercial,2026-10-28
 366392030,commercial,2026-10-28
@@ -176,7 +171,6 @@ MMSI,permit_group,pull_date
 366725960,commercial,2026-10-28
 366728420,commercial,2026-10-28
 366739960,commercial,2026-10-28
-366744020,commercial,2026-10-28
 366747620,commercial,2026-10-28
 366747870,commercial,2026-10-28
 366755160,commercial,2026-10-28
@@ -187,7 +181,6 @@ MMSI,permit_group,pull_date
 366794940,commercial,2026-10-28
 366797960,commercial,2026-10-28
 366813390,for-hire + open-access commercial,2026-10-28
-366825520,commercial,2026-10-28
 366834830,commercial,2026-10-28
 366846750,commercial,2026-10-28
 366848260,commercial,2026-10-28
@@ -210,14 +203,12 @@ MMSI,permit_group,pull_date
 366927850,commercial,2026-10-28
 366934440,commercial,2026-10-28
 366939620,commercial,2026-10-28
-366940460,for-hire + open-access commercial,2026-10-28
 366940990,commercial + for-hire,2026-10-28
 366943390,for-hire + open-access commercial,2026-10-28
 36694490,commercial,2026-10-28
 366947090,commercial,2026-10-28
 366951350,commercial,2026-10-28
 366955140,commercial,2026-10-28
-366961860,commercial,2026-10-28
 366962140,commercial,2026-10-28
 366962410,commercial,2026-10-28
 366973830,commercial,2026-10-28
@@ -230,18 +221,14 @@ MMSI,permit_group,pull_date
 366988020,commercial,2026-10-28
 366988070,commercial,2026-10-28
 366988130,commercial,2026-10-28
-366989560,commercial,2026-10-28
 366991820,commercial,2026-10-28
-367007280,commercial + for-hire,2026-10-28
 367010820,commercial,2026-10-28
 367013530,commercial,2026-10-28
-367015670,for-hire + open-access commercial,2026-10-28
 367016390,commercial,2026-10-28
 367016870,commercial,2026-10-28
 367018850,for-hire + open-access commercial,2026-10-28
 367037070,commercial,2026-10-28
 367040650,commercial,2026-10-28
-367046820,for-hire + open-access commercial,2026-10-28
 367052470,commercial + for-hire,2026-10-28
 367053040,commercial,2026-10-28
 367056030,commercial,2026-10-28
@@ -293,7 +280,6 @@ MMSI,permit_group,pull_date
 367120020,commercial,2026-10-28
 367120060,commercial,2026-10-28
 367120570,commercial,2026-10-28
-367120740,commercial,2026-10-28
 367123230,commercial,2026-10-28
 367129260,commercial,2026-10-28
 367130870,commercial,2026-10-28
@@ -316,7 +302,6 @@ MMSI,permit_group,pull_date
 367148770,commercial,2026-10-28
 367148780,commercial,2026-10-28
 367148930,commercial,2026-10-28
-367151950,commercial,2026-10-28
 367154860,commercial,2026-10-28
 367155230,commercial,2026-10-28
 367155280,commercial,2026-10-28
@@ -341,7 +326,6 @@ MMSI,permit_group,pull_date
 367181750,commercial,2026-10-28
 367181760,commercial,2026-10-28
 367183240,commercial,2026-10-28
-367184740,for-hire + open-access commercial,2026-10-28
 367187480,commercial,2026-10-28
 367190280,commercial,2026-10-28
 367198440,commercial,2026-10-28
@@ -378,7 +362,6 @@ MMSI,permit_group,pull_date
 367350060,commercial,2026-10-28
 367352170,commercial,2026-10-28
 367356550,commercial,2026-10-28
-367356690,commercial,2026-10-28
 367357680,commercial + for-hire,2026-10-28
 367359070,commercial,2026-10-28
 367367970,commercial,2026-10-28
@@ -387,7 +370,6 @@ MMSI,permit_group,pull_date
 367373350,commercial,2026-10-28
 367377130,commercial,2026-10-28
 367379210,commercial,2026-10-28
-367381780,commercial,2026-10-28
 367384580,commercial,2026-10-28
 367385870,commercial,2026-10-28
 367387310,commercial,2026-10-28
@@ -455,7 +437,6 @@ MMSI,permit_group,pull_date
 367522070,commercial,2026-10-28
 367523250,commercial,2026-10-28
 367531510,commercial,2026-10-28
-367534250,commercial,2026-10-28
 367534570,commercial,2026-10-28
 367534990,commercial,2026-10-28
 367535770,commercial,2026-10-28
@@ -477,7 +458,6 @@ MMSI,permit_group,pull_date
 367587070,commercial,2026-10-28
 367589480,commercial,2026-10-28
 367589510,commercial,2026-10-28
-367594260,commercial,2026-10-28
 367599080,for-hire + open-access commercial,2026-10-28
 367599280,commercial,2026-10-28
 367600760,commercial,2026-10-28
@@ -693,7 +673,6 @@ MMSI,permit_group,pull_date
 368401660,commercial,2026-10-28
 368411440,commercial,2026-10-28
 368411540,commercial,2026-10-28
-368413570,for-hire,2026-10-28
 368414080,commercial,2026-10-28
 368414520,commercial,2026-10-28
 368414540,commercial,2026-10-28

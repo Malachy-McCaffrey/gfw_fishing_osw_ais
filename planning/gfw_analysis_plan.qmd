@@ -887,7 +887,10 @@ review (D-083), Greenport / North Fork, City Island, Plymouth, Old Saybrook
 4. **Write** `data/processed/vessel_review/{v}/vessel_port_year.csv`
    (MMSI, year, community, state, visits, share, status) and
    `vessel_port_stage1.csv` (MMSI, Stage 1 group, flag), plus an
-   unmatched-anchorage sheet for review.
+   unmatched-anchorage sheet for review. **The review covers the
+   `other (state)` anchorages with at least 50 visits (D-089)**; each one
+   checked gets a row in `port_anchorages.csv`, even one that keeps its
+   label.
 5. **Validate**, before anything downstream reads the tables:
    - **against GARFO:** for `unique_years` matches, GFW home port vs GARFO
      principal and home port per permit year: agreement rate and a
@@ -2567,7 +2570,10 @@ first power, per-route cable dates, the remaining SRW foundations) update
       `references/port_communities.csv`, write `03b_port_visits.qmd` and its
       `vessel_helpers.R` functions with tests, run the pull on v5, review
       the unmatched-anchorage and GARFO-disagreement sheets, and tag the
-      port tables with the frozen crosswalk before 13.
+      port tables with the frozen crosswalk before 13. Done on v4
+      (2026-11-03): the GARFO-disagreement review (D-087) and the
+      anchorage review (D-089). Left: the pull on v5 once its vessel and
+      gear review is finished, the v5 sheets, and the freeze.
 - [x] SFW crosswalk from the PSO ids (A01–A15) to layout positions:
       received from Ørsted (`sfw_monopile_install_orsted.csv`) and built in
       `05`, 2026-10-20. Replaces the shared turbine window.

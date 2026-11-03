@@ -30,6 +30,12 @@ Phase 4, frequentist models 5, INLA-SPDE 6, sensitivity 7 and synthesis 8.
 
 ---
 
+### 2026-11-02, scope of the anchorage review
+
+| ID | Topic | Decision | Consequence | Status |
+|---|---|---|---|---|
+| D-089 | Which anchorages outside the communities get reviewed | **The anchorage review covers the `other (state)` anchorages (10–50 km from a reference point) with at least 50 counted visits** that are not yet in `references/port_anchorages.csv`. The `outside region` anchorages (more than 50 km from every point: Hampton VA, Gloucester, Morehead City and so on) are real ports elsewhere and are not reviewed. **Every reviewed anchorage gets a row in `port_anchorages.csv`**: the community it belongs to; its current `other (XX)` label, to record that it was checked and keep it (as 89e4db37 did, D-083); `outside region` where the label's state is wrong and the real state has no community; or a new community in `port_communities.csv`, as D-083 added five. A row takes the anchorage off 03b's sheet, so the review's progress is visible there | v4: 28 anchorages, 4,535 of the 6,143 visits (74%) to `other (state)` anchorages; the 2,265 `outside region` anchorages are left as they are. A one-off worksheet, `r/scratchpad/port_anchorage_worksheet_v4.csv` (gitignored; written by `r/scratchpad/port_anchorage_worksheet.R`), adds the nearest community and point, its distance and a map link to each, with blank `community` and `reason` columns. The state in `other (XX)` is the nearest point's, not the anchorage's: Lewes (DE) reads `other (NJ)` and Stamford (CT) `other (NY)`. Closes the review loop after D-087's GARFO review (55 of 55 in-scope vessels reviewed, 58 findings). **Done 2026-11-03: 28 of 28 reviewed**, each with a row in `port_anchorages.csv`: 25 keep their `other (XX)` label (three of them, the two off Newport and one in open water south of Long Island, are waiting stops, never at dock), Rowayton (CT) is relabelled `other (NY)` → `other (CT)`, and Lewes and Stamford are `outside region`; no new community. After 03b's re-render, 197 `other (state)` anchorages remain on the sheet, all below the cutoff (1,608 visits, the busiest 47) | |
+
 ### 2026-11-02, distance from home port
 
 | ID | Topic | Decision | Consequence | Status |

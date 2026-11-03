@@ -27,7 +27,7 @@ execute:
 
 ## Status {#sec-status}
 
-As of 2026-10-30. Decision IDs refer to [`planning/decisions.md`](decisions.md).
+As of 2026-11-03. Decision IDs refer to [`planning/decisions.md`](decisions.md).
 
 | Phase | Notebook | Status | Outcome recorded in |
 |---|---|---|---|
@@ -40,7 +40,8 @@ As of 2026-10-30. Decision IDs refer to [`planning/decisions.md`](decisions.md).
 | 6: INLA-SPDE | `12_models_inla.qmd` | Not started | @sec-models |
 | 7: sensitivity | `13_sensitivity.qmd` | Not started | @sec-sensitivity |
 | 8: synthesis | `14_synthesis.qmd` | Not started | @sec-synthesis |
-| Data: GFW pipeline v5 | `01`, then `01a_compare_pipelines.qmd` | **v5 adopted as primary, v4 as sensitivity (2026-10-30, D-070).** Done: versioned layout, v4 roster, the v5 pull (2026-10-28), the combined grid (D-069) with v4's 02 → 05a re-rendered on it (2026-10-30), the comparison report for GFW (`reports/pipeline_compare/`). In progress: the v5 vessel and gear review. Next: 03 → 05 on v5 once the review is finished, then the descriptive BAG on both versions (v5 plan step 9) | `planning/gfw_pipeline_v5_plan.qmd`; D-053 to D-057, D-062 to D-064, D-068 to D-070 |
+| Data: GFW pipeline v5 | `01`, then `01a_compare_pipelines.qmd` | **v5 adopted as primary, v4 as sensitivity (2026-10-30, D-070).** Done: versioned layout, v4 roster, the v5 pull (2026-10-28), the combined grid (D-069) with v4's 02 → 05a re-rendered on it (2026-10-30), the comparison report for GFW (`reports/pipeline_compare/`). In progress: the v5 vessel and gear review, with 61 hull and 37 gear decisions recorded (2026-10-29 to 2026-10-30); the sheets from 03's last v5 render (2026-10-30) still hold 364 open vessel rows (339 of them list 5, the v4 roster's label changes) and 65 open gear rows. Next: 03 → 05 on v5 once the review is finished, then the descriptive BAG on both versions (v5 plan step 9) | `planning/gfw_pipeline_v5_plan.qmd`; D-053 to D-057, D-062 to D-064, D-068 to D-070 |
+| Data: vessel home ports | `03b_port_visits.qmd` | **Done on v4 (2026-11-03):** the port-visit pull, the home-port and distance tables, the GARFO disagreement review (55 of 55 in-scope vessels, D-087) and the anchorage review (28 of 28, D-089). Next: the pull and both reviews on v5, once its vessel and gear review is finished; then the port tables are frozen with the crosswalk before 13 | @sec-ports; D-080 to D-089 |
 
 Every number typed in this plan was measured on the 2026-10-06 pull, which
 is GFW pipeline **v4**. v5 is now the primary version (D-070), so they are

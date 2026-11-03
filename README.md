@@ -2,13 +2,13 @@
 
 Geospatial analysis and statistical modeling workflows to quantify AIS vessel presence and apparent fishing effort proximal to three Orsted offshore wind projects in Southern New England. Pre-processed AIS vessel presence and apparent fishing effort data accessed from Global Fishing Watch 4Wings API via gfwr package. This research is in fulfillment of my master's thesis.
 
-**Status:** the analysis was developed in Python through the thesis write-up and poster. Active development has since moved to an R-only workflow in `r/`. The R workflow runs from the data pull through vessel classification, the analysis tables, exploratory analysis and the global and local spatial statistics (analysis Phases 0–3); the before–after–gradient (BAG) models (Phase 4) are in progress, and the statistical models, sensitivity and synthesis (Phases 5–8) are not yet written. The phase-by-phase status is the *Status* table at the top of [`planning/gfw_analysis_plan.qmd`](planning/gfw_analysis_plan.qmd). The completed Python analysis is archived, not deleted — still reproducible, see `archive/README.md`.
+**Status:** the analysis was developed in Python through the thesis write-up and poster. Active development has since moved to an R-only workflow in `r/`. The R workflow runs from the data pull through vessel classification, the analysis tables, exploratory analysis and the global and local spatial statistics (analysis Phases 0–3), and vessel home ports from GFW port visits (03b) are built and reviewed on pipeline v4; the before–after–gradient (BAG) models (Phase 4) are in progress, and the statistical models, sensitivity and synthesis (Phases 5–8) are not yet written. GFW pipeline v5 is now the primary version and v4 a sensitivity (D-070); the v5 vessel and gear review is in progress, and 03 onward are re-rendered on v5 once it is finished. The phase-by-phase status is the *Status* table at the top of [`planning/gfw_analysis_plan.qmd`](planning/gfw_analysis_plan.qmd). The completed Python analysis is archived, not deleted — still reproducible, see `archive/README.md`.
 
 ---
 
 ## The R workflow
 
-Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order, so `quarto render r/` runs 02 → 02a → 03 → 04 → 05 → 05a → 06 → 07 → 08 → 10. Steps 00–04 prepare and classify the data; 05 onward are the analysis phases of [`planning/gfw_analysis_plan.qmd`](planning/gfw_analysis_plan.qmd), where each phase's method and gate are written down.
+Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order, so `quarto render r/` runs 02 → 02a → 03 → 03b → 04 → 05 → 05a → 06 → 07 → 08 → 10. Steps 00–04 prepare and classify the data; 05 onward are the analysis phases of [`planning/gfw_analysis_plan.qmd`](planning/gfw_analysis_plan.qmd), where each phase's method and gate are written down.
 
 | Step | File | What it does | Needs |
 |---|---|---|---|
@@ -27,9 +27,9 @@ Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order,
 | 10 | `10_bag.qmd` | **Phase 4, in progress.** Before–after–gradient models on interim specifications; fits are cached in `data/processed/models/{pipeline}/`. | 05 |
 | 11–14 | not yet written | **Phases 5–8:** frequentist models, INLA-SPDE, sensitivity, synthesis. | |
 
-There is no 09. A planned `01a_compare_pipelines.qmd` will compare GFW pipeline versions ([`planning/gfw_pipeline_v5_plan.qmd`](planning/gfw_pipeline_v5_plan.qmd)).
+There is no 09. The GFW pipeline versions are compared in [`reports/pipeline_compare/gfw_v4_v5_comparison.qmd`](reports/pipeline_compare/gfw_v4_v5_comparison.qmd), a self-contained report for Global Fishing Watch staff (D-068), rendered on its own and not part of `quarto render r/`; the design is in [`planning/gfw_pipeline_v5_plan.qmd`](planning/gfw_pipeline_v5_plan.qmd).
 
-Shared code, sourced by the qmds: `paths.R` (every path; each can be overridden with a Quarto parameter), `gfw_helpers.R` (development stages, analysis window, `read_gfw()`, gear classes), `vessel_helpers.R` (crosswalk build and validation, `classify()`, the fishing roster), `review_helpers.R` (03's screen, GARFO matching, and GFW identity and PSIX evidence), `port_helpers.R` (03b's port-visit rules and checks), `analysis_helpers.R` (seasons, transforms, lease distances, lattice neighbours, `fit_cached()`, provenance sidecars), `infra_helpers.R` (reading Ørsted foundation files and building exposure covariates), `spatial_helpers.R` (global and local statistics) and `bag_helpers.R` (BAG models).
+Shared code, sourced by the qmds: `paths.R` (every path; each can be overridden with a Quarto parameter), `gfw_helpers.R` (development stages, analysis window, `read_gfw()`, gear classes), `vessel_helpers.R` (crosswalk build and validation, `classify()`, the fishing roster), `review_helpers.R` (03's screen, GARFO matching, and GFW identity and PSIX evidence), `port_helpers.R` (03b's port-visit rules and checks), `analysis_helpers.R` (seasons, transforms, lease distances, lattice neighbours, `fit_cached()`, provenance sidecars), `infra_helpers.R` (reading Ørsted foundation files and building exposure covariates), `spatial_helpers.R` (global and local statistics), `bag_helpers.R` (BAG models) and `compare_helpers.R` (the v4 vs v5 comparison report).
 
 **Analysis window:** 2016-01-01 to 2026-08-31, in three development stages (`dev_stages` in `r/gfw_helpers.R`):
 
@@ -60,7 +60,7 @@ The pull runs to 2026-09-30, but the window ends on 2026-08-31, the last day Ør
 ### Layout
 
 ```
-r/                          workflow qmds in run order (00–10, with 02a and 05a), shared *_helpers.R, paths.R
+r/                          workflow qmds in run order (00–10, with 02a, 03b and 05a), shared *_helpers.R, paths.R
   tests/testthat/           tests for the shared code; schema checks on references/
 references/                 tracked: hand-made decision files, Ørsted dates, GARFO codes,
                             generated *_{pipeline}.csv crosswalk, permit groups and roster,
@@ -74,7 +74,7 @@ reports/                    gitignored: figures and tables from 06 onward, by pi
 archive/                    frozen Python implementation and its written output
 ```
 
-Data flows one way: the pull (01) → grid (02) → infrastructure covariates (02a) → vessel review (03, writes `references/`) → classification (04) → analysis tables (05) → rasters for other GIS work (05a, an output only) → the analysis phases (06–10) → `reports/`. Everything made from a pull is filed under its GFW pipeline version (`v4` today).
+Data flows one way: the pull (01) → grid (02) → infrastructure covariates (02a) → vessel review (03, writes `references/`) → home ports (03b, descriptive: read by the synthesis and sensitivity only) → classification (04) → analysis tables (05) → rasters for other GIS work (05a, an output only) → the analysis phases (06–10) → `reports/`. Everything made from a pull is filed under its GFW pipeline version: `v5`, the primary analysis, and `v4`, kept as a sensitivity (D-070).
 
 `planning/post_filter_review.qmd`, `planning/work-plan-appendices.md` and `planning/gridcell_decision.R` are earlier working notes, kept for the record.
 

@@ -276,6 +276,52 @@ test_that("power_effect_factor() plants each scenario's shape in Stage 3 only (D
   expect_error(power_effect_factor(s3, bands, "outside", 0.2))
 })
 
+test_that("timing_effect_factor() plants in construction-phase rows only (D-094)", {
+  bands <- c("inside", "0-2", "2-4", "inside", "0-2")
+  cx <- c(1, 1, 1, 0, 0)
+  expect_equal(timing_effect_factor(cx, bands, "inside", 0.3), c(0.7, 1, 1, 1, 1))
+  expect_equal(timing_effect_factor(cx, bands, "near", 0.5), c(0.5, 0.5, 1, 1, 1))
+  # the fading gradient is a stage × season scenario only
+  expect_error(timing_effect_factor(cx, bands, "fading", 0.3))
+  expect_error(timing_effect_factor(cx, bands, "inside", -0.1), "proportion")
+})
+
+test_that("bracket_effects() picks the smallest passing size and the one below (D-094)", {
+  e <- c(0, 0.1, 0.2, 0.3, 0.4, 0.5)
+  # crosses 0.8 between 20 and 30%: both get 500 simulations
+  expect_equal(bracket_effects(e, c(0.05, 0.3, 0.6, 0.85, 0.95, 1)), c(0.2, 0.3))
+  # order of the input does not matter
+  expect_equal(bracket_effects(rev(e), rev(c(0.05, 0.3, 0.6, 0.85, 0.95, 1))), c(0.2, 0.3))
+  # passes at 10%: the size below is 0, which is not rerun
+  expect_equal(bracket_effects(e, c(0.05, 0.9, 1, 1, 1, 1)), 0.1)
+  # never reaches 0.8: no second pass
+  expect_length(bracket_effects(e, c(0.05, 0.1, 0.2, 0.3, 0.5, 0.7)), 0)
+  # a false-positive rate above 0.8 at e = 0 is not a pass
+  expect_equal(bracket_effects(e, c(0.9, 0.5, 0.9, 1, 1, 1)), c(0.1, 0.2))
+})
+
+test_that("radius_summary() scores recovery, selection noise and the winner's curse (D-094)", {
+  # three simulations × three radii; λ planted at e = 0.3, truth log(0.7)
+  tab <- tibble::tibble(
+    sim = rep(1:3, each = 3), radius = rep(c(2, 5, 10), 3),
+    aic = c(105, 100, 103,     # 5 km best
+            99, 100, 104,      # 2 km best, but within 2 AIC
+            95, 100, 101),     # 2 km beats 5 km by more than 2
+    estimate = c(-0.2, -0.36, -0.3, -0.5, -0.4, -0.3, -0.6, -0.3, -0.2),
+    std.error = c(0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.1))
+  r <- radius_summary(tab, 0.3)
+  expect_equal(r$n_complete, 3)
+  expect_equal(r$recovery, 1 / 3)
+  expect_equal(r$false_select, 1 / 3)
+  # CI excludes 0 at 5 km in sims 1 and 2 (|est| > 1.96 se), not in 3
+  expect_equal(r$power, 2 / 3)
+  expect_equal(r$bias_primary, mean(c(-0.36, -0.4, -0.3)) - log(0.7))
+  expect_equal(r$bias_winner, mean(c(-0.36, -0.5, -0.6)) - log(0.7))
+  # a simulation with a failed refit at any radius is left out
+  tab2 <- dplyr::mutate(tab, aic = replace(aic, 9, NA))
+  expect_equal(radius_summary(tab2, 0.3)$n_complete, 2)
+  expect_equal(radius_summary(tab2, 0.3)$n_sims, 3)
+})
 
 test_that("wald_power() scores rejections among converged refits", {
   w <- wald_power(c(0.01, 0.2, 0.04, NA))

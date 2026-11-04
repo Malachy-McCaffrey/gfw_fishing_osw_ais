@@ -21,10 +21,19 @@ params:
   mesh_cutoff_km: 2        # SPDE mesh: no two vertices closer than this
   # Power analysis (plan, "Simulation power analysis")
   power_nsim: 100
-  power_effects: !expr c(0, 0.2, 0.3, 0.5)   # !expr: knitr reads a mixed YAML list as a parameter spec
+  # matching-scenario effect sizes; 10 and 40% added by D-094
+  power_effects: !expr c(0, 0.1, 0.2, 0.3, 0.4, 0.5)   # !expr: knitr reads a mixed YAML list as a parameter spec
+  # simulations at the two sizes that bracket the MDE, after the first pass
+  # (D-094): power_nsim from the first draw plus the rest from a second
+  power_nsim_bracket: 500
   # the fading-gradient scenario's effect size, for the gradient test's power
   # only; its e = 0 run is the matching scenario's (D-091)
   power_fade_effect: 0.3
+  # timing-model power at the season-year proxy, and VP mobile's radius
+  # recovery at season-year (D-094; D-065 for the radii)
+  timing_power_effects: !expr c(0, 0.3, 0.5)
+  radius_effects: !expr c(0, 0.3, 0.5)
+  radius_km: !expr c(2, 5, 10)
   workers: 14              # parallel refit processes (callr; no sockets needed)
   fit_workers: 8           # parallel main-model fits (fewer: the monthly models are large)
   # Leave-one-vessel-out: top vessels per dataset × gear, plus named hulls
@@ -158,12 +167,19 @@ ss    <- map(set_names(datasets), \(ds) read_tab(ds, "stage_season"))
 st    <- map(set_names(datasets), \(ds) read_tab(ds, "stage"))
 month <- map(set_names(datasets), \(ds) read_tab(ds, "month"))
 sy_afe <- read_tab("afe", "season_year")
-# VP season-year is read only for its fleet counts (the fleet-size sensitivity
-# for fixed AFE, whose timing model runs at season-year)
+# VP season-year: its fleet counts (the fleet-size sensitivity for fixed AFE,
+# whose timing model runs at season-year), and the VP timing models' season-
+# year power proxy and radius recovery (Step 3, D-094)
 sy_vp <- read_tab("vp", "season_year")
+sy <- list(afe = sy_afe, vp = sy_vp)
+# active construction at the sensitivity radii per cell × season-year (02a,
+# D-066), for VP mobile's radius recovery (D-065, D-094): columns
+# active_construction_<r>km_share for each radius in qparams$radius_km
+radii_path <- file.path(paths$analysis, "infra_cell_season_year_radii.csv")
+sy_radii <- read_csv(radii_path, col_types = cols(cell_id = "c", season = "c", .default = "d"))
 
 input_files <- c(map(datasets, \(ds) tpath(ds, c("stage", "stage_season", "month"))) |> unlist(),
-                 tpath(c("afe", "vp"), "season_year"))
+                 tpath(c("afe", "vp"), "season_year"), radii_path)
 
 # the modelled dataset × gear combinations (plan, "Scope per gear")
 ss_models <- tribble(~dataset, ~gear,
@@ -471,7 +487,9 @@ timing_models <- tribble(~dataset, ~gear, ~step,
 # `bands`: the distance-band scheme (D-076); `cuts`: the foundation-distance
 # band edges for h(·), coarsened when the finer bands lack support
 timing_data <- function(ds, g, step, bands = "full", cuts = c(2, 5, 10)) {
-  base <- if (step == "month") month[[ds]] else sy_afe
+  # season-year for both datasets: fixed AFE's timing model, and every
+  # model's season-year power proxy (D-094)
+  base <- if (step == "month") month[[ds]] else sy[[ds]]
   d <- base |> filter(gear_class == g, domain) |> bag_prepare()
   if (bands == "merged") d <- mutate(d, dist_band = merge_bands(dist_band))
   bx <- band_schemes[[bands]]
@@ -629,6 +647,56 @@ timing_sets <- timing_models |>
          spec_timing_leads = pmap(list(id, plan, step, family), \(id, pl, step, fam)
            spec_or_null(!is.null(pl$lead_terms), paste(id, "timing leads"), pl$data,
                         timing_formula(step, pl$lead_terms), fam, "ar1", "time_year", knots = month_knots(step))))
+
+# --- timing power at a season-year proxy (Step 3; D-094) ----------------------
+# A monthly timing refit takes hours, so every timing model's power is
+# simulated at season-year. The proxy is the timing model rebuilt at
+# season-year by the same support rule (D-076): its band scheme, foundation
+# cut and optional terms are chosen afresh, since season-year cells pool six
+# months and may support terms the monthly model drops (or the reverse). For
+# fixed AFE the timing model already runs at season-year, so its own plan is
+# reused and its power is its actual power, not a proxy.
+# The headline of a timing model: construction × inside, or construction ×
+# near when its bands are pooled (D-076), mirroring headline_of()
+timing_headline_of <- \(bands) if (bands == "full") "cx_inside" else "cx_near"
+tpower_sets <- timing_models |>
+  mutate(proxy = step == "month",
+         plan = pmap(list(id, dataset, gear, step), \(id, ds, g, step)
+           if (step == "season_year") timing_sets$plan[[match(id, timing_sets$id)]]
+           else plan_timing(ds, g, "season_year")),
+         bands = map_chr(plan, "bands"),
+         headline = map_chr(bands, \(b) if (b == "none") NA_character_ else timing_headline_of(b)),
+         # base model: the season-year timing model without the construction
+         # × band terms (the BAG terms of this model), as the stage × season
+         # base drops stage × band but keeps stage; construction stays
+         spec_base = pmap(list(id, plan, family), \(id, pl, fam)
+           spec_or_null(pl$bands != "none", paste(id, "timing power base (season-year)"), pl$data,
+                        timing_formula("season_year", setdiff(pl$terms, band_cols("cx", pl$bands))), fam,
+                        "ar1", "time_year")))
+
+# --- radius recovery: VP mobile at season-year (Step 3; D-065, D-094) ---------
+# The VP mobile season-year model's data with `active` taken at radius `r`
+# km: the share of the season-year with active construction within r km of
+# the cell (02a's sensitivity radii, D-066), joined by cell and the
+# season-year's last day. At 5 km it must reproduce the primary share; the
+# tables are rounded to 1/1000, so equality is checked to that.
+radius_data <- function(d, r) {
+  col <- sprintf("active_construction_%gkm_share", r)
+  rad <- sy_radii |>
+    transmute(cell_id, step_end = season_year_end(season, season_year), active_r = .data[[col]])
+  out <- left_join(d, rad, by = c("cell_id", "step_end"), relationship = "one-to-one")
+  stopifnot("a cell × season-year has no radius exposure" = !anyNA(out$active_r))
+  if (r == 5) stopifnot("the 5 km radius share does not reproduce active_construction_share" =
+                          max(abs(out$active_r - out$active)) <= 1e-3)
+  mutate(out, active = active_r) |> select(-active_r)
+}
+radius_plan <- tpower_sets |> filter(id == "vp_MOBILE") |> pull(plan) |> pluck(1)
+# runnable only when the season-year support rule kept a model and its λ
+radius_ok <- radius_plan$bands != "none" && "active" %in% radius_plan$terms
+radius_spec_base <- if (radius_ok)
+  make_spec("vp_MOBILE radius base (season-year)", radius_plan$data,
+            timing_formula("season_year", setdiff(radius_plan$terms, "active")), "nbinom2", "ar1", "time_year")
+
 timing_sets |> filter(!map_lgl(pre_data, is.null)) |>
   transmute(id, step, pre_bands, timing_bands = bands, rows = map_int(pre_data, nrow),
             cells = map_int(pre_data, \(d) n_distinct(d$cell_id)),
@@ -645,7 +713,13 @@ support_rules <- bind_rows(
   timing_sets |> transmute(id, model = "timing",
                            decision = map_chr(plan, \(pl) paste(c(paste("bands:", pl$bands),
                              if (!is.null(pl$cuts) && pl$bands != "none") paste0("found_band cuts: ", paste(pl$cuts, collapse = "/")),
-                             pl$log), collapse = "; "))))
+                             pl$log), collapse = "; "))),
+  # the season-year power proxies (D-094); fixed AFE's is its timing model
+  tpower_sets |> filter(proxy) |>
+    transmute(id, model = "timing power proxy (season-year)",
+              decision = map_chr(plan, \(pl) paste(c(paste("bands:", pl$bands),
+                if (!is.null(pl$cuts) && pl$bands != "none") paste0("found_band cuts: ", paste(pl$cuts, collapse = "/")),
+                pl$log), collapse = "; "))))
 save_tab(support_rules, "bag_support_rules")
 support_rules |> knitr::kable()
 term_support_tab <- bind_rows(
@@ -745,7 +819,11 @@ all_specs <- c(ss_sets$spec, ss_sets$spec_base, ss_sets$spec_nozone, compact(ss_
                compact(timing_sets$spec_pre_s1), compact(timing_sets$spec_pre_1619),
                compact(timing_sets$spec_timing_leads),
                # fleet-size sensitivity (step 8): new fits; the ones above stay cached
-               ss_sets$spec_fleet, compact(timing_sets$spec_timing_fleet))
+               ss_sets$spec_fleet, compact(timing_sets$spec_timing_fleet),
+               # power bases (Step 3, D-094): the timing models' season-year
+               # proxies and VP mobile's radius recovery. Fixed AFE's proxy
+               # base is a new fit too: its timing model has the cx terms
+               compact(tpower_sets$spec_base), compact(list(radius_spec_base)))
 run_specs <- function(specs, workers) {
   todo <- keep(specs, \(s) !file.exists(fit_cache_path(s$key, paths$models)))
   message(length(todo), " of ", length(specs), " fits to run")
@@ -816,6 +894,34 @@ gradient test, the Wald test of all Stage 3 × band terms at α = 0.05
 are reused across effect sizes and scenarios, so the curves differ only by
 the effect.
 
+**Second pass (D-094).** After the `r qparams$power_nsim`-simulation pass,
+the smallest effect with power ≥ 0.8 in the matching scenario, and the size
+below it when that is above 0, get more simulations, up to
+`r qparams$power_nsim_bracket`, from a second draw (`seed = 43`). The MDE is
+the smallest tested effect with power ≥ 0.8, scored on all of a size's
+simulations. A gear that reaches 0.8 nowhere gets no second pass.
+
+**Timing models (D-094).** A monthly timing refit takes hours, so each
+timing model's power is simulated on a **season-year proxy**: the timing
+model rebuilt at season-year by the support rule (D-076), its base model
+without the construction × band terms, and (1 − *e*) planted in each cell's
+construction-phase seasons in the headline's bands (inside, or inside and
+0–2 km when pooled), at *e* ∈
+{`r paste(100 * unlist(qparams$timing_power_effects), collapse = ", ")`}%.
+The construction × inside (or near) term is scored. Fixed AFE's timing
+model is at season-year already, so its result is its actual power.
+
+**Radius recovery (D-065, D-094).** For VP mobile at season-year only:
+*λ* planted as (1 − *e*)<sup>*a*</sup> on the 5 km active-construction share
+*a* (true *λ* = log(1 − *e*)), at *e* ∈
+{`r paste(100 * unlist(qparams$radius_effects), collapse = ", ")`}%, and each
+simulation refitted with the share at
+`r paste(unlist(qparams$radius_km), collapse = ", ")` km. Scored: *λ*'s power
+at 5 km; recovery (5 km has the lowest AIC); at *e* = 0, how often another
+radius beats 5 km by more than 2 AIC units; and *λ*'s bias at 5 km and at
+the radius with the lowest AIC (the winner's curse). A radius may be chosen
+from the data only if recovery ≥ 0.8 at an *e* where *λ*'s power ≥ 0.8.
+
 The refits run as `r qparams$workers` separate R processes (`callr`), each
 writing one small result file per refit to `reports/bag/{pipeline}/cache/`, so an
 interrupted render resumes where it stopped.
@@ -827,15 +933,24 @@ interrupted render resumes where it stopped.
 # band scheme (D-076). `wald_terms`: if given, the terms of the gradient test
 # (D-091), whose Wald statistic each worker also computes from the refit's
 # fixed-effect covariance and stores as wald_chi2, wald_df and wald_p. The
-# power analysis passes them; leave-one-vessel-out does not need them
+# power analysis passes them; leave-one-vessel-out does not need them.
+# `formula`, `spatiotemporal`, `time`: the model refitted, by default the
+# stage × season model (iid field by stage); the timing power and radius
+# recovery (D-094) pass the season-year timing formula with an AR1 field
+# over time_year. Every refit also records its AIC, for the radius recovery
 run_refit_jobs <- function(spec_id, d, family, jobs, term, terms, wald_terms = NULL,
+                           formula = ss_formula, spatiotemporal = "iid", time = "stage_num",
                            workers = qparams$workers) {
   # spec on disk, read by every worker; its hash names the result folder, so
-  # a changed specification never reuses old results. wald_terms joins the
-  # spec only when given, so a caller without it keeps its existing key
-  spec <- list(data = d, formula = ss_formula, family = family, cutoff = qparams$mesh_cutoff_km,
+  # a changed specification never reuses old results. wald_terms and a
+  # non-default field join the spec only when given, so a stage × season
+  # caller keeps its existing key
+  spec <- list(data = d, formula = formula, family = family, cutoff = qparams$mesh_cutoff_km,
                term = term, terms = terms)
   if (!is.null(wald_terms)) spec$wald_terms <- wald_terms
+  if (spatiotemporal != "iid" || time != "stage_num") {
+    spec$spatiotemporal <- spatiotemporal; spec$time <- time
+  }
   key <- substr(digest::digest(list(spec, as.character(packageVersion("sdmTMB"))), algo = "sha256"), 1, 10)
   out_dir <- file.path(job_dir, paste(spec_id, key, sep = "_"))
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
@@ -868,10 +983,14 @@ run_refit_jobs <- function(spec_id, d, family, jobs, term, terms, wald_terms = N
         }
         fam <- switch(spec$family, nbinom2 = nbinom2(), tweedie = tweedie())
         mesh <- make_mesh(spec$data, c("x_km", "y_km"), cutoff = spec$cutoff)
+        # the field over time: the stage × season default unless the spec
+        # names another (the timing refits' AR1 over years, D-094)
+        st <- if (is.null(spec$spatiotemporal)) "iid" else spec$spatiotemporal
+        tm <- if (is.null(spec$time)) "stage_num" else spec$time
         for (j in seq_len(nrow(jobs))) {
           d <- spec$data; d$hours <- jobs$y[[j]]
           fit <- try(sdmTMB(spec$formula, data = d, mesh = mesh, family = fam, offset = d$log_expo,
-                            spatial = "on", spatiotemporal = "iid", time = "stage_num", silent = TRUE),
+                            spatial = "on", spatiotemporal = st, time = tm, silent = TRUE),
                      silent = TRUE)
           # the same convergence rule as fit_ok() in the main session
           ok <- !inherits(fit, "try-error") &&
@@ -881,10 +1000,13 @@ run_refit_jobs <- function(spec_id, d, family, jobs, term, terms, wald_terms = N
             r <- t[t$term %in% spec$terms, c("term", "estimate", "std.error")]
             # one gradient test per refit, repeated on each of its term rows
             if (!is.null(wt)) r <- cbind(r, wald_of(fit))
+            # the refit's AIC, for comparing radii (D-094)
+            r$aic <- AIC(fit)
             r
           } else {
             r <- data.frame(term = spec$term, estimate = NA_real_, std.error = NA_real_)
             if (!is.null(wt)) r <- cbind(r, wald_of(NULL))
+            r$aic <- NA_real_
             r
           }
           saveRDS(cbind(res, tag = jobs$tag[j]), file.path(dirname(spec_file), paste0(jobs$tag[j], ".rds")))
@@ -923,19 +1045,43 @@ power_runs <- ss_sets |>
                 identical(full$season, d$season))
     band_full <- full$dist_band
     type <- if (fam == "nbinom2") "count" else "continuous"
-    # the matching scenario at every effect size, then the fading gradient
-    # at its one effect size; matching tags keep the format of the earlier
-    # single-scenario runs
+    # refit a set of jobs and keep the headline rows, labelled by job
+    refit <- \(jobs) run_refit_jobs(id, d, fam, jobs, hl, tm, wald_terms = grid_terms_of(b, stages = 3)) |>
+      filter(term == hl) |>
+      left_join(select(jobs, tag, scenario, effect, sim), by = "tag")
+    # the planted response of simulation `i`, from column `col` of `s`; the
+    # thinning seed is the simulation number, so it never repeats across passes
+    plant <- \(s, col, sc, e, i) inject_effect(s[, col], power_effect_factor(d$stage, band_full, sc, e), type, seed = i)
+    # pass 1: the matching scenario at every effect size, then the fading
+    # gradient at its one effect size; matching tags keep the format of the
+    # earlier single-scenario runs
     jobs <- bind_rows(
       expand_grid(effect = unlist(qparams$power_effects), sim = seq_len(qparams$power_nsim)) |>
         mutate(scenario = matching_scenario(b), tag = sprintf("power_e%02d_s%03d", round(100 * effect), sim)),
       expand_grid(effect = qparams$power_fade_effect, sim = seq_len(qparams$power_nsim)) |>
         mutate(scenario = "fading", tag = sprintf("power_fade_e%02d_s%03d", round(100 * effect), sim))) |>
-      mutate(y = pmap(list(scenario, effect, sim), \(sc, e, i)
-        inject_effect(sims[, i], power_effect_factor(d$stage, band_full, sc, e), type, seed = i)))
-    run_refit_jobs(id, d, fam, jobs, hl, tm, wald_terms = grid_terms_of(b, stages = 3)) |>
-      filter(term == hl) |>
-      left_join(select(jobs, tag, scenario, effect, sim), by = "tag")
+      mutate(y = pmap(list(scenario, effect, sim), \(sc, e, i) plant(sims, i, sc, e, i)))
+    res <- refit(jobs)
+    # pass 2 (D-094): more simulations, to power_nsim_bracket, at the
+    # smallest size with power >= 0.8 in the matching scenario and the size
+    # below it; none when no size reaches 0.8. A second draw (seed 43), so
+    # pass 1's simulations and cached refits are untouched; simulations are
+    # numbered on from pass 1 (101, 102, ...) and tagged the same way
+    p1 <- res |> filter(scenario != "fading") |>
+      group_by(effect) |>
+      summarise(power = power_from_refits(estimate, std.error, first(effect))$power, .groups = "drop")
+    br <- bracket_effects(p1$effect, p1$power)
+    n_extra <- qparams$power_nsim_bracket - qparams$power_nsim
+    if (length(br) > 0 && n_extra > 0) {
+      sims2 <- simulate(base, nsim = n_extra, re_form = ~0, seed = 43)
+      jobs2 <- expand_grid(effect = br, k = seq_len(n_extra)) |>
+        mutate(sim = qparams$power_nsim + k, scenario = matching_scenario(b),
+               tag = sprintf("power_e%02d_s%03d", round(100 * effect), sim),
+               y = pmap(list(k, effect, sim), \(col, e, i) plant(sims2, col, matching_scenario(b), e, i))) |>
+        select(-k)
+      res <- bind_rows(res, refit(jobs2))
+    }
+    res
   })) |>
   select(id, dataset, gear, bands, res) |> unnest(res)
 save_tab(power_runs, "bag_power_runs")
@@ -946,10 +1092,16 @@ power <- power_runs |>
   summarise(power_from_refits(estimate, std.error, first(effect)) |> select(-effect), .groups = "drop")
 save_tab(power, "bag_power")
 # the MDE from the matching scenario only (D-091); the fading gradient has a
-# single effect size and is not the headline's shape
+# single effect size and is not the headline's shape. Sizes that got the
+# second pass are scored on all their simulations (D-094), so the MDE uses
+# the 500-simulation estimate where one exists; `replicates_at_mde` shows
+# which estimate set it
 mde <- power |> filter(scenario != "fading") |>
   group_by(id, dataset, gear, bands, scenario) |>
-  summarise(mde = mde_of(effect, power), fpr = power[effect == 0], .groups = "drop") |>
+  summarise(mde = mde_of(effect, power), fpr = power[effect == 0],
+            replicates_at_mde = if (is.na(mde)) NA_integer_ else replicates[effect == mde],
+            bracket = paste(100 * effect[replicates + failed > qparams$power_nsim], collapse = "/"),
+            .groups = "drop") |>
   rename(mde_scenario = scenario) |>
   mutate(descriptive_only = is.na(mde) | mde > 0.5)
 save_tab(mde, "bag_mde")
@@ -989,6 +1141,96 @@ p <- ggplot(gradient_power, aes(100 * effect, power, colour = gear)) +
        subtitle = "at 0%: the false-positive rate; triangles: the fading gradient (e inside, e/2 at 0–2, e/4 at 2–4 km)")
 save_fig(p, "bag_gradient_power", height = 4.5)
 p
+```
+
+### Timing-model power at season-year (D-094)
+
+```{r}
+# Each timing model's power on its season-year proxy (fixed AFE: its own
+# season-year model). Same steps as the stage × season runs: simulate from
+# the base model with new fields, plant the effect, refit the full model
+timing_power_runs <- tpower_sets |>
+  filter(!map_lgl(spec_base, is.null)) |>
+  mutate(res = pmap(list(id, dataset, gear, bands, plan, family, spec_base, headline),
+                    function(id, ds, g, b, pl, fam, sb, hl) {
+    base <- get_fit(sb)
+    sims <- simulate(base, nsim = qparams$power_nsim, re_form = ~0, seed = 42)
+    d <- pl$data
+    # each row's own full band, as for the stage × season runs: timing_data()
+    # recodes only the band column when it pools, so the rows line up
+    full <- timing_data(ds, g, "season_year", "full", pl$cuts)
+    stopifnot("full-band rows do not line up with the timing data" =
+                identical(full$cell_id, d$cell_id) && identical(full$step_end, d$step_end))
+    band_full <- full$dist_band
+    type <- if (fam == "nbinom2") "count" else "continuous"
+    sc <- matching_scenario(b)
+    jobs <- expand_grid(effect = unlist(qparams$timing_power_effects), sim = seq_len(qparams$power_nsim)) |>
+      mutate(scenario = sc, tag = sprintf("tpower_e%02d_s%03d", round(100 * effect), sim),
+             y = pmap(list(effect, sim), \(e, i)
+               inject_effect(sims[, i], timing_effect_factor(d$construction, band_full, sc, e), type, seed = i)))
+    # the full season-year timing model, AR1 field over years as in Step 6
+    run_refit_jobs(paste0(id, "_timing_sy"), d, fam, jobs, hl, hl,
+                   formula = timing_formula("season_year", pl$terms), spatiotemporal = "ar1", time = "time_year") |>
+      filter(term == hl) |>
+      left_join(select(jobs, tag, scenario, effect, sim), by = "tag")
+  })) |>
+  select(id, dataset, gear, step, proxy, bands, res) |> unnest(res)
+save_tab(timing_power_runs, "bag_timing_power_runs")
+
+timing_power <- timing_power_runs |>
+  group_by(id, dataset, gear, step, proxy, bands, scenario, effect) |>
+  summarise(power_from_refits(estimate, std.error, first(effect)) |> select(-effect), .groups = "drop")
+save_tab(timing_power, "bag_timing_power")
+# the MDE of the construction × inside (or near) term; a monthly model's is
+# its season-year proxy's, and labelled so
+timing_mde <- timing_power |>
+  group_by(id, dataset, gear, step, proxy, bands, scenario) |>
+  summarise(mde = mde_of(effect, power), fpr = power[effect == 0], .groups = "drop") |>
+  mutate(mde_basis = if_else(proxy, "season-year proxy", "own season-year model")) |>
+  rename(mde_scenario = scenario)
+save_tab(timing_mde, "bag_timing_mde")
+timing_power |> kable_round(3)
+timing_mde |> kable_round(2)
+```
+
+### Radius recovery: VP mobile at season-year (D-065, D-094)
+
+```{r}
+# One set of simulations, planted at 5 km, refitted at every radius: the
+# same response vectors at each radius, so the AIC comparison is within a
+# simulation. Runs only when the season-year support rule kept λ
+radius_runs <- if (radius_ok) {
+  d5 <- radius_plan$data
+  base <- get_fit(radius_spec_base)
+  sims <- simulate(base, nsim = qparams$power_nsim, re_form = ~0, seed = 42)
+  # λ planted as (1 − e)^share on the 5 km share, the model's own log-linear
+  # form, so the true λ is log(1 − e) and the bias is measured against it
+  jobs <- expand_grid(effect = unlist(qparams$radius_effects), sim = seq_len(qparams$power_nsim)) |>
+    mutate(tag = sprintf("radius_e%02d_s%03d", round(100 * effect), sim),
+           y = pmap(list(effect, sim), \(e, i) inject_effect(sims[, i], (1 - e)^d5$active, "count", seed = i)))
+  map_dfr(unlist(qparams$radius_km), \(r)
+    run_refit_jobs(sprintf("vp_MOBILE_radius_%gkm", r), radius_data(d5, r), "nbinom2", jobs, "active", "active",
+                   formula = timing_formula("season_year", radius_plan$terms),
+                   spatiotemporal = "ar1", time = "time_year") |>
+      filter(term == "active") |>
+      left_join(select(jobs, tag, effect, sim), by = "tag") |>
+      mutate(radius = r))
+} else {
+  message("radius recovery skipped: the VP mobile season-year model has no λ term (support rule, D-076)")
+  NULL
+}
+
+if (!is.null(radius_runs)) {
+  save_tab(radius_runs, "bag_radius_runs")
+  radius_recovery <- map_dfr(split(radius_runs, radius_runs$effect), \(t) radius_summary(t, t$effect[1]))
+  save_tab(radius_recovery, "bag_radius_recovery")
+  # the D-065 rule: a radius may be chosen from the data only if recovery
+  # >= 0.8 at a planted effect for which λ's power is also >= 0.8
+  radius_choice_allowed <- any(radius_recovery$effect > 0 & radius_recovery$recovery >= 0.8 &
+                                 radius_recovery$power >= 0.8)
+  radius_recovery |> kable_round(3)
+} else radius_choice_allowed <- FALSE
+radius_choice_allowed
 ```
 
 ## Step 4: pre-trend equivalence test
@@ -1452,9 +1694,13 @@ timing_rr <- timing_fits |>
     t <- tidy(f)
     rate_ratios(t, intersect(timing_terms, t$term))
   })) |>
-  select(id, dataset, gear, step, rr) |> unnest(rr)
+  select(id, dataset, gear, step, rr) |> unnest(rr) |>
+  # each model's construction × inside (or near) MDE from Step 3 (D-094),
+  # with its basis: a monthly model's is its season-year proxy's, whose band
+  # scheme (`mde_bands`) may differ from the monthly model's
+  left_join(select(timing_mde, id, timing_mde = mde, mde_basis, mde_bands = bands), by = "id")
 save_tab(timing_rr, "bag_timing_rate_ratios")
-timing_rr |> select(id, term, rr, rr_lo, rr_hi, p) |> kable_round(3)
+timing_rr |> select(id, term, rr, rr_lo, rr_hi, p, timing_mde, mde_basis) |> kable_round(3)
 
 p <- timing_rr |> filter(str_detect(term, "found_band")) |>
   mutate(dist = factor(str_remove(term, "found_band"), found_lv)) |>

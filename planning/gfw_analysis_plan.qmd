@@ -1728,34 +1728,48 @@ settled the base model (the Phase 3 power simulation has the same dependency,
      multiply the simulated mean by (1 − *e*) in the `inside` band only, so
      the MDE is that of the Stage 3 × inside term. Bands pooled (D-076):
      by (1 − *e*) in `inside` and `0–2` km, the cells of the `near` term.
-     Effect sizes *e* ∈ {20, 30, 50}% (D-049), plus *e* = 0 to check the
-     false-positive rate.
+     Effect sizes *e* ∈ {10, 20, 30, 40, 50}% (D-049; the 10 and 40% steps
+     added by D-094 so the MDE is not read off a 20-point gap), plus *e* = 0
+     to check the false-positive rate.
    - **Fading gradient**, for the power of the gradient test only: (1 − *e*)
      inside, (1 − *e*/2) at 0–2 km and (1 − *e*/4) at 2–4 km, at
      *e* = 30% alone. Displacement that weakens with distance is the shape
      the test exists to detect. Its *e* = 0 run is the matching scenario's,
-     since nothing is planted, so this adds one effect size per gear
-     (about 2,500 refits in all, against about 2,000 for one scenario).
+     since nothing is planted, so this adds one effect size per gear.
 
-   For the timing model, the effect is planted as a function of turbine
-   distance after installation.
+   **Timing models: a season-year proxy (D-094).** A monthly timing refit
+   takes hours, so a monthly power curve is not feasible. Every timing
+   model's power is simulated at season-year instead: the timing model
+   rebuilt at season-year by the same support rule (D-076), with a base
+   model without the construction × band terms, and (1 − *e*) planted in
+   the construction-phase cells of the headline's bands (inside, or inside
+   and 0–2 km when pooled), at *e* ∈ {0, 30, 50}%, scored on construction ×
+   inside (or near). For fixed AFE, whose timing model is at season-year,
+   this is its actual power; for the monthly models it is labelled "season-
+   year proxy", which shares their terms but not their time step.
 3. Refit the full BAG model to each simulated dataset and record whether the
    95% CI of the headline rate ratio excludes 1, its bias and the CI
    coverage, and whether the gradient test (the Wald test of all Stage 3 ×
    band terms) rejects at α = 0.05.
 4. 100 simulations per effect size and model (decision 2026-10-20, D-049;
    `set.seed(42)`, parallel worker processes via `callr`, cached with
-   `fit_cached()`). Increase to 500 for any gear whose power curve crosses 0.8
-   between two tested effect sizes, to pin down the MDE (matching scenario
-   only).
+   `fit_cached()`). Then, in the matching scenario only (D-094), 400 more
+   simulations (a separate draw, `seed = 43`), making 500, at the smallest
+   *e* with power ≥ 0.8 and at the size below it when that is above 0; none
+   when no size reaches 0.8. The MDE uses the 500-simulation estimate where
+   one exists: if the size below passes, the MDE drops one step; if the
+   smallest passing size no longer passes, the MDE is the next passing size.
+   No interpolation and no further rounds. About 1,500 stage × season
+   refits per gear.
 
 **Outputs.** Power curves per gear × dataset × model; a table of the
 **minimum detectable effect** (MDE, the smallest *e* with power ≥ 0.8 in
 the matching scenario), with the scenario that defines it; the
 false-positive rate at *e* = 0 (should be close to 0.05) for the headline
 term and for the gradient test; the gradient test's power in the matching
-scenario at each *e* and in the fading gradient at 30%; bias and coverage.
-Written to `models/power_*.csv` with provenance sidecars.
+scenario at each *e* and in the fading gradient at 30%; bias and coverage;
+the timing models' season-year MDEs, with the proxy label where it applies;
+and VP mobile's radius-recovery table. Written to `models/power_*.csv` with provenance sidecars.
 
 **Vessel clustering.** A cell-level model treats cells as the only source of
 clustering, but a cell's effort often comes from one vessel (caveat 12). The
@@ -1764,13 +1778,15 @@ As a check, repeat the *e* = 20% scenario with vessel-level resampling:
 redraw vessels with replacement within gear × stage from the records, rebuild
 the cell table, and inject the effect. Report how much it lowers power.
 
-**Radius recovery (timing models; decision 2026-10-29, D-065).** Can the data
-choose the `active_construction` radius at all? Simulate from the timing
-model's base model (without *λ*) as in steps 1 and 4, and inject a
-construction effect at the primary radius: multiply the mean by (1 − *e*) in
-the cell-months with `active_construction` at 5 km, for *e* ∈ {0, 30, 50}%.
-Refit the full timing model with `active_construction` at 2, 5 and 10 km,
-and record:
+**Radius recovery (VP mobile at season-year; decisions 2026-10-29, D-065,
+and 2026-11-04, D-094).** Can the data choose the `active_construction`
+radius at all? Run for VP mobile only, on its season-year proxy timing
+model (step 2). Simulate from that model's base model (without *λ*) as in
+steps 1 and 4, and inject a construction effect at the primary radius:
+multiply the mean by (1 − *e*)<sup>*a*</sup>, where *a* is the cell's share of the
+season-year with active construction within 5 km, so the true *λ* is
+log(1 − *e*), for *e* ∈ {0, 30, 50}%, 100 simulations. Refit the full
+model with the active-construction share at 2, 5 and 10 km, and record:
 
 - power for *λ* at 5 km (the 95% CI excludes 0);
 - the share of simulations in which the 5 km fit has the lowest AIC
@@ -1793,8 +1809,9 @@ The Phase 7 sensitivity runs use the same tables.
   (steps 1–2), with its MDE stated, not as a hypothesis test.
 - The MDE sets the pre-trend equivalence margin (@sec-bag-pretrend).
 - The `active_construction` radius stays fixed at 5 km. Comparing the 2 / 5 /
-  10 km fits to choose a radius is allowed only for a gear × dataset where
-  recovery is at least 0.8 at an *e* for which *λ*'s power is at least 0.8.
+  10 km fits to choose a radius is allowed only for VP mobile at season-year
+  (the one model the recovery runs on, D-094), and only if recovery is at
+  least 0.8 at an *e* for which *λ*'s power is at least 0.8.
   Anywhere else, the radius runs are reported as a sensitivity check (does the
   result hold?), not as an estimate of the radius (D-065).
 

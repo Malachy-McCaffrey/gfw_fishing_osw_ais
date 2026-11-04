@@ -99,15 +99,88 @@ power_from_refits <- function(est, se, true_e, level = 0.95) {
 # Only Stage 3 rows are touched; Stages 1 and 2 keep a multiplier of 1.
 power_effect_factor <- function(stage, band, scenario = c("inside", "near", "fading"), e) {
   scenario <- match.arg(scenario)
+  ifelse(as.character(stage) == "Stage 3", 1 - e * band_share(band, scenario, e), 1)
+}
+
+# The share of e each row's band receives under a scenario (see
+# power_effect_factor()); 0 for bands outside the scenario. Shared by the
+# stage × season and timing plants so both use one definition of the shapes.
+band_share <- function(band, scenario, e) {
   stopifnot("e must be a single proportion in [0, 1)" = length(e) == 1 && e >= 0 && e < 1)
-  # the share of e each band receives
   share <- switch(scenario,
                   inside = c(inside = 1),
                   near   = c(inside = 1, "0-2" = 1),
                   fading = c(inside = 1, "0-2" = 0.5, "2-4" = 0.25))
   s <- unname(share[as.character(band)])
   s[is.na(s)] <- 0
-  ifelse(as.character(stage) == "Stage 3", 1 - e * s, 1)
+  s
+}
+
+# The timing models' planted effect (D-094; plan, "Simulation power
+# analysis", step 2): as power_effect_factor(), but on the rows in each
+# cell's own construction phase (`construction` = 1) instead of Stage 3, so
+# it is the effect the construction × inside (or near) term estimates.
+# `band`: each row's own FULL band; `scenario`: "inside" (four bands) or
+# "near" (pooled bands), the matching scenario of the timing model.
+timing_effect_factor <- function(construction, band, scenario = c("inside", "near"), e) {
+  scenario <- match.arg(scenario)
+  ifelse(construction == 1, 1 - e * band_share(band, scenario, e), 1)
+}
+
+# The effect sizes that get 400 more simulations, to 500 (D-094): after the
+# 100-simulation pass, the smallest e > 0 with power >= target, and the
+# tested size just below it when that is above 0. Empty when no size
+# reaches the target (no second pass: the gear's MDE is above the largest
+# tested size either way). `effect`, `power`: one value per tested size.
+bracket_effects <- function(effect, power, target = 0.8) {
+  o <- order(effect); effect <- effect[o]; power <- power[o]
+  i <- which(effect > 0 & !is.na(power) & power >= target)
+  if (length(i) == 0) return(numeric())
+  i <- min(i)
+  below <- if (i > 1 && effect[i - 1] > 0) effect[i - 1]
+  c(below, effect[i])
+}
+
+# Radius recovery for one effect size (D-065, D-094; plan, "Radius
+# recovery"). `tab`: one row per simulation × radius refit, with columns
+# sim, radius (km), aic, estimate and std.error of λ (NA when the refit
+# failed); `true_e`: the planted effect, so the true λ is log(1 − e);
+# `primary`: the radius the effect was planted at. Only simulations whose
+# refits converged at every radius are scored, so the AIC comparison is
+# always among the same radii. Returns:
+# - power: λ's 95% CI excludes 0 at the primary radius;
+# - recovery: the primary radius has the lowest AIC;
+# - false_select: another radius beats the primary by more than `delta` AIC
+#   units (at e = 0, the selection noise);
+# - bias_primary, bias_winner: mean λ minus the truth at the primary radius
+#   and at whichever radius has the lowest AIC (the winner's curse).
+radius_summary <- function(tab, true_e, primary = 5, delta = 2, level = 0.95) {
+  z <- stats::qnorm(1 - (1 - level) / 2)
+  truth <- log(1 - true_e)
+  n_radii <- dplyr::n_distinct(tab$radius)
+  ok <- tab |>
+    dplyr::group_by(sim) |>
+    dplyr::filter(sum(!is.na(aic) & !is.na(estimate)) == n_radii) |>
+    dplyr::ungroup()
+  per_sim <- ok |>
+    dplyr::group_by(sim) |>
+    dplyr::summarise(
+      aic_primary = aic[radius == primary],
+      est_primary = estimate[radius == primary],
+      se_primary = std.error[radius == primary],
+      best = radius[which.min(aic)],
+      est_winner = estimate[which.min(aic)],
+      beaten = any(aic[radius != primary] < aic[radius == primary] - delta),
+      .groups = "drop")
+  tibble::tibble(
+    effect = true_e,
+    n_sims = dplyr::n_distinct(tab$sim),
+    n_complete = nrow(per_sim),
+    power = mean(abs(per_sim$est_primary) > z * per_sim$se_primary),
+    recovery = mean(per_sim$best == primary),
+    false_select = mean(per_sim$beaten),
+    bias_primary = mean(per_sim$est_primary) - truth,
+    bias_winner = mean(per_sim$est_winner) - truth)
 }
 
 # The gradient test's rejection rate across refits (D-091): the share of

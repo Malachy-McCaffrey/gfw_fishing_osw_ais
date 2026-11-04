@@ -188,7 +188,9 @@ input_files <- c(map(datasets, \(ds) table_path(ds, time_steps)) |> unlist(),
 
 For each surface: Moran's I by permutation (`r qparams$nsim` draws), with the
 permutation null band and a z against that null; General G with its analytic
-z. The sensitivity row (`scale = "raw"`) repeats both on raw density.
+z. The sensitivity row (`scale = "raw"`) repeats both on raw density. A
+surface with no effort in any cell has no statistic and is listed as "no
+effort" (D-095).
 
 ```{r}
 # global statistics for every surface of one dataset × time step, on y_vst
@@ -217,8 +219,23 @@ global <- map_dfr(datasets, \(ds) bind_rows(
   relocate(season, .after = stage) |>
   arrange(dataset, gear_class, stage, season, scale)
 
-# no surface may be missing a statistic: every stage and stage × season surface has effort
-stopifnot("a stage or stage × season surface has no statistic" = !anyNA(global$I))
+# Surfaces with no effort at all (D-095): every cell is 0, so the AFE
+# transform has no c and there is nothing to test. They are reported as "no
+# effort", with no statistic. On v5, AFE pole-and-line has none in Stage 2
+# Apr–Sep: GFW's v5 computes no AFE for most of its for-hire boats (D-070)
+no_effort <- map_dfr(datasets, \(ds) bind_rows(
+  tabs[[ds]]$stage |> mutate(season = "all"), tabs[[ds]]$stage_season) |>
+    group_by(gear_class, stage, season) |>
+    summarise(no_effort = all(density == 0), .groups = "drop") |>
+    mutate(dataset = ds, .before = 1)) |>
+  mutate(season = factor(season, levels(global$season)))
+global <- global |> left_join(no_effort, by = c("dataset", "gear_class", "stage", "season"))
+# every other surface must have a statistic: a missing one anywhere else is
+# an error, not an empty surface
+stopifnot("a stage or stage × season surface with effort has no statistic" =
+            !anyNA(global$I[!global$no_effort]))
+global |> filter(no_effort, scale == "y_vst") |>
+  transmute(dataset, gear_class, stage, season, statistic = "no effort") |> knitr::kable()
 ```
 
 Moran's I (z against the permutation null) on `y_vst`, by stage, all months
@@ -261,10 +278,12 @@ scale_cmp <- global |>
   pivot_wider(names_from = scale, values_from = c(I, G_z))
 scale_cmp |>
   group_by(dataset) |>
-  summarise(surfaces = n(),
-            spearman_I = cor(I_y_vst, I_raw, method = "spearman"),
-            spearman_G_z = cor(G_z_y_vst, G_z_raw, method = "spearman"),
-            median_I_y_vst = median(I_y_vst), median_I_raw = median(I_raw)) |>
+  # surfaces with no effort have no statistic on either scale (D-095), so
+  # they are left out of the counts, correlations and medians
+  summarise(surfaces = sum(!is.na(I_y_vst)),
+            spearman_I = cor(I_y_vst, I_raw, method = "spearman", use = "complete.obs"),
+            spearman_G_z = cor(G_z_y_vst, G_z_raw, method = "spearman", use = "complete.obs"),
+            median_I_y_vst = median(I_y_vst, na.rm = TRUE), median_I_raw = median(I_raw, na.rm = TRUE)) |>
   kable_round()
 
 p <- scale_cmp |>

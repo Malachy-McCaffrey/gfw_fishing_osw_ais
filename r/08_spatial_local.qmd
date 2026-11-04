@@ -263,6 +263,19 @@ primary <- nested |>
   select(-sdat) |>
   unnest(res)
 
+# Surfaces with no effort in any cell (D-095): there is nothing to test, and
+# their cells carry no statistic. Reading them as "ns" everywhere would turn
+# "no effort" into "no cluster", so they are flagged here and kept out of the
+# stage-change classes (Step 3) and criteria 1–2. On v5, AFE pole-and-line
+# has none in Stage 2 Apr–Sep (GFW's v5 computes no AFE for most of its
+# for-hire boats, D-070)
+no_effort <- primary |>
+  group_by(dataset, gear_class, stage, season) |>
+  summarise(no_effort = all(density == 0), .groups = "drop")
+no_effort |> filter(no_effort) |> select(-no_effort) |> mutate(statistic = "no effort") |> knitr::kable()
+# the surfaces with effort, for the steps that compare classes
+primary_eff <- primary |> semi_join(filter(no_effort, !no_effort), by = c("dataset", "gear_class", "stage", "season"))
+
 counts <- primary |>
   group_by(dataset, gear_class, stage, season) |>
   summarise(positive_cells = sum(density > 0),
@@ -271,7 +284,8 @@ counts <- primary |>
             gi_bin3 = sum(abs(gi_bin) == 3),
             HH05 = sum(lisa05 == "HH"), LL05 = sum(lisa05 == "LL"),
             HL05 = sum(lisa05 == "HL"), LH05 = sum(lisa05 == "LH"),
-            HH10 = sum(lisa10 == "HH"), LL10 = sum(lisa10 == "LL"), .groups = "drop")
+            HH10 = sum(lisa10 == "HH"), LL10 = sum(lisa10 == "LL"), .groups = "drop") |>
+  left_join(no_effort, by = c("dataset", "gear_class", "stage", "season"))
 save_tab(counts, "local_counts")
 counts |> filter(season == "all") |> knitr::kable()
 ```
@@ -360,7 +374,9 @@ itself, so these describe how classifications moved; they are not tests of
 change.
 
 ```{r}
-status <- primary |>
+# surfaces with effort only (D-095): a pair with a no-effort surface has no
+# change class, rather than "lost" or "gained" clusters against an empty map
+status <- primary_eff |>
   transmute(dataset, gear_class, stage, season, cell_id,
             gi = gi_status(gi_bin), lisa = lisa_status(lisa05))
 pairs <- tibble(from = c("Stage 1", "Stage 2", "Stage 1"), to = c("Stage 2", "Stage 3", "Stage 3"))
@@ -414,7 +430,8 @@ Cohen's κ per surface between Gi\* hot and LISA HH, and between Gi\* cold
 and LISA LL (q = 0.05).
 
 ```{r}
-c1 <- primary |>
+# surfaces with effort only (D-095)
+c1 <- primary_eff |>
   group_by(dataset, gear_class, stage, season) |>
   summarise(kappa_hot = cohen_kappa(gi05 == "hot", lisa05 == "HH"),
             kappa_cold = cohen_kappa(gi05 == "cold", lisa05 == "LL"),
@@ -452,7 +469,8 @@ neighbourhood, the cell included, holds no effort. A statistic that labels
 empty sea "significant" says nothing about effort.
 
 ```{r}
-c2 <- primary |>
+# surfaces with effort only (D-095)
+c2 <- primary_eff |>
   group_by(dataset, gear_class, stage, season) |>
   summarise(LL = sum(lisa05 == "LL"), LL_empty_share = mean(zero_nb[lisa05 == "LL"]),
             cold = sum(gi05 == "cold"), cold_empty_share = mean(zero_nb[gi05 == "cold"]),

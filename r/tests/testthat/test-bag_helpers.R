@@ -228,6 +228,70 @@ test_that("bag_final_verdict() combines gate, verdict and robustness", {
   expect_equal(bag_final_verdict("fail", "decrease", 0, 0.3, bound = "shifted"), "not interpretable (descriptive only)")
 })
 
+test_that("wald_joint() tests a set of coefficients jointly (D-091)", {
+  # one coefficient: the square of the z-test, with the same p-value
+  w1 <- wald_joint(c(a = log(0.7)), matrix(0.04, dimnames = list("a", "a")))
+  z <- log(0.7) / 0.2
+  expect_equal(w1$chi2, z^2)
+  expect_equal(w1$df, 1)
+  expect_equal(w1$p, 2 * pnorm(-abs(z)))
+
+  # two correlated coefficients, against the statistic computed by hand
+  b <- c(a = 0.3, b = -0.2)
+  V <- matrix(c(0.04, 0.01, 0.01, 0.09), 2, dimnames = list(names(b), names(b)))
+  w2 <- wald_joint(b, V)
+  chi2 <- drop(t(b) %*% solve(V) %*% b)
+  expect_equal(w2$chi2, chi2)
+  expect_equal(w2$df, 2)
+  expect_equal(w2$p, pchisq(chi2, 2, lower.tail = FALSE))
+
+  # the joint test can reject when no single term does: two moderate terms of
+  # the same sign, each with |z| = 1.8 (p ≈ 0.07), independent
+  Vi <- diag(c(0.01, 0.01)); dimnames(Vi) <- list(c("a", "b"), c("a", "b"))
+  wi <- wald_joint(c(a = -0.18, b = -0.18), Vi)
+  expect_lt(wi$p, 0.05)
+
+  # cannot be read: missing values, mismatched names, a singular covariance
+  expect_true(is.na(wald_joint(c(a = NA, b = 0.1), V)$p))
+  expect_true(is.na(wald_joint(c(b = 0.3, a = -0.2), V)$p))   # wrong order
+  expect_true(is.na(wald_joint(unname(b), V)$p))
+  sing <- matrix(c(0.04, 0.04, 0.04, 0.04), 2, dimnames = list(names(b), names(b)))
+  w_sing <- wald_joint(b, sing)
+  expect_true(is.na(w_sing$p))
+  expect_equal(w_sing$df, 2)
+})
+
+test_that("power_effect_factor() plants each scenario's shape in Stage 3 only (D-091)", {
+  bands <- c("inside", "0-2", "2-4", "4-8", "8-15")
+  s3 <- rep("Stage 3", 5)
+  expect_equal(power_effect_factor(s3, bands, "inside", 0.3), c(0.7, 1, 1, 1, 1))
+  expect_equal(power_effect_factor(s3, bands, "near", 0.3), c(0.7, 0.7, 1, 1, 1))
+  expect_equal(power_effect_factor(s3, bands, "fading", 0.3), c(0.7, 0.85, 0.925, 1, 1))
+  # Stages 1 and 2 are never touched, and e = 0 plants nothing
+  expect_equal(power_effect_factor(c("Stage 1", "Stage 2"), c("inside", "inside"), "fading", 0.5), c(1, 1))
+  expect_equal(power_effect_factor(s3, bands, "near", 0), rep(1, 5))
+  # factors (as the model data hold them) work like characters
+  expect_equal(power_effect_factor(factor(s3), factor(bands), "inside", 0.2), c(0.8, 1, 1, 1, 1))
+  expect_error(power_effect_factor(s3, bands, "inside", 1), "proportion")
+  expect_error(power_effect_factor(s3, bands, "outside", 0.2))
+})
+
+
+test_that("wald_power() scores rejections among converged refits", {
+  w <- wald_power(c(0.01, 0.2, 0.04, NA))
+  expect_equal(w$n_ok, 3)
+  expect_equal(w$n_failed, 1)
+  expect_equal(w$power, 2 / 3)
+  expect_true(is.na(wald_power(c(NA, NA))$power))
+})
+
+test_that("gradient_verdict() reads the gradient test without claiming no change", {
+  expect_equal(gradient_verdict(c(0.01, 0.2, NA)),
+               c("gradient change detected", "no evidence of a gradient change", NA))
+  expect_equal(gradient_verdict(0.05), "no evidence of a gradient change")   # p must be below alpha
+  expect_equal(gradient_verdict(0.08, alpha = 0.1), "gradient change detected")
+})
+
 test_that("boot_band_rate() gives the pooled rate with an interval around it", {
   set.seed(3)
   d <- tibble(dist_band = rep(c("inside", "8-15"), each = 200),

@@ -82,6 +82,44 @@ power_from_refits <- function(est, se, true_e, level = 0.95) {
                  coverage = mean(lo <= truth & hi >= truth))
 }
 
+# Power scenarios (D-091; plan, "Simulation power analysis") ---------------------
+# The multiplier for each row's simulated mean, by the shape of the planted
+# effect. `stage`: each row's stage; `band`: each row's own FULL distance
+# band (inside, 0-2, 2-4, 4-8, 8-15), even when the model pools the bands,
+# so a pooled gear's cells get the same effect as a full-band gear's;
+# `scenario`:
+# - "inside": 1 − e in the inside band only. The matching scenario for a
+#   gear fitted with the four bands: its MDE is that of the Stage 3 × inside
+#   headline;
+# - "near": 1 − e in inside and 0–2 km, the cells of the pooled near band.
+#   The matching scenario for a gear whose bands are pooled (D-076);
+# - "fading": 1 − e inside, 1 − e/2 at 0–2 km and 1 − e/4 at 2–4 km, a
+#   displacement that weakens with distance. For the gradient test's power
+#   only (the shape the test exists to detect), not for the MDE.
+# Only Stage 3 rows are touched; Stages 1 and 2 keep a multiplier of 1.
+power_effect_factor <- function(stage, band, scenario = c("inside", "near", "fading"), e) {
+  scenario <- match.arg(scenario)
+  stopifnot("e must be a single proportion in [0, 1)" = length(e) == 1 && e >= 0 && e < 1)
+  # the share of e each band receives
+  share <- switch(scenario,
+                  inside = c(inside = 1),
+                  near   = c(inside = 1, "0-2" = 1),
+                  fading = c(inside = 1, "0-2" = 0.5, "2-4" = 0.25))
+  s <- unname(share[as.character(band)])
+  s[is.na(s)] <- 0
+  ifelse(as.character(stage) == "Stage 3", 1 - e * s, 1)
+}
+
+# The gradient test's rejection rate across refits (D-091): the share of
+# converged refits whose Wald test of all Stage 3 × band terms rejects at
+# `alpha`. At e = 0 this is the test's false-positive rate (should be close
+# to alpha). Failed refits (NA p) are counted, not scored.
+wald_power <- function(p, alpha = 0.05) {
+  ok <- !is.na(p)
+  tibble::tibble(n_ok = sum(ok), n_failed = sum(!ok),
+                 power = if (any(ok)) mean(p[ok] < alpha) else NA_real_)
+}
+
 # Minimum detectable effect: the smallest tested effect with power >= target,
 # or NA if none reaches it (then the gear is reported descriptively, with
 # "MDE > largest tested effect").
@@ -412,6 +450,105 @@ bag_final_verdict <- function(gate, verdict, checks_shifted, mde, bound = NA) {
   # the bound only qualifies a readable verdict
   v <- ifelse(gate %in% c("pass", "caution") & bound %in% "shifted", paste0(v, "; classification-sensitive"), v)
   ifelse(gate == "caution", paste(v, "(provisional)"), v)
+}
+
+# The gradient test (D-091) ------------------------------------------------------
+# Beside each headline verdict, the plan (@sec-bag-prereg) asks whether the
+# gradient changed shape anywhere: are all Stage 3 × band terms zero at once?
+# One band's term cannot answer that, and testing the bands one by one would
+# give four chances to be fooled. A Wald test asks it once.
+#
+# Wald χ² test that the coefficients `estimate` (a named numeric vector, log
+# scale) are all zero, given their covariance matrix `V` (from the fit's
+# fixed-effect covariance, with the same names on rows and columns). The
+# statistic is b' V⁻¹ b, χ² with one degree of freedom per coefficient under
+# the null. With one coefficient it is the square of the z-test that
+# rate_ratios() reports, so the two agree.
+#
+# Returns a one-row tibble: chi2, df and p. NA (with df still the number of
+# terms) when any estimate or covariance is missing, the names do not match,
+# or V is not positive definite (a fit at a boundary): the test cannot be
+# read, which is not the same as "no gradient change".
+wald_joint <- function(estimate, V) {
+  b  <- unname(estimate)
+  df <- length(b)
+  na <- tibble::tibble(chi2 = NA_real_, df = df, p = NA_real_)
+  if (df == 0 || anyNA(b) || anyNA(V)) return(na)
+  V <- as.matrix(V)
+  # the covariance must describe exactly these coefficients, in this order
+  if (is.null(names(estimate)) || !identical(rownames(V), names(estimate)) ||
+      !identical(colnames(V), names(estimate))) return(na)
+  # positive definite, judged by the eigenvalues relative to the largest:
+  # chol() alone is not enough, because rounding can leave an exactly
+  # singular matrix with a tiny positive pivot, and the test would then
+  # divide by noise. 1e-10 is far below any real variance ratio between
+  # coefficients on the log scale
+  ev <- eigen(V, symmetric = TRUE, only.values = TRUE)$values
+  if (min(ev) <= 1e-10 * max(abs(ev))) return(na)
+  # Cholesky gives a stable solve
+  R <- tryCatch(chol(V), error = function(e) NULL)
+  if (is.null(R)) return(na)
+  # b' V⁻¹ b = ||R'⁻¹ b||², with V = R'R
+  z <- backsolve(R, b, transpose = TRUE)
+  chi2 <- sum(z^2)
+  tibble::tibble(chi2 = chi2, df = df, p = stats::pchisq(chi2, df, lower.tail = FALSE))
+}
+
+# The linear fixed effects of an sdmTMB fit and their covariance, labelled
+# by term, for wald_joint() (D-091). sdmTMB's vcov() cannot be used for this:
+# it labels the covariance with tidy()'s terms only when the two have the
+# same length, and with a smooth in the formula (every BAG model has
+# s(depth_m)) tidy() adds the smooth's coefficient, which is not among the
+# linear effects b_j, so vcov() returns unlabelled rows. The labels are the
+# column names of the fit's own fixed-effect design matrix (X_ij), which
+# are the b_j in order, so estimates and covariance come from the same
+# sd_report and cannot be mispaired.
+#
+# `parts`: 1 for a single-family fit or the first part of a delta model, 2
+# for the second, c(1, 2) for both together (named "1:<term>" and
+# "2:<term>", with their cross-part covariance). Returns list(estimate, V),
+# or NULL if a part's estimates do not match its design matrix (e.g. a
+# coefficient mapped off), so the caller reports the test as not readable.
+# Takes a fitted model, unlike the pure functions above, and is checked by
+# a dry run on synthetic fits rather than in the unit tests.
+fixed_effects_cov <- function(fit, parts = 1) {
+  pf <- fit$sd_report$par.fixed
+  cf <- fit$sd_report$cov.fixed
+  par_name <- c("b_j", "b_j2")
+  idx <- integer(); nm <- character()
+  for (m in parts) {
+    i <- which(names(pf) == par_name[m])
+    X <- fit$tmb_data$X_ij[[m]]
+    if (is.null(X) || length(i) != ncol(X)) return(NULL)
+    idx <- c(idx, i)
+    nm <- c(nm, if (length(parts) > 1) paste0(m, ":", colnames(X)) else colnames(X))
+  }
+  V <- cf[idx, idx, drop = FALSE]
+  dimnames(V) <- list(nm, nm)
+  list(estimate = stats::setNames(unname(pf[idx]), nm), V = V)
+}
+
+# The Wald test of `terms` in a fit (D-091), from fixed_effects_cov(). For
+# both parts of a delta model, give `parts = c(1, 2)` and the terms
+# unprefixed: each is tested in both parts. NA (df still the number of
+# tested coefficients) when the terms cannot be matched.
+fit_wald <- function(fit, terms, parts = 1) {
+  tm <- if (length(parts) > 1) as.vector(outer(paste0(parts, ":"), terms, paste0)) else terms
+  fc <- fixed_effects_cov(fit, parts)
+  if (is.null(fc) || !all(tm %in% names(fc$estimate)))
+    return(tibble::tibble(chi2 = NA_real_, df = length(tm), p = NA_real_))
+  wald_joint(fc$estimate[tm], fc$V[tm, tm, drop = FALSE])
+}
+
+# The reading of the gradient test (D-091). It is a significance test, so a
+# non-rejection is "no evidence of a gradient change", never "no change":
+# only the headline verdict's "no change ≥ MDE" can rule a change out. It
+# sits beside the verdict and never alters it. NA p (the test could not be
+# computed) gives NA.
+gradient_verdict <- function(p, alpha = 0.05) {
+  dplyr::case_when(is.na(p) ~ NA_character_,
+                   p < alpha ~ "gradient change detected",
+                   TRUE ~ "no evidence of a gradient change")
 }
 
 # Cell bootstrap of band rates (descriptive BAG) ---------------------------------

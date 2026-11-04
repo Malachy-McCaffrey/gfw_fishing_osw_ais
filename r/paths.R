@@ -18,10 +18,12 @@
 # interim_gfw:scratch/interim`, which lets a test run write somewhere other
 # than the real data folders.
 
-# The version a render uses when none is given. The analysed data so far is
-# the 2026-10-06 pull, which is v4 (gfwr requests ":latest", which was v4 until
-# 2026-10-21). Change this only when the analysis adopts a new version.
-gfw_pipeline_default <- "v4"
+# The version a render uses when none is given: the primary analysis version.
+# v5 (`:v5.0`, pulled 2026-10-28) since 2026-11-04, when its vessel and gear
+# review was finished and 03 -> 05 were re-rendered on it (D-070, D-090); v4
+# (the 2026-10-06 `:latest` snapshot) is the sensitivity analysis, rendered
+# with `-P pipeline:v4`. Change this only when the analysis adopts a new version.
+gfw_pipeline_default <- "v5"
 
 # All project paths for one pipeline version
 make_gfw_paths <- function(pipeline = gfw_pipeline_default) {

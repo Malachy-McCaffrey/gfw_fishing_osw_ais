@@ -27,7 +27,7 @@ execute:
 
 ## Status {#sec-status}
 
-As of 2026-11-03. Decision IDs refer to [`planning/decisions.md`](decisions.md).
+As of 2026-11-04. Decision IDs refer to [`planning/decisions.md`](decisions.md).
 
 | Phase | Notebook | Status | Outcome recorded in |
 |---|---|---|---|
@@ -35,12 +35,12 @@ As of 2026-11-03. Decision IDs refer to [`planning/decisions.md`](decisions.md).
 | 1: exploratory analysis | `06_explore.qmd` | **Done**, gate passed 2026-10-19 | D-016 to D-018 |
 | 2: global spatial autocorrelation | `07_spatial_global.qmd` | **Done** (2026-10-20) | D-027 to D-031 |
 | 3: Local Moran's I vs Gi\* | `08_spatial_local.qmd` | **Done** (2026-10-20), except criterion 6, deferred to Phase 4; the primary method stays provisional | D-036 to D-041 |
-| 4: BAG models | `10_bag.qmd` | **In progress** on interim models (Phase 5's recommended form), refitted once Phase 5 settles the base model | D-047 to D-052 |
+| 4: BAG models | `10_bag.qmd` | **In progress** on interim models (Phase 5's recommended form), refitted once Phase 5 settles the base model. Headline estimates and comparisons pre-registered 2026-11-04 (@sec-bag-prereg), before any fit on the frozen vessel classification of either version | D-047 to D-052, D-091 |
 | 5: frequentist models | `11_models_frequentist.qmd` | Not started | @sec-models |
 | 6: INLA-SPDE | `12_models_inla.qmd` | Not started | @sec-models |
 | 7: sensitivity | `13_sensitivity.qmd` | Not started | @sec-sensitivity |
 | 8: synthesis | `14_synthesis.qmd` | Not started | @sec-synthesis |
-| Data: GFW pipeline v5 | `01`, then `01a_compare_pipelines.qmd` | **v5 adopted as primary, v4 as sensitivity (2026-10-30, D-070).** Done: versioned layout, v4 roster, the v5 pull (2026-10-28), the combined grid (D-069) with v4's 02 → 05a re-rendered on it (2026-10-30), the comparison report for GFW (`reports/pipeline_compare/`). In progress: the v5 vessel and gear review, with 61 hull and 37 gear decisions recorded (2026-10-29 to 2026-10-30); the sheets from 03's last v5 render (2026-10-30) still hold 364 open vessel rows (339 of them list 5, the v4 roster's label changes) and 65 open gear rows. Next: 03 → 05 on v5 once the review is finished, then the descriptive BAG on both versions (v5 plan step 9) | `planning/gfw_pipeline_v5_plan.qmd`; D-053 to D-057, D-062 to D-064, D-068 to D-070 |
+| Data: GFW pipeline v5 | `01`, then `01a_compare_pipelines.qmd` | **v5 adopted as primary, v4 as sensitivity (2026-10-30, D-070).** Done: versioned layout, v4 roster, the v5 pull (2026-10-28), the combined grid (D-069) with v4's 02 → 05a re-rendered on it (2026-10-30), the comparison report for GFW (`reports/pipeline_compare/`). **The v5 vessel and gear review is finished and frozen (2026-11-04, D-090):** both review sheets are empty; the crosswalk, the gear corrections and the v5 fishing roster (`references/fishing_roster_v5.csv`) are committed; the 129 list 5 rejects of vessels v4 types FISHING are accept/non_fishing (D-071). v5 Primary: 1,244 vessels, 92,961 VP h and 28,569 AFE h, none of it UNRESOLVED gear. 03 → 05 are re-rendered on v5 (with 02a, first time on v5) and on v4; `r/paths.R` now defaults to v5. Next: 03b on v5, 05a → 10 on v5, then the descriptive BAG on both versions (v5 plan step 9) | `planning/gfw_pipeline_v5_plan.qmd`; D-053 to D-057, D-062 to D-064, D-068 to D-070 |
 | Data: vessel home ports | `03b_port_visits.qmd` | **Done on v4 (2026-11-03):** the port-visit pull, the home-port and distance tables, the GARFO disagreement review (55 of 55 in-scope vessels, D-087) and the anchorage review (28 of 28, D-089). Next: the pull and both reviews on v5, once its vessel and gear review is finished; then the port tables are frozen with the crosswalk before 13 | @sec-ports; D-080 to D-089 |
 
 Every number typed in this plan was measured on the 2026-10-06 pull, which
@@ -759,7 +759,7 @@ Y^(1 − *p*/2). Using the measured powers:
 | AFE, cell × stage × season | **Tweedie** (*p* estimated) *vs* **delta-Gamma**, with a season term | Continuous with exact zeros. *p* ≈ 1.7. |
 | AFE, cell × month (mobile) / cell × season-year (fixed) | **Delta-Gamma / delta-lognormal** (hurdle) | 84–97% zeros within the domain. Occupancy and intensity probably respond differently near turbines (@sec-models). |
 
-### Scope per gear
+### Scope per gear {#sec-scope}
 
 Every gear and dataset gets the full descriptive treatment at all three
 descriptive time steps (@sec-time-steps). The table covers the models.
@@ -1583,7 +1583,7 @@ position lies within 100 m of its layout point, that every date falls inside
 the analysis window, that every foundation lies inside its own lease, and
 that no cell's exposure ever decreases.
 
-### BAG design
+### BAG design {#sec-bag-design}
 
 Before–After–Gradient (Methratta 2020, 2021) estimates the change in the
 **spatial gradient** of effort with distance from the development, between
@@ -1609,8 +1609,10 @@ $$
   low-rank smooth of `dist_lease_km`.
 - **z**<sub>c</sub> holds the static environmental covariates (@sec-env):
   `s(depth_m)`, slope, BPI and, once available, habitat shares.
-- *γ*<sub>s</sub> are the **BAG effects**. The change in the inside / 0–2 km
-  rate ratio between Stage 1 and Stages 2 and 3 is the headline estimate.
+- *γ*<sub>s</sub> are the **BAG effects**. The headline estimate is the
+  Stage 3 × inside rate ratio against Stage 1 (Stage 3 × near where the bands
+  are pooled); the Stage 2 terms are reported as anticipation
+  (@sec-bag-prereg, D-078, D-091).
 - *ω*<sub>c</sub> is a spatial random effect (Phase 5 decides its form).
 
 **Timing model: cell × month × gear** (VP and mobile AFE; fixed AFE at cell ×
@@ -1719,20 +1721,40 @@ settled the base model (the Phase 3 power simulation has the same dependency,
    simulate responses from the base model. Draw new spatial random effects in
    each simulation rather than conditioning on the fitted ones, so spatial
    uncertainty is included (conservative).
-2. Inject a known BAG effect: multiply the simulated mean by (1 − *e*) in the
-   `inside` and `0–2` km bands in Stage 3 (and, for the timing model, as a
-   function of turbine distance after installation). Effect sizes
-   *e* ∈ {20, 30, 50}% (D-049), plus *e* = 0 to check the false-positive rate.
+2. Inject a known BAG effect in Stage 3, in the shape that matches the
+   gear's headline (D-091; @sec-bag-prereg). Effects are planted by each
+   cell's own band, whatever band scheme the refit uses:
+   - **Matching scenario**, which defines the MDE. Bands fitted in full:
+     multiply the simulated mean by (1 − *e*) in the `inside` band only, so
+     the MDE is that of the Stage 3 × inside term. Bands pooled (D-076):
+     by (1 − *e*) in `inside` and `0–2` km, the cells of the `near` term.
+     Effect sizes *e* ∈ {20, 30, 50}% (D-049), plus *e* = 0 to check the
+     false-positive rate.
+   - **Fading gradient**, for the power of the gradient test only: (1 − *e*)
+     inside, (1 − *e*/2) at 0–2 km and (1 − *e*/4) at 2–4 km, at
+     *e* = 30% alone. Displacement that weakens with distance is the shape
+     the test exists to detect. Its *e* = 0 run is the matching scenario's,
+     since nothing is planted, so this adds one effect size per gear
+     (about 2,500 refits in all, against about 2,000 for one scenario).
+
+   For the timing model, the effect is planted as a function of turbine
+   distance after installation.
 3. Refit the full BAG model to each simulated dataset and record whether the
-   95% CI of the headline rate ratio excludes 1, its bias, and the CI coverage.
+   95% CI of the headline rate ratio excludes 1, its bias and the CI
+   coverage, and whether the gradient test (the Wald test of all Stage 3 ×
+   band terms) rejects at α = 0.05.
 4. 100 simulations per effect size and model (decision 2026-10-20, D-049;
    `set.seed(42)`, parallel worker processes via `callr`, cached with
    `fit_cached()`). Increase to 500 for any gear whose power curve crosses 0.8
-   between two tested effect sizes, to pin down the MDE.
+   between two tested effect sizes, to pin down the MDE (matching scenario
+   only).
 
 **Outputs.** Power curves per gear × dataset × model; a table of the
-**minimum detectable effect** (MDE, the smallest *e* with power ≥ 0.8); the
-false-positive rate at *e* = 0 (should be close to 0.05); bias and coverage.
+**minimum detectable effect** (MDE, the smallest *e* with power ≥ 0.8 in
+the matching scenario), with the scenario that defines it; the
+false-positive rate at *e* = 0 (should be close to 0.05) for the headline
+term and for the gradient test; the gradient test's power in the matching
+scenario at each *e* and in the fading gradient at 30%; bias and coverage.
 Written to `models/power_*.csv` with provenance sidecars.
 
 **Vessel clustering.** A cell-level model treats cells as the only source of
@@ -1764,7 +1786,9 @@ The Phase 7 sensitivity runs use the same tables.
 
 **Use of the result.**
 
-- Report every BAG estimate next to its MDE.
+- Report every BAG estimate next to its MDE, and the gradient test next to
+  its power in both scenarios (a non-rejection with low power in the fading
+  gradient says little about displacement).
 - A gear × dataset with an **MDE above 50%** is reported descriptively
   (steps 1–2), with its MDE stated, not as a hypothesis test.
 - The MDE sets the pre-trend equivalence margin (@sec-bag-pretrend).
@@ -2008,6 +2032,115 @@ datasets carries the weight. VP (presence) and AFE (apparent fishing) measure
 effort differently: the same direction in both is much stronger than either
 alone, and a disagreement is a finding to explain, not noise to average
 away.
+
+### Pre-registered estimates and comparisons {#sec-bag-prereg}
+
+Fixed on 2026-11-04 (D-091), after the vessel classification of both
+pipeline versions was frozen and before any BAG model was fitted on it.
+This section lists **which** estimates answer the study question and
+**which** comparisons test them. The rules for reading them are those of
+@sec-bag-support and @sec-bag-reading, cited here, not restated. A change
+after this point is a new decision in `planning/decisions.md`, marked as a
+deviation from this section, and the pre-registered result is reported
+beside the changed one.
+
+**Frozen inputs.** The decisions, gear corrections and v5 crosswalk
+(commit 110dae1), the v5 fishing roster (d7e4c6c) and the v4 crosswalk
+(9b052bf), with the analysis tables 04 → 05 built from them on both versions
+(D-090). Interim fits exist from 10's renders of 2026-10-27 to 2026-10-31 on
+v4 tables that predate the freeze. Their estimates were not looked at, and
+they do not carry over: `fit_cached()` keys each fit on the data it reads,
+so every fit on the frozen tables is new.
+
+**Primary analysis.** GFW pipeline **v5**, **Primary** set (D-070). v4 and
+Strict have the roles set out below.
+
+**Headline estimates.** One per dataset × gear, at most five:
+
+| Dataset | Gear | Model | Headline term |
+|---|---|---|---|
+| VP | MOBILE | Stage × season BAG, NB2 | Stage 3 × inside |
+| VP | FIXED | Stage × season BAG, NB2 | Stage 3 × inside |
+| VP | POLE_AND_LINE | Stage × season BAG, NB2 | Stage 3 × inside |
+| AFE | MOBILE | Stage × season BAG, delta-Gamma or Tweedie | Stage 3 × inside |
+| AFE | FIXED | Stage × season BAG, delta-Gamma or Tweedie, **if the support rule allows it** | Stage 3 × inside |
+
+- **The quantity.** The rate ratio exp(*γ*) of the `inside` band against the
+  8–15 km reference ring in Stage 3, relative to the same ratio in Stage 1,
+  with its 95% CI, read against the gear's MDE (@sec-bag-power). Where the
+  support rule (D-076) pools the bands, the headline is **Stage 3 × near**
+  (inside + 0–2 km), a different quantity, and is labelled so. Stage 2
+  enters only as mechanism (step 4 of @sec-bag-reading): its terms are
+  reported, never headlines (@sec-bag-design's term list was aligned with
+  this on 2026-11-04).
+- **The gradient test.** Beside the verdict, one Wald test per headline
+  model: are all Stage 3 × band terms zero at once (inside, 0–2, 2–4 and
+  4–8 km, or near and mid where the bands are pooled; for a delta-Gamma
+  fit, those terms of both parts together)? It is a χ² test on the fitted
+  fixed-effect covariance, with as many degrees of freedom as terms, at
+  α = 0.05. It answers whether the shape of the gradient changed anywhere,
+  which a single band cannot. It is reported as *gradient change detected*
+  or *no evidence of a gradient change*, with its power from
+  @sec-bag-power. Being a significance test, it cannot show that the
+  gradient did **not** change; that reading belongs to the verdict's *no
+  change larger than the MDE*. It is computed on the headline model and on
+  the v4 refit, and does not alter the verdict.
+- **The full grid is reported.** Every stage × band term of every headline
+  model (Stages 2 and 3 × the four bands, or × near and mid), as rate ratios
+  with 95% CIs, and a gradient profile per gear: the rate ratio by band, one
+  line per stage. These are estimates, not verdicts: the robustness checks
+  are not applied to them, and they are read for the shape of the change
+  (confined to the leases, spread into 0–2 km, or fading with distance).
+- **The model** is the shared stage × season BAG model of @sec-bag-design,
+  in `sdmTMB` (@sec-models). What is fixed now is the **rule** that chooses
+  each open setting, not its outcome: the response family (NB2 for VP;
+  delta-Gamma vs Tweedie for AFE by spatial-block CV, unless the hurdle
+  parts' BAG terms have opposite signs, which requires the hurdle; Phase 5
+  step 2), the random-field structure (D-077), and the band scheme (D-076).
+  Each choice is recorded before the BAG terms are read.
+- **No pole-and-line AFE headline.** It is descriptive only (@sec-scope).
+- **No multiplicity correction across the headlines.** Each dataset × gear
+  is its own question with its own verdict and gradient test (D-078). The verdicts are read
+  together: the same direction in VP and AFE for a gear carries much more
+  weight than either alone, and a disagreement is reported as a finding
+  (@sec-bag-reading, "Weighing the evidence").
+
+**Gates and verdicts** are those of @sec-bag-reading: the support rule,
+convergence, power (MDE ≤ 50%), the pre-trend equivalence test
+(@sec-bag-pretrend) and the random-field rule; then the headline verdict
+(*change detected*, *no change larger than the MDE*, or *inconclusive*). A
+gear that fails a gate is reported descriptively with its MDE, never as "no
+effect".
+
+**Counted robustness checks.** The four of D-078, and no others: without
+the cells ever inside a safety zone; the fleet-size covariate; leave one
+vessel out; the fixed cohort (D-074). A headline is **robust** if none of
+them shifts it (`check_outcome()`).
+
+**Comparisons with their own role.** Each is reported against every
+headline but does not count as a robustness check:
+
+| Comparison | Role | If it differs from the headline |
+|---|---|---|
+| **v4 refit** of the same model on the v4 Primary set (D-090) | Pipeline sensitivity (D-070) | It shifts the headline (`check_outcome()`): the verdict is marked **version-sensitive**. Where the descriptive BAG on both versions (v5 plan, Section 4.4, step 5) finds that dataset × gear's stage × band contrasts differ beyond bootstrap noise, the v4 estimate is **co-primary** for it, and a firm verdict needs both versions to agree |
+| Exclusion upper bound (D-074) | Bound on what the activity exclusions could hide | Shifts the headline: marked **classification-sensitive** (D-078) |
+| Pre-trend-term models (D-018) | Set by the pre-trend gate | Non-parallel: **replaces** the headline. Inconclusive: **co-primary**. Parallel: reported sensitivity (D-078) |
+| Strict vs Primary | The effect of vessel processing, a methods result in its own right (@sec-synthesis) | Reported, with no effect on any verdict |
+| INLA-SPDE refit (Phase 6) | Confirmation in a second inferential framework (@sec-models) | Reported beside the `sdmTMB` estimate; a difference is explained, and does not change the verdict |
+
+**Read together, not counted.** The rest of the Phase 7 table
+(@sec-sensitivity) is read for patterns across runs (D-078).
+
+**Mechanism, not headlines.** The Stage 2 × band terms (anticipation,
+D-075), the timing and leads models, the foundation-distance response
+*h*(·), the active-construction and safety-zone terms, the delta-Gamma
+parts, and the mobile vs fixed gear contrast. They are reported with the
+headline and explain it. They never substitute for it (D-078).
+
+**The verdict per gear** is that of @sec-bag-reading, with the flags above:
+for example *decrease detected, robust, version-sensitive*. It is written to
+`bag_reading` for each version, and the final table (Phase 7) carries the v4
+comparison and the flags.
 
 ### Limits of the within-AOI BAG {#sec-bag-limits}
 
@@ -2449,6 +2582,7 @@ grid: variant × outcome, with the estimate and CI.
 | Variant | Purpose |
 |---|---|
 | Strict vs Primary (all-gear) | The effect of vessel processing, as a result in its own right |
+| v4 refit of every headline model on the v4 Primary set (D-070, D-091) | GFW pipeline version. Its own column, not a counted check: a shift marks the verdict *version-sensitive*, and it is co-primary for any dataset × gear whose descriptive BAG differs between versions (@sec-bag-prereg) |
 | Drop `edge` + `outside` cells | AOI boundary effects |
 | Drop dual-permitted MMSIs (`vessel_permit_groups.csv`) | Gear assignment for mixed-fishery vessels |
 | AFE with imputed effort for added hulls (from `04`) | The undercount in caveat 3 |

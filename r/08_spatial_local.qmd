@@ -513,7 +513,8 @@ baseline run (seed 42, queen), then runs that change one thing each.
 
 - **Seeds:** `r paste(qparams$seeds_extra, collapse = ", ")`.
 - **Weights:** second-order queen, and the Phase 2 distance band for that
-  dataset × gear.
+  dataset × gear where the Phase 2 gate adds one (none where it found queen
+  weights adequate).
 - **Leave-one-vessel-out:** the top `r qparams$top_k` MMSIs per dataset ×
   gear (by Primary hours over the window), each removed from the surface,
   re-aggregated from the record-level file.
@@ -537,7 +538,12 @@ score <- function(b, a) bind_rows(
 base_of <- \(ds, g, st) base$res[[which(base$dataset == ds & base$gear_class == g & base$stage == st)]]
 
 # seeds and weights
-band_of <- \(ds, g) paste0("band", rho0$phase3_band_km[rho0$dataset == ds & rho0$gear_class == g])
+# the Phase 2 band weights' name, or none when the gate found queen adequate
+# (phase3_band_km NA, e.g. v5 AFE pole-and-line): that gear has no band run
+band_of <- function(ds, g) {
+  k <- rho0$phase3_band_km[rho0$dataset == ds & rho0$gear_class == g]
+  if (is.na(k)) character() else paste0("band", k)
+}
 alt_runs <- stage_surf |>
   mutate(runs = pmap(list(dataset, as.character(gear_class), stage, sdat), function(ds, g, st, s) {
     specs <- bind_rows(tibble(type = "seed", run = as.character(qparams$seeds_extra),

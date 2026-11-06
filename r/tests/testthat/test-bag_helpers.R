@@ -348,3 +348,61 @@ test_that("boot_band_rate() gives the pooled rate with an interval around it", {
   expect_true(inside$lo < inside$rate && inside$hi > inside$rate)
   expect_identical(b, boot_band_rate(d, B = 199))
 })
+
+test_that("warm_start() matches b_j by name and copies free same-shape parameters (D-097)", {
+  # parent: intercept, x, z; variant drops z and adds log_fleet
+  parent <- list(b_j = c(1, 2, 3), ln_kappa = matrix(c(-1, -1), 2, 1), omega_s = matrix(1:4 / 10, 4, 1),
+                 epsilon_st = array(5, c(4, 3, 1)), ar1_phi = 0.7, ln_phi = 0.3, zeta_s = array(0, c(4, 0, 1)))
+  template <- list(b_j = c(0, 0, 0), ln_kappa = matrix(0, 2, 1), omega_s = matrix(0, 4, 1),
+                   epsilon_st = array(0, c(4, 3, 1)), ar1_phi = 0, ln_phi = 0, zeta_s = array(0, c(4, 0, 1)),
+                   b_smooth = c(0, 0))
+  # the variant holds the AR1 field fixed (map NA), as with spatiotemporal = "off"
+  map <- list(epsilon_st = factor(rep(NA, 12)), ar1_phi = factor(NA))
+  s <- warm_start(parent, c("(Intercept)", "x", "z"), template, c("(Intercept)", "log_fleet", "x"), map)
+  # shared terms by name, the new one at 0, the dropped one gone
+  expect_equal(s$b_j, c(1, 0, 2))
+  # free and the same shape: copied, shape kept
+  expect_identical(s$ln_kappa, parent$ln_kappa)
+  expect_identical(s$omega_s, parent$omega_s)
+  expect_equal(s$ln_phi, 0.3)
+  # held fixed in the variant: left at the variant's own default
+  expect_false(any(c("epsilon_st", "ar1_phi") %in% names(s)))
+  # zero-length, or absent from the parent: not set
+  expect_false(any(c("zeta_s", "b_smooth") %in% names(s)))
+  # a shape mismatch (another mesh) is not copied
+  t2 <- modifyList(template, list(omega_s = matrix(0, 5, 1)))
+  expect_false("omega_s" %in% names(warm_start(parent, c("(Intercept)", "x", "z"), t2,
+                                                 c("(Intercept)", "log_fleet", "x"), map)))
+  # b_j must match its design matrix
+  expect_error(warm_start(parent, c("(Intercept)", "x"), template, c("(Intercept)", "log_fleet", "x"), map))
+})
+
+test_that("warm_start() leaves out the AR1 field sdmTMB maps off without it (D-097)", {
+  skip_if_not_installed("sdmTMB")
+  # templates only (do_fit = FALSE): no optimisation, so this is quick. Pins
+  # the installed sdmTMB's behaviour that warm_start() relies on
+  d <- sdmTMB::pcod_2011
+  mesh <- sdmTMB::make_mesh(d, c("X", "Y"), cutoff = 20)
+  tmpl <- function(st, f = density ~ depth_scaled) suppressMessages(
+    sdmTMB::sdmTMB(f, data = d, mesh = mesh, family = sdmTMB::tweedie(), spatial = "on",
+                   spatiotemporal = st, time = "year", do_fit = FALSE))
+  parent <- tmpl("ar1")
+  nofield <- tmpl("off")
+  # the no-field template keeps epsilon_st at full size, mapped off
+  expect_identical(dim(nofield$tmb_params$epsilon_st), dim(parent$tmb_params$epsilon_st))
+  expect_true(all(is.na(nofield$tmb_map$epsilon_st)))
+  pars <- parent$tmb_params
+  pars$omega_s[] <- 0.1; pars$epsilon_st[] <- 0.2; pars$ln_kappa[] <- -2
+  s <- warm_start(pars, colnames(parent$tmb_data$X_ij[[1]]), nofield$tmb_params,
+                  colnames(nofield$tmb_data$X_ij[[1]]), nofield$tmb_map)
+  expect_false(any(c("epsilon_st", "ln_tau_E", "ar1_phi") %in% names(s)))
+  expect_true(all(c("omega_s", "ln_tau_O", "ln_kappa", "ln_phi", "thetaf") %in% names(s)))
+  expect_true(all(s$omega_s == 0.1))
+  # a variant with one more term: the parent's b_j by name, the new one at 0
+  extra <- tmpl("ar1", density ~ depth_scaled + depth_scaled2)
+  pars$b_j[] <- c(1, 2)
+  s2 <- warm_start(pars, colnames(parent$tmb_data$X_ij[[1]]), extra$tmb_params,
+                   colnames(extra$tmb_data$X_ij[[1]]), extra$tmb_map)
+  expect_equal(as.vector(s2$b_j), c(1, 2, 0))
+  expect_true(all(s2$epsilon_st == 0.2))
+})

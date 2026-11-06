@@ -191,3 +191,23 @@ test_that("fit_cached() fits once, reuses the cache, and refits when the key cha
   expect_equal(calls, 3)
   expect_error(fit_cached(list(1), fit, dir = dir), "named list")
 })
+
+test_that("fit_cached() leaves no cache file when the fit fails, and no temporary files (D-099)", {
+  dir <- file.path(tempdir(), "fit_cache_atomic_test")
+  unlink(dir, recursive = TRUE)
+  key <- list(data = data.frame(y = 1:3), family = "nbinom2")
+  # a failed fit: nothing is cached, so the next call fits again
+  expect_error(fit_cached(key, \() stop("no convergence"), dir = dir, packages = "stats"), "no convergence")
+  expect_length(list.files(dir), 0)
+  expect_false(file.exists(fit_cache_path(key, dir, packages = "stats")))
+  # a successful fit: exactly the fit and its sidecar, no .tmp left behind
+  fit_cached(key, \() list(value = 1), dir = dir, packages = "stats")
+  f <- basename(as.character(fit_cache_path(key, dir, packages = "stats")))
+  expect_setequal(list.files(dir), c(f, paste0(f, ".json")))
+  # a write that fails (the cache "folder" is an ordinary file, so nothing
+  # can be written into it): the error surfaces and no cache file appears
+  blocker <- file.path(tempdir(), "fit_cache_not_a_dir")
+  writeLines("x", blocker)
+  expect_error(suppressWarnings(fit_cached(key, \() list(value = 1), dir = blocker, packages = "stats")))
+  expect_false(file.exists(file.path(blocker, f)))
+})

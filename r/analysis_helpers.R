@@ -235,7 +235,8 @@ cells_to_raster <- function(ix, iy, layer, value, template, layers = unique(laye
 # `label`: a readable name, stored in the sidecar only (not part of the key).
 #
 # Writes <dir>/<hash>.rds and a <hash>.rds.json sidecar (label, the key's
-# element names, package versions, R version, fit time in seconds).
+# element names, package versions, R version, fit time in seconds), each
+# appearing only once complete (D-099).
 # Returns the fit. Not a pure function: it reads and writes `dir`.
 fit_cache_packages <- c("sdmTMB", "glmmTMB", "TMB", "fmesher", "mgcv")
 
@@ -266,13 +267,23 @@ fit_cached <- function(key_inputs, fit_fun, dir = gfw_paths$models, label = NULL
   t0 <- Sys.time()
   fit <- fit_fun()
   elapsed <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
-  saveRDS(fit, f)
+  # Both files are written under temporary names in `dir`, then renamed into
+  # place, sidecar first (D-099). A rename within one folder is all or
+  # nothing, so a process killed mid-write leaves only a stray .tmp file:
+  # never a partial <hash>.rds that a later run (or a warm-started variant
+  # waiting for its parent, 10) would take for a finished fit, and never a
+  # .rds without its sidecar
+  tmp <- paste0(f, ".", Sys.getpid(), ".tmp")
+  on.exit(unlink(paste0(tmp, c("", ".json"))), add = TRUE)
+  saveRDS(fit, tmp)
   jsonlite::write_json(list(
     label = if (is.null(label)) NA_character_ else label,
     hash = hash, written = format(Sys.time(), tz = "UTC", usetz = TRUE),
     fit_seconds = round(elapsed, 1), key_elements = names(key_inputs),
     packages = as.list(versions), r_version = R.version.string),
-    paste0(f, ".json"), auto_unbox = TRUE, pretty = TRUE, digits = NA)
+    paste0(tmp, ".json"), auto_unbox = TRUE, pretty = TRUE, digits = NA)
+  stopifnot("could not move the fit's sidecar into place" = file.rename(paste0(tmp, ".json"), paste0(f, ".json")),
+            "could not move the fit into place" = file.rename(tmp, f))
   fit
 }
 

@@ -36,6 +36,12 @@ params:
   radius_km: !expr c(2, 5, 10)
   workers: 14              # parallel refit processes (callr; no sockets needed)
   fit_workers: 8           # parallel main-model fits (fewer: the monthly models are large)
+  # Of the fit_workers, at most heavy_workers fits over heavy_rows rows (the
+  # monthly timing and pre-trend models) run at once (D-097): they set the
+  # run's peak memory (a v5 render with eight fits at once ran out of
+  # memory, 2026-11-05)
+  heavy_workers: 2
+  heavy_rows: 100000
   # Leave-one-vessel-out: top vessels per dataset × gear, plus named hulls
   lovo_top_k: 10
   lovo_extra: !expr c("368175660")   # BUCKEYE: kept at the pre-Phase 4 screen, checked here
@@ -53,6 +59,11 @@ params:
   # Several hours of extra fits on a cold cache (cached after); false skips it.
   field_check: true
   cv_folds: 5
+  # Step 3 simulation power (D-096): off until Phase 5 settles the base model
+  # it simulates from (plan, "Simulation power analysis"). Off, Step 3 and its
+  # season-year base fits are skipped and every MDE is unknown (NA), which
+  # the gate does not read as "MDE above 50%". true runs it: days of refits
+  power_run: false
 ---
 
 ```{r setup, include=FALSE}
@@ -355,23 +366,52 @@ is uninformative. That is harmless, and it is the common case for the sparse
 gears.
 
 ```{r}
-cutoff <- qparams$mesh_cutoff_km
+# as.numeric (D-098): YAML gives `mesh_cutoff_km: 2` as the integer 2L, and
+# fmesher 0.8.0 ignores an integer cutoff, so the mesh had a vertex at every
+# data location instead of none closer than 2 km
+cutoff <- as.numeric(qparams$mesh_cutoff_km)
+stopifnot("mesh cutoff must be one positive number" = length(cutoff) == 1 && cutoff > 0)
 
-# a fit specification: the cache key and a fit function that runs anywhere
-make_spec <- function(id, d, formula, family, spatiotemporal = "off", time = NULL, knots = NULL) {
+# a fit specification: the cache key and a fit function that runs anywhere.
+# `start_from`: another spec on the same rows (so the same mesh and time
+# steps) whose cached fit this one starts its optimiser from (D-097): the
+# timing variants start from the main timing fit. Its cache hash joins the
+# key, so a changed parent refits its variants; specs without one keep their
+# key. `after` names the parent's cache file, which run_specs() waits for.
+make_spec <- function(id, d, formula, family, spatiotemporal = "off", time = NULL, knots = NULL,
+                      start_from = NULL) {
   force(d); force(formula); force(family); force(spatiotemporal); force(time); force(knots)
   cut <- cutoff
   key <- list(data = d, formula = formula, family = family, cutoff = cut, spatial = "on",
               spatiotemporal = spatiotemporal, time = time, knots = knots)
+  parent_file <- NULL
+  if (!is.null(start_from)) {
+    stopifnot("a warm start needs the parent's rows" = nrow(start_from$key$data) == nrow(d))
+    pf <- fit_cache_path(start_from$key, paths$models)
+    key$start_from <- attr(pf, "hash")
+    parent_file <- as.character(pf)
+  }
   fun <- function() {
     fam <- switch(family, nbinom2 = sdmTMB::nbinom2(), tweedie = sdmTMB::tweedie(),
                   delta_gamma = sdmTMB::delta_gamma())
     mesh <- sdmTMB::make_mesh(d, c("x_km", "y_km"), cutoff = cut)
+    if (is.null(parent_file))
+      return(sdmTMB::sdmTMB(formula, data = d, mesh = mesh, family = fam, offset = d$log_expo,
+                            spatial = "on", spatiotemporal = spatiotemporal, time = time, knots = knots,
+                            silent = TRUE))
+    # warm start (D-097): build the variant unfitted for its parameter
+    # layout and map, take the parent's estimates into it (warm_start_of(),
+    # bag_helpers.R), then fit. multiphase off: sdmTMB applies `start` after
+    # its first, non-spatial phase, so that phase would be discarded anyway
+    template <- sdmTMB::sdmTMB(formula, data = d, mesh = mesh, family = fam, offset = d$log_expo,
+                               spatial = "on", spatiotemporal = spatiotemporal, time = time, knots = knots,
+                               do_fit = FALSE)
+    start <- warm_start_of(parent_file, template)
     sdmTMB::sdmTMB(formula, data = d, mesh = mesh, family = fam, offset = d$log_expo,
                    spatial = "on", spatiotemporal = spatiotemporal, time = time, knots = knots,
-                   silent = TRUE)
+                   control = sdmTMB::sdmTMBcontrol(start = start, multiphase = FALSE), silent = TRUE)
   }
-  list(id = id, key = key, fun = fun)
+  list(id = id, key = key, fun = fun, after = parent_file)
 }
 get_fit <- \(spec) fit_cached(spec$key, spec$fun, dir = paths$models, label = spec$id)
 fit_ok <- \(f) { s <- sanity(f, silent = TRUE); isTRUE(s$hessian_ok && s$eigen_values_ok && s$nlminb_ok && s$gradients_ok) }
@@ -643,10 +683,12 @@ timing_sets <- timing_models |>
          spec_timing = pmap(list(id, plan, step, family), \(id, pl, step, fam)
            spec_or_null(pl$bands != "none", paste(id, "timing"), pl$data, timing_formula(step, pl$terms), fam,
                         "ar1", "time_year", knots = month_knots(step))),
-         # the same with development split into event-time leads (D-075)
-         spec_timing_leads = pmap(list(id, plan, step, family), \(id, pl, step, fam)
+         # the same with development split into event-time leads (D-075),
+         # started from the main timing fit (D-097) when there is one
+         spec_timing_leads = pmap(list(id, plan, step, family, spec_timing), \(id, pl, step, fam, parent)
            spec_or_null(!is.null(pl$lead_terms), paste(id, "timing leads"), pl$data,
-                        timing_formula(step, pl$lead_terms), fam, "ar1", "time_year", knots = month_knots(step))))
+                        timing_formula(step, pl$lead_terms), fam, "ar1", "time_year", knots = month_knots(step),
+                        start_from = parent)))
 
 # --- timing power at a season-year proxy (Step 3; D-094) ----------------------
 # A monthly timing refit takes hours, so every timing model's power is
@@ -775,10 +817,11 @@ ss_sets <- ss_sets |>
   mutate(spec_fleet = pmap(list(id, gear, data, family), \(id, g, d, fam)
     ss_spec(paste(id, "fleet"), add_log_fleet(d, g, "stage_season"), ss_fleet_formula, fam)))
 timing_sets <- timing_sets |>
-  mutate(spec_timing_fleet = pmap(list(id, gear, plan, step, family), \(id, g, pl, step, fam)
+  # started from the main timing fit (D-097): the same rows with one more term
+  mutate(spec_timing_fleet = pmap(list(id, gear, plan, step, family, spec_timing), \(id, g, pl, step, fam, parent)
     spec_or_null(pl$bands != "none", paste(id, "timing fleet"), add_log_fleet(pl$data, g, step),
                  timing_formula(step, c(pl$terms, "log_fleet")), fam, "ar1", "time_year",
-                 knots = month_knots(step))))
+                 knots = month_knots(step), start_from = parent)))
 
 # the fleet values each model sees (raw counts, before the log and centring)
 fleet_vp |> imap_dfr(\(f, step) f |> group_by(gear_class) |>
@@ -807,9 +850,14 @@ gc_specs <- map(set_names(datasets[gc_bands[datasets] != "none"]), function(ds) 
 ## Fit every model (parallel)
 
 Every specification above that is not yet cached is fitted here, up to
-`r qparams$fit_workers` at a time, each in its own R process. A fit that
-fails stops the render with its error. The power and leave-one-vessel-out
-refits (steps 3 and 8) run in their own worker pool.
+`r qparams$fit_workers` at a time, each in its own R process. Of those, at
+most `r qparams$heavy_workers` are large fits (over
+`r format(qparams$heavy_rows, big.mark = ",")` rows: the monthly timing
+and pre-trend models), which set the run's peak memory (D-097). The timing
+models' leads, fleet and no-field variants wait for the main timing fit and
+start from its estimates (D-097). A fit that fails stops the render with its
+error. The power and leave-one-vessel-out refits (steps 3 and 8) run in
+their own worker pool.
 
 ```{r}
 # compact(): the support rule (D-076) leaves some timing specs NULL
@@ -823,48 +871,136 @@ all_specs <- c(ss_sets$spec, ss_sets$spec_base, ss_sets$spec_nozone, compact(ss_
                # power bases (Step 3, D-094): the timing models' season-year
                # proxies and VP mobile's radius recovery. Fixed AFE's proxy
                # base is a new fit too: its timing model has the cx terms
-               compact(tpower_sets$spec_base), compact(list(radius_spec_base)))
-run_specs <- function(specs, workers) {
+               # only when Step 3 runs (D-096)
+               if (isTRUE(qparams$power_run)) c(compact(tpower_sets$spec_base), compact(list(radius_spec_base))))
+# Fits every spec not yet cached, `workers` at a time, each in its own R
+# process (callr). Scheduling (D-097):
+#   - at most `heavy_workers` fits over `heavy_rows` rows run at once; the
+#     other slots take smaller fits, so the large monthly models cannot all
+#     run together and exhaust memory;
+#   - a warm-started variant (spec$after, its parent's cache file) waits
+#     until that file exists;
+#   - parents before variants, then largest first, so the long fits start
+#     early and their variants can follow.
+# Polls every 5 s, and records each fit's peak resident memory from those
+# polls (a fit shorter than one poll may show NA). Returns a tibble of
+# model and peak_gb for the fits it ran.
+# Progress (D-099): quarto holds back R's messages until a chunk ends, so
+# each fit's start and end, and every `status_min` minutes a line per
+# running fit (minutes, CPU minutes, memory), are appended to
+# fit_progress.log in the report folder, where a long run can be watched.
+run_specs <- function(specs, workers, heavy_workers = qparams$heavy_workers,
+                      heavy_rows = qparams$heavy_rows, status_min = 30) {
+  progress_file <- file.path(paths$bag, "fit_progress.log")
+  dir.create(paths$bag, recursive = TRUE, showWarnings = FALSE)
+  progress <- function(...) cat(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), ..., "\n",
+                                file = progress_file, append = TRUE)
   todo <- keep(specs, \(s) !file.exists(fit_cache_path(s$key, paths$models)))
   message(length(todo), " of ", length(specs), " fits to run")
-  # largest data first, so the long fits start early
-  todo <- todo[order(-map_int(todo, \(s) nrow(s$key$data)))]
+  progress("run_specs:", length(todo), "of", length(specs), "fits to run;", workers, "workers")
+  last_status <- Sys.time()
+  rows_of <- \(s) nrow(s$key$data)
+  is_heavy <- \(s) rows_of(s) > heavy_rows
+  # a variant is ready once its parent's fit is cached
+  ready <- \(s) is.null(s$after) || file.exists(s$after)
+  todo <- todo[order(!map_lgl(todo, \(s) is.null(s$after)), -map_int(todo, rows_of))]
   running <- list()
+  peaks <- tibble(model = character(), peak_gb = numeric())
   while (length(todo) > 0 || length(running) > 0) {
-    while (length(running) < workers && length(todo) > 0) {
-      s <- todo[[1]]; todo <- todo[-1]
-      running[[s$id]] <- callr::r_bg(function(root, spec, dir) {
+    # fill free slots with the first ready spec that the heavy cap allows
+    repeat {
+      if (length(running) >= workers || length(todo) == 0) break
+      n_heavy <- sum(map_lgl(running, "heavy"))
+      i <- detect_index(todo, \(s) ready(s) && (!is_heavy(s) || n_heavy < heavy_workers))
+      if (i == 0) break
+      s <- todo[[i]]; todo <- todo[-i]
+      # user_profile = FALSE (D-099): the worker skips the project's
+      # .Rprofile, so renv is not activated in it (renv's activation takes
+      # one shared lock, and a worker that never released it stalled every
+      # later worker on 2026-11-06); libpath gives it this session's
+      # library, the renv project library, instead
+      p <- callr::r_bg(function(root, spec, dir) {
         setwd(root)
         suppressPackageStartupMessages(library(tidyverse))
+        # bag_helpers.R for warm_start_of() (D-097); it only defines
+        # functions and constants
         source("r/paths.R"); source("r/gfw_helpers.R"); source("r/analysis_helpers.R")
+        source("r/bag_helpers.R")
         fit_cached(spec$key, spec$fun, dir = dir, label = spec$id)
         TRUE
-      }, args = list(root = root, spec = s, dir = paths$models), supervise = TRUE)
+      }, args = list(root = root, spec = s, dir = paths$models), supervise = TRUE,
+      user_profile = FALSE, libpath = .libPaths())
+      running[[s$id]] <- list(p = p, heavy = is_heavy(s), peak = NA_real_, start = Sys.time())
+      progress("start:", s$id, "| rows", rows_of(s), if (is_heavy(s)) "| heavy" else "",
+               if (!is.null(s$after)) "| warm" else "")
     }
+    # nothing running and nothing can start: a variant's parent is neither
+    # cached nor queued, so waiting would never end
+    if (length(running) == 0 && length(todo) > 0)
+      stop("fits waiting on a parent that is not scheduled: ", paste(map_chr(todo, "id"), collapse = ", "))
     Sys.sleep(5)
     for (nm in names(running)) {
-      p <- running[[nm]]
-      if (!p$is_alive()) {
-        if (p$get_exit_status() != 0) stop("fit failed: ", nm, "\n", p$read_all_error())
+      r <- running[[nm]]
+      if (r$p$is_alive()) {
+        rss <- tryCatch(r$p$get_memory_info()[["rss"]], error = \(e) NA_real_)
+        if (!is.na(rss)) running[[nm]]$peak <- max(r$peak, rss, na.rm = TRUE)
+      } else {
+        mins <- round(as.numeric(difftime(Sys.time(), r$start, units = "mins")), 1)
+        if (r$p$get_exit_status() != 0) {
+          progress("FAILED:", nm, "after", mins, "min")
+          stop("fit failed: ", nm, "\n", r$p$read_all_error())
+        }
+        progress("done:", nm, "|", mins, "min | peak", round(r$peak / 1e9, 2), "GB")
+        peaks <- add_row(peaks, model = nm, peak_gb = round(r$peak / 1e9, 2))
         running[[nm]] <- NULL
       }
     }
+    # every status_min minutes, one line per running fit: wall minutes, CPU
+    # minutes (a fit whose CPU stops rising is stuck; one whose CPU tracks
+    # its wall time is working) and current memory
+    if (difftime(Sys.time(), last_status, units = "mins") >= status_min) {
+      last_status <- Sys.time()
+      iwalk(running, function(r, nm) {
+        cpu <- tryCatch(sum(r$p$get_cpu_times()[c("user", "system")]), error = \(e) NA_real_)
+        rss <- tryCatch(r$p$get_memory_info()[["rss"]], error = \(e) NA_real_)
+        progress("running:", nm, "|", round(as.numeric(difftime(Sys.time(), r$start, units = "mins"))), "min |",
+                 round(cpu / 60), "CPU min |", round(rss / 1e9, 2), "GB")
+      })
+      progress("queued:", length(todo))
+    }
   }
+  progress("run_specs: finished")
+  peaks
 }
-t_fit <- system.time(run_specs(all_specs, qparams$fit_workers))[["elapsed"]]
+t_fit <- system.time(fit_peaks <- run_specs(all_specs, qparams$fit_workers))[["elapsed"]]
 round(t_fit / 60, 1)
 
+# per fit: time, convergence, optimiser iterations (to see what the warm
+# starts save), whether it was warm-started, and its peak memory when it
+# was fitted in this render (NA when it came from the cache)
 fit_log <- map_dfr(all_specs, function(s) {
   f <- as.character(fit_cache_path(s$key, paths$models))
   m <- jsonlite::read_json(paste0(f, ".json"))
+  fit <- readRDS(f)
+  # mesh_vertices: a check on the cutoff (D-098); at 2 km a full-grid
+  # model has several hundred, not one per cell
   tibble(model = s$id, rows = nrow(s$key$data), fit_minutes = round(m$fit_seconds / 60, 1),
-         converged = fit_ok(readRDS(f)))
-})
+         converged = fit_ok(fit), iterations = fit$model$iterations %||% NA_integer_,
+         warm_start = !is.null(s$after), mesh_vertices = fit$spde$mesh$n)
+}) |>
+  left_join(fit_peaks, by = "model")
 save_tab(fit_log, "bag_fit_log")
 fit_log |> knitr::kable()
 ```
 
 ## Step 3: simulation power
+
+**Run only with `power_run: true` (D-096).** Power simulates from the base
+model Phase 5 settles, so until then it is skipped: every MDE is unknown
+(NA), estimates are read without an equivalence margin, the pre-trend test
+uses the plan's placeholder margin, and no gear is marked descriptive-only
+for want of an MDE. This render: `power_run` =
+`r isTRUE(qparams$power_run)`.
 
 For each dataset × gear: fit the **base model** (the stage × season model
 without the BAG terms), simulate `r qparams$power_nsim` new datasets from it
@@ -945,7 +1081,8 @@ run_refit_jobs <- function(spec_id, d, family, jobs, term, terms, wald_terms = N
   # a changed specification never reuses old results. wald_terms and a
   # non-default field join the spec only when given, so a stage × season
   # caller keeps its existing key
-  spec <- list(data = d, formula = formula, family = family, cutoff = qparams$mesh_cutoff_km,
+  # `cutoff`: the numeric mesh cutoff (D-098), as for the main fits
+  spec <- list(data = d, formula = formula, family = family, cutoff = cutoff,
                term = term, terms = terms)
   if (!is.null(wald_terms)) spec$wald_terms <- wald_terms
   if (spatiotemporal != "iid" || time != "stage_num") {
@@ -1012,7 +1149,10 @@ run_refit_jobs <- function(spec_id, d, family, jobs, term, terms, wald_terms = N
           saveRDS(cbind(res, tag = jobs$tag[j]), file.path(dirname(spec_file), paste0(jobs$tag[j], ".rds")))
         }
         TRUE
-      }, args = list(root = root, spec_file = spec_file, jobs_file = jf), supervise = TRUE)
+      # user_profile = FALSE and this session's library: no renv
+      # activation, so no shared lock to wait on (D-099)
+      }, args = list(root = root, spec_file = spec_file, jobs_file = jf), supervise = TRUE,
+      user_profile = FALSE, libpath = .libPaths())
     })
     walk(procs, \(p) p$wait())
     fails <- keep(procs, \(p) p$get_exit_status() != 0)
@@ -1024,7 +1164,7 @@ run_refit_jobs <- function(spec_id, d, family, jobs, term, terms, wald_terms = N
 }
 ```
 
-```{r}
+```{r power, eval = isTRUE(get0("qparams")$power_run)}
 # the scenario that defines a gear's MDE (D-091): the planted effect covers
 # exactly the cells of its headline term
 matching_scenario <- \(bands) if (bands == "full") "inside" else "near"
@@ -1145,7 +1285,7 @@ p
 
 ### Timing-model power at season-year (D-094)
 
-```{r}
+```{r timing-power, eval = isTRUE(get0("qparams")$power_run)}
 # Each timing model's power on its season-year proxy (fixed AFE: its own
 # season-year model). Same steps as the stage × season runs: simulate from
 # the base model with new fields, plant the effect, refit the full model
@@ -1195,7 +1335,7 @@ timing_mde |> kable_round(2)
 
 ### Radius recovery: VP mobile at season-year (D-065, D-094)
 
-```{r}
+```{r radius-recovery, eval = isTRUE(get0("qparams")$power_run)}
 # One set of simulations, planted at 5 km, refitted at every radius: the
 # same response vectors at each radius, so the AIC comparison is within a
 # simulation. Runs only when the season-year support rule kept λ
@@ -1231,6 +1371,22 @@ if (!is.null(radius_runs)) {
   radius_recovery |> kable_round(3)
 } else radius_choice_allowed <- FALSE
 radius_choice_allowed
+```
+
+```{r power-skipped, eval = !isTRUE(get0("qparams")$power_run)}
+# Step 3 not run (D-096): the tables later steps read, with every power
+# result unknown. descriptive_only is NA, not TRUE, so bag_gate() does not
+# fail a gear for an MDE that was never estimated; bag_verdict() with an NA
+# MDE gives only "decrease" / "increase" / "inconclusive"; the pre-trend
+# margin falls back to the plan's placeholder (pretrend_margin()). Nothing is
+# saved under the power tables' names, so no file can be mistaken for a result
+mde <- ss_sets |> transmute(id, dataset, gear, bands, mde = NA_real_, fpr = NA_real_, descriptive_only = NA)
+gradient_power <- tibble(id = character(), scenario = character(), effect = numeric(), power = numeric())
+timing_mde <- tpower_sets |>
+  transmute(id, bands, mde = NA_real_, mde_basis = "power not run (D-096)")
+# the D-065 rule needs the recovery runs, so the radius stays at 5 km
+radius_choice_allowed <- FALSE
+message("Step 3 power skipped (power_run = false, D-096): every MDE is NA")
 ```
 
 ## Step 4: pre-trend equivalence test
@@ -1409,18 +1565,22 @@ cv_sets <- ss_sets |>
 
 # the timing models without the AR1 year field, for the AIC comparison
 field_timing <- timing_sets |> filter(!map_lgl(spec_timing, is.null)) |>
-  mutate(spec_nofield = pmap(list(id, plan, step, family), \(id, pl, step, fam)
+  # started from the timing fit (D-097); its AR1 field is left out of the start
+  mutate(spec_nofield = pmap(list(id, plan, step, family, spec_timing), \(id, pl, step, fam, parent)
     make_spec(paste(id, "timing no year field"), pl$data, timing_formula(step, pl$terms), fam,
-              knots = month_knots(step))))
+              knots = month_knots(step), start_from = parent)))
 
 field_specs <- c(cv_sets$spec, field_timing$spec_nofield)
-t_field <- system.time(run_specs(field_specs, qparams$fit_workers))[["elapsed"]]
+t_field <- system.time(field_peaks <- run_specs(field_specs, qparams$fit_workers))[["elapsed"]]
 round(t_field / 60, 1)
-# fit times of the new jobs (the CV jobs are 5 fits each)
+# fit times of the new jobs (the CV jobs are 5 fits each), whether each was
+# warm-started (D-097), and peak memory when fitted in this render
 field_log <- map_dfr(field_specs, function(s) {
   m <- jsonlite::read_json(paste0(as.character(fit_cache_path(s$key, paths$models)), ".json"))
-  tibble(model = s$id, rows = nrow(s$key$data), fit_minutes = round(m$fit_seconds / 60, 1))
-})
+  tibble(model = s$id, rows = nrow(s$key$data), fit_minutes = round(m$fit_seconds / 60, 1),
+         warm_start = !is.null(s$after))
+}) |>
+  left_join(field_peaks, by = "model")
 save_tab(field_log, "bag_field_fit_log")
 
 # cross-validation scores; Δ against the fitted model (iid per stage)

@@ -613,6 +613,62 @@ fit_wald <- function(fit, terms, parts = 1) {
   wald_joint(fc$estimate[tm], fc$V[tm, tm, drop = FALSE])
 }
 
+# Warm starts (D-097) ------------------------------------------------------------
+# A variant of a fitted model (the timing model with lead bins, the fleet
+# term, or without its AR1 year field) on the same rows, and so the same
+# mesh and time steps, starts its optimiser from the parent's estimates
+# instead of from zero. The maximum is the same; only the path to it is
+# shorter.
+#
+# Builds sdmTMBcontrol(start = ...) for the variant from parameter lists:
+# `parent_pars`, the parent's full parameter list at its optimum (fixed and
+# random, as from parList()); `parent_cols`, the column names of its
+# fixed-effect design matrix; `template_pars`, `template_cols` and
+# `template_map`, the same for the variant, from sdmTMB(..., do_fit = FALSE).
+#   - b_j (the linear fixed effects) is matched by column name: shared terms
+#     take the parent's value, new terms (log_fleet, the lead bins) start at
+#     0, and terms the variant drops are left out.
+#   - every other parameter is copied when the parent has it with the same
+#     dimensions, except one the variant holds fixed: any NA in its map. A
+#     variant without the AR1 field keeps epsilon_st and ar1_phi at full size
+#     but mapped off, and copying them would fix the field at the parent's
+#     values rather than switch it off.
+#   - zero-length parameters, and b_j2 (delta models, not warm-started), are
+#     left at their defaults.
+# Returns a named list for sdmTMBcontrol(start = ...).
+warm_start <- function(parent_pars, parent_cols, template_pars, template_cols, template_map) {
+  stopifnot(length(parent_pars$b_j) == length(parent_cols),
+            length(template_pars$b_j) == length(template_cols))
+  # linear fixed effects by name; new terms at 0
+  b <- stats::setNames(rep(0, length(template_cols)), template_cols)
+  shared <- intersect(template_cols, parent_cols)
+  b[shared] <- as.vector(parent_pars$b_j)[match(shared, parent_cols)]
+  b_j <- template_pars$b_j
+  b_j[] <- unname(b)
+  # every other parameter: same name, same shape, free in the variant
+  same_shape <- function(a, t) identical(dim(a), dim(t)) && length(a) == length(t)
+  held_fixed <- function(nm) !is.null(template_map[[nm]]) && anyNA(template_map[[nm]])
+  rest <- setdiff(names(template_pars), c("b_j", "b_j2"))
+  keep <- rest[vapply(rest, function(nm) {
+    nm %in% names(parent_pars) && length(template_pars[[nm]]) > 0 &&
+      same_shape(parent_pars[[nm]], template_pars[[nm]]) && !held_fixed(nm)
+  }, logical(1))]
+  c(list(b_j = b_j), parent_pars[keep])
+}
+
+# The start list for a variant from its parent's cached fit (D-097), by
+# warm_start(). `parent_file`: the parent's fit_cached() file; `template`:
+# the variant built with sdmTMB(..., do_fit = FALSE). The parameters are read
+# at the parent's best evaluation (last.par.best), random effects included.
+# Takes fitted models, unlike the pure function above, so it is checked by
+# the warm-against-cold comparison rather than in the unit tests.
+warm_start_of <- function(parent_file, template) {
+  parent <- readRDS(parent_file)
+  e <- parent$tmb_obj$env
+  warm_start(e$parList(par = e$last.par.best), colnames(parent$tmb_data$X_ij[[1]]),
+             template$tmb_params, colnames(template$tmb_data$X_ij[[1]]), template$tmb_map)
+}
+
 # The reading of the gradient test (D-091). It is a significance test, so a
 # non-rejection is "no evidence of a gradient change", never "no change":
 # only the headline verdict's "no change ≥ MDE" can rule a change out. It

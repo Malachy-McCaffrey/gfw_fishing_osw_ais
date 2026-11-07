@@ -35,7 +35,7 @@ As of 2026-11-04. Decision IDs refer to [`planning/decisions.md`](decisions.md).
 | 1: exploratory analysis | `06_explore.qmd` | **Done**, gate passed 2026-10-19 | D-016 to D-018 |
 | 2: global spatial autocorrelation | `07_spatial_global.qmd` | **Done** (2026-10-20) | D-027 to D-031 |
 | 3: Local Moran's I vs Gi\* | `08_spatial_local.qmd` | **Done** (2026-10-20), except criterion 6, deferred to Phase 4; the primary method stays provisional | D-036 to D-041 |
-| 4: BAG models | `09a_bag_fit.qmd`, `09b_bag_power.qmd`, `09_bag.qmd` (D-101) | **In progress** on interim models (Phase 5's recommended form), refitted once Phase 5 settles the base model. Headline estimates and comparisons pre-registered 2026-11-04 (@sec-bag-prereg), before any fit on the frozen vessel classification of either version | D-047 to D-052, D-091, D-096 to D-101 |
+| 4: BAG models | `09a_bag_fit.qmd`, `09b_bag_power.qmd`, `09_bag.qmd` (D-101) | **In progress.** 09a fits every candidate model; a selection step then chooses the base model from fit criteria alone and is committed before any BAG estimate is read, v4 using v5's choice (D-104). Run order 09a → selection → 09a refits (only what the selection changed) → 09b → 09; no BAG estimate is looked at before the power analysis (D-103). Headline estimates and comparisons pre-registered 2026-11-04 (@sec-bag-prereg), before any fit on the frozen vessel classification of either version | D-047 to D-052, D-091, D-096 to D-101, D-103, D-104 |
 | 5: frequentist models | `10_models_frequentist.qmd` | Not started | @sec-models |
 | 6: INLA-SPDE | `11_models_inla.qmd` | Not started | @sec-models |
 | 7: sensitivity | `12_sensitivity.qmd` | Not started | @sec-sensitivity |
@@ -1712,9 +1712,10 @@ fixed AFE cannot be read.
 
 **Base model.** The BAG model of step 5 (or 6) **without the BAG term**
 *γ*<sub>s</sub>, fitted to all stages per gear × dataset with the family and
-spatial structure chosen in Phase 5. It therefore runs once Phase 5 has
-settled the base model (the Phase 3 power simulation has the same dependency,
-@sec-timeline).
+spatial structure chosen by Phase 4's selection step (D-104; it was Phase 5
+until then). It therefore runs once that selection is committed (the Phase 3
+power simulation has the same dependency, @sec-timeline). Power is never a
+selection criterion (D-104).
 
 **Procedure.**
 
@@ -2187,6 +2188,15 @@ comparison and the flags.
 
 ## Phase 5: Statistical models, comparison of approaches (`10_models_frequentist.qmd`, `11_models_inla.qmd`) {#sec-models}
 
+**Since D-104 (2026-11-07)** the base model is no longer chosen here. Phase
+4's selection step applies the rules of step 2 below (family by
+spatial-block CV, with the opposite-signs condition recorded as yes/no;
+field structure by D-077) to 09a's candidate fits before any BAG estimate is
+read, on v5, and v4 uses the same forms. DHARMa is reported, not a selection
+criterion. Phase 5 is the diagnostic gate at the end of this section, run
+after `09_bag.qmd`, together with the `glmmTMB` baseline (step 3); Phase 6
+(INLA, step 4) follows it.
+
 ### The three candidate approaches
 
 | | **Tweedie GLMM** | **Hurdle (delta) model** | **Bayesian INLA-SPDE** |
@@ -2331,7 +2341,7 @@ A **tiered strategy**, chosen by data shape rather than by habit:
 2. **Tweedie vs hurdle.** Decide per gear × dataset × time step by:
    - spatial-block cross-validation (`sdmTMB_cv`, block size ≥ *ρ*₀), using
      the out-of-fold log predictive density;
-   - DHARMa diagnostics;
+   - DHARMa diagnostics (reported beside the choice, not part of it, D-104);
    - whether the hurdle's two parts give BAG effects with **opposite signs**.
      If so, the hurdle is required on substance, whatever the CV score.
 3. **`glmmTMB`** without a spatial field (cell random effect only) as the
@@ -2580,7 +2590,8 @@ effect, or a random slope on distance by vessel. This splits *fleet-wide
 redistribution* from *a few vessels moving*. It is costly in rows and is
 optional; the leave-one-vessel-out jackknife (Phase 7) is the minimum.
 
-**Gate for Phases 5–6.**
+**Gate for Phases 5–6.** Run after `09_bag.qmd` (D-104): these checks read
+BAG rate ratios, against thresholds set here, and choose nothing.
 
 - Residual Moran's I is not significant at q = 0.05.
 - DHARMa uniformity and dispersion pass, or any failures are explained.
@@ -2699,11 +2710,11 @@ write_provenance <- function(out_path, inputs, extra = list()) {
 | 1 | 0: Analysis tables, weights, bathymetry covariates, helpers, tests | — |
 | 2–3 | 1: EDA (gate: parallel trends, PROVIDER) | 0 |
 | 3–4 | 2: Global statistics, correlograms (*ρ*₀) | 0 |
-| 4–6 | 3: Local Moran's I vs Gi\* (needs the base model from 5 for the power simulation; run criteria 1–4 first and 5 later) | 2 |
+| 4–6 | 3: Local Moran's I vs Gi\* (needs the base model from Phase 4's selection step for the power simulation, D-104; run criteria 1–4 first and 5 later) | 2 |
 | done | 4a: Ørsted infrastructure ingest and covariates (`02a`; built 2026-10-19) | Ørsted data |
 | When received | Ørsted habitat ingest: coverage check, per-cell shares, refit the affected models | Ørsted habitat |
 | 6–9 | 4b: Stage × season BAG (no Ørsted data needed), then the timing BAG models | 1, 4a |
-| 8–12 | 5: `sdmTMB` / `glmmTMB` Tweedie vs hurdle, CV, diagnostics | 2, 4 |
+| 8–12 | 5: diagnostic gate after the BAG report: mesh, prior and covariate sensitivity, `glmmTMB` baseline, residual Moran's I, Tweedie–hurdle sign agreement (the base-model choice moved to Phase 4's selection step, D-104) | 2, 4 |
 | 12–16 | 6: INLA-SPDE confirmatory, BYM2 sensitivity | 5 |
 | 16–18 | 7: Sensitivity grid | 3, 5 |
 | 18–20 | 8: Synthesis, FAIR release, DOI | all |

@@ -8,7 +8,7 @@ Geospatial analysis and statistical modeling workflows to quantify AIS vessel pr
 
 ## The R workflow
 
-Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order, so `quarto render r/` runs 02 → 02a → 03 → 03b → 04 → 05 → 05a → 06 → 07 → 08 → 09a → 09 (09b, Step 3 power, runs on its own after Phase 5). Steps 00–04 prepare and classify the data; 05 onward are the analysis phases of [`planning/gfw_analysis_plan.qmd`](planning/gfw_analysis_plan.qmd), where each phase's method and gate are written down.
+Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order, so `quarto render r/` runs 02 → 02a → 03 → 03b → 04 → 05 → 05a → 06 → 07 → 08 → 09a → 09 (09b, Step 3 power, runs on its own after Phase 5, and 09 is not rendered for real until it has, D-103). Steps 00–04 prepare and classify the data; 05 onward are the analysis phases of [`planning/gfw_analysis_plan.qmd`](planning/gfw_analysis_plan.qmd), where each phase's method and gate are written down.
 
 | Step | File | What it does | Needs |
 |---|---|---|---|
@@ -26,7 +26,7 @@ Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order,
 | 08 | `08_spatial_local.qmd` | **Phase 3.** Local Moran's I vs Getis-Ord Gi\*: change maps, comparison criteria and the power simulation. | 05, 07 |
 | 09a | `09a_bag_fit.qmd` | **Phase 4, in progress.** Fits every before–after–gradient model (interim specifications), the random-field check and the leave-one-vessel-out refits; fits are cached in `data/processed/models/{pipeline}/`. Hours on a cold cache: render it from a terminal. | 05, 07 |
 | 09b | `09b_bag_power.qmd` | **Phase 4, Step 3, deferred to after Phase 5 (D-096).** Simulation power, timing-model power and radius recovery; days of refits. Not in the default render. | 09a |
-| 09 | `09_bag.qmd` | **Phase 4, in progress.** The BAG report: every table, test and verdict, read from 09a's (and 09b's) caches; it fits nothing (D-101). | 09a |
+| 09 | `09_bag.qmd` | **Phase 4, in progress.** The BAG report: every table, test and verdict, read from 09a's (and 09b's) caches; it fits nothing (D-101). Rendered only after 09b, so no BAG estimate is seen before the power analysis (D-103). | 09a, 09b |
 | 10–13 | not yet written | **Phases 5–8:** frequentist models, INLA-SPDE, sensitivity, synthesis. | |
 
 The GFW pipeline versions are compared in [`reports/pipeline_compare/gfw_v4_v5_comparison.qmd`](reports/pipeline_compare/gfw_v4_v5_comparison.qmd), a self-contained report for Global Fishing Watch staff (D-068), rendered on its own and not part of `quarto render r/`; the design is in [`planning/gfw_pipeline_v5_plan.qmd`](planning/gfw_pipeline_v5_plan.qmd).

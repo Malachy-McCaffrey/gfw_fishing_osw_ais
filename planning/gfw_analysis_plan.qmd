@@ -1755,13 +1755,13 @@ selection criterion (D-104).
    band terms) rejects at α = 0.05.
 4. 100 simulations per effect size and model (decision 2026-10-20, D-049;
    `set.seed(42)`, parallel worker processes via `callr`, cached with
-   `fit_cached()`). Then, in the matching scenario only (D-094), 400 more
+   `fit_cached()`). Then, in the matching scenario only (D-094, D-106), 400 more
    simulations (a separate draw, `seed = 43`), making 500, at the smallest
-   *e* with power ≥ 0.8 and at the size below it when that is above 0; none
+   *e* with power ≥ 0.8 and at the size below it when that is above 0, each only if the exact 95% interval of its 100-simulation power contains 0.8 (72 to 88 rejections, D-106); none
    when no size reaches 0.8. The MDE uses the 500-simulation estimate where
    one exists: if the size below passes, the MDE drops one step; if the
    smallest passing size no longer passes, the MDE is the next passing size.
-   No interpolation and no further rounds. About 1,500 stage × season
+   No interpolation and no further rounds. About 700 to 1,500 stage × season
    refits per gear.
 
 **Outputs.** Power curves per gear × dataset × model; a table of the
@@ -1771,7 +1771,7 @@ false-positive rate at *e* = 0 (should be close to 0.05) for the headline
 term and for the gradient test; the gradient test's power in the matching
 scenario at each *e* and in the fading gradient at 30%; bias and coverage;
 the timing models' season-year MDEs, with the proxy label where it applies;
-and VP mobile's radius-recovery table. Written to `models/power_*.csv` with provenance sidecars.
+and, in Phase 7, VP mobile's radius-recovery table (deferred from Phase 4 by D-106). Every rate carries its Monte Carlo standard error and exact 95% interval, and each planted *e* > 0 its sign (Type S) and exaggeration (Type M) errors among the significant simulations (D-106). Written to `models/power_*.csv` with provenance sidecars.
 
 **Vessel clustering.** A cell-level model treats cells as the only source of
 clustering, but a cell's effort often comes from one vessel (caveat 12). The
@@ -1780,7 +1780,7 @@ As a check, repeat the *e* = 20% scenario with vessel-level resampling:
 redraw vessels with replacement within gear × stage from the records, rebuild
 the cell table, and inject the effect. Report how much it lowers power.
 
-**Radius recovery (VP mobile at season-year; decisions 2026-10-29, D-065,
+**Radius recovery (VP mobile at season-year; deferred to Phase 7 as an exploratory analysis, D-106; decisions 2026-10-29, D-065,
 and 2026-11-04, D-094).** Can the data choose the `active_construction`
 radius at all? Run for VP mobile only, on its season-year proxy timing
 model (step 2). Simulate from that model's base model (without *λ*) as in
@@ -1815,7 +1815,7 @@ The Phase 7 sensitivity runs use the same tables.
   (the one model the recovery runs on, D-094), and only if recovery is at
   least 0.8 at an *e* for which *λ*'s power is at least 0.8.
   Anywhere else, the radius runs are reported as a sensitivity check (does the
-  result hold?), not as an estimate of the radius (D-065).
+  result hold?), not as an estimate of the radius (D-065). Every Phase 4 verdict uses 5 km; the recovery run, and any radius it allows, come in Phase 7 (D-106).
 
 No new dependency: `simulate()` for `glmmTMB` and `sdmTMB` fits does the
 simulation, and the refits use the model code in `r/bag_specs.R` (D-101, D-104).
@@ -2631,7 +2631,7 @@ grid: variant × outcome, with the estimate and CI.
 | `band × year` pre-trend term, every gear (Phase 1 gate, 2026-10-19, D-018) | Parallel pre-construction trends across distance bands, which the Phase 1 tests could not establish with power |
 | Distance bands vs a continuous distance smooth | BAG specification |
 | SRW's 40 unrecorded positions installed from May 2026 (`infra_cell_month_srw_planned.csv`) | Upper bound on SRW exposure (decision 2026-10-19, D-024) |
-| Exposure radii: `active_construction` at 2 / 5 / 10 km; `n_found` at 1 / 2 / 4 km (`infra_cell_*_radii.csv` from 02a, D-066) | Scale of the construction and structure effects (D-065) |
+| Exposure radii: `active_construction` at 2 / 5 / 10 km; `n_found` at 1 / 2 / 4 km (`infra_cell_*_radii.csv` from 02a, D-066) | Scale of the construction and structure effects (D-065); VP mobile's radius-recovery run (D-094) also runs here, exploratory (D-106) |
 | `cable_works(t)` in the timing model | Coarse cable windows |
 | `sz_share_install` (zones on installation days only) in place of `sz_share` | Enforcement-only safety zones: the RWF and SRW rules enforce zones only during active construction (caveat 17) |
 | Stage × season BAG without the cells ever inside a safety zone | Mandated exclusion driving the inside-band *γ* (caveat 17) |

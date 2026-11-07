@@ -35,6 +35,14 @@ Phase 4, frequentist models 5, INLA-SPDE 6, sensitivity 7 and synthesis 8.
 
 ---
 
+### 2026-11-07, worker logs and blinding
+
+| ID | Topic | Decision | Consequence | Status |
+|---|---|---|---|---|
+| D-107 | Worker logs must hold no estimates | **The warm-started fit in `make_spec()` (`r/bag_specs.R`) runs inside `suppressMessages()`.** Given `start`, sdmTMB prints each starting value ("Initiating `b_j` at …"), and for a warm start (D-097) those are the parent fit's estimates: the timing model's fixed effects, its construction × band terms among them. D-102 sent worker output to `reports/bag/{pipeline}/worker_logs/`, so the v5 logs of `vp_MOBILE timing leads`, `timing fleet` and `vp_FIXED timing leads` (2026-11-06/07) held the `vp_MOBILE` and `vp_FIXED` timing fits' estimates, unlabelled. Warnings and errors still reach the logs. No other fit passes starting values (checked 2026-11-07). Tested on sdmTMB's bundled `pcod_2011` data: one "Initiating" message without the wrapper, none with it. **What was seen:** while checking the interrupted 09a run (2026-11-07, about 01:15), Claude printed the last three lines of each of the three logs: the tail of an unlabelled starting-value vector and the three smoothing-parameter starts. They were not mapped to terms, interpreted or reported, and nobody else opened the logs. No stage × season (headline) estimate was in them: no fit is warm-started from a stage × season model. The three logs are to be deleted (the user, since the tool could not), and the two refitted fits overwrite theirs | The timing models' construction × band terms are mechanism terms, not headlines (D-078), and the exposure was unlabelled numbers, so no estimate known before power (D-103) can have informed any choice: every rule that uses one (D-104 to D-106) was committed before. Recorded so the blinding record is complete. From here, a worker log holds only progress, warnings and errors; it is still not to be read for estimates, and it never contains any | |
+
+---
+
 ### 2026-11-07, power design: where the simulations are spent
 
 | ID | Topic | Decision | Consequence | Status |

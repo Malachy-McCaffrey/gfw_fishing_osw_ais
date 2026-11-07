@@ -134,9 +134,14 @@ make_spec <- function(id, d, formula, family, spatiotemporal = "off", time = NUL
                                spatial = "on", spatiotemporal = spatiotemporal, time = time, knots = knots,
                                do_fit = FALSE, silent = TRUE)
     start <- warm_start_of(parent_file, template)
-    sdmTMB::sdmTMB(formula, data = d, mesh = mesh, family = fam, offset = d$log_expo,
-                   spatial = "on", spatiotemporal = spatiotemporal, time = time, knots = knots,
-                   control = sdmTMB::sdmTMBcontrol(start = start, multiphase = FALSE), silent = TRUE)
+    # suppressMessages (D-107): given `start`, sdmTMB prints every starting
+    # value ("Initiating `b_j` at ..."), i.e. the parent's estimates, BAG
+    # terms included, into the worker log, which must hold no estimate
+    # before power is done (D-103). Warnings and errors still reach the log
+    suppressMessages(
+      sdmTMB::sdmTMB(formula, data = d, mesh = mesh, family = fam, offset = d$log_expo,
+                     spatial = "on", spatiotemporal = spatiotemporal, time = time, knots = knots,
+                     control = sdmTMB::sdmTMBcontrol(start = start, multiphase = FALSE), silent = TRUE))
   }
   list(id = id, key = key, fun = fun, after = parent_file)
 }

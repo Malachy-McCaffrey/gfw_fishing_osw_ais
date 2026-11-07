@@ -272,14 +272,14 @@ cache key, so decide this once.
   works, but more records fall through to `UNRESOLVED`. Track the `UNRESOLVED`
   share of Primary AFE and VP by version.
 
-### 2.5 `r/05_prepare_analysis.qmd` onward (05–08, 10)
+### 2.5 `r/05_prepare_analysis.qmd` onward (05–09)
 
 - Covariates (lease distance, CRM bathymetry, infrastructure) are unaffected.
 - Every cell table, derived field (`rate`, `density`, `rate_fleet`, and so on)
   and the provenance `.json` sidecars change. Add the pipeline version to the
   sidecars.
 - `fit_cached()` keys on its inputs, so new data means new cache entries and a
-  **full refit of 10** (hours). Keep v4 and v5 model caches apart so they do
+  **full refit of 09** (hours). Keep v4 and v5 model caches apart so they do
   not overwrite each other.
 - `06`–`08`: re-render figures and tables per version. (Per standing
   preference, rebuild figure PNGs only; never re-render the webinar `.pptx`.)
@@ -388,7 +388,7 @@ Per project rules, `data/` is never edited by Claude. Steps marked
 
 **Status (2026-10-28): implemented and tested; data move pending (you).**
 Implemented as `make_gfw_paths(pipeline)` and `gfw_pipeline_default <- "v4"`
-in `r/paths.R`, with a `pipeline` parameter in every qmd (01–10). The design
+in `r/paths.R`, with a `pipeline` parameter in every qmd (01–09). The design
 below was extended in four ways:
 
 - The review sheets, the grid and the two generated `references/` files
@@ -745,7 +745,7 @@ whose ratio falls is an FP fix.
 For VP and AFE, Strict and Primary, and each gear class:
 
 1. Ratio `v5 / v4` hours by **stage**. Is it the same in Stages 1, 2 and 3?
-2. Ratio by **distance band** (the BAG bands from `10_bag.qmd`) × stage. Is
+2. Ratio by **distance band** (the BAG bands from `09_bag.qmd`) × stage. Is
    the v5/v4 change itself a gradient around the leases? (A
    difference-in-differences of the versions.)
 3. Ratio by month-of-year. Seasonal fixed-gear FNs would distort season
@@ -753,7 +753,7 @@ For VP and AFE, Strict and Primary, and each gear class:
 4. Spatial map of `h5 − h4` by cell for AFE, with Global Moran's I on the
    difference (07's machinery). Clustered differences near the leases are the
    red flag.
-5. Re-run the **descriptive BAG (10, step 1)** on both versions and compare
+5. Re-run the **descriptive BAG (09, step 1)** on both versions and compare
    the stage × band contrasts and their bootstrap intervals. This is cheap,
    needs no model refit, and decides how much to worry.
 
@@ -786,7 +786,7 @@ report v4 as a sensitivity. If it is not, report the affected dataset × gear
 | 7 | Run 03 on v5 with APIs on; auto-resolve gear; review list 5 (v4 label changes), the gear residual and the v5-triggered sample | you | review session |
 | 8 | Add the 04 roster gate (Section 3.6, Part C); render 02 (union grid) → 04 → 05 for both versions. The v5 render of 04 must pass the gate. | both | — |
 | 9 | Comparison sections 4.3–4.4 (FP/FN, bias checks, descriptive BAG on both) | Claude | — |
-| 10 | Decide the primary version from the decision rule; refit 10 on v5 (and v4 if needed) | you decide | long refit |
+| 10 | Decide the primary version from the decision rule; refit 09 on v5 (and v4 if needed) | you decide | long refit |
 | 11 | Docs: data dictionary, analysis plan, CITATION/README | Claude | — |
 
 With the `:v4.0` re-pull dropped (D-063), no step depends on `:v4.0` staying

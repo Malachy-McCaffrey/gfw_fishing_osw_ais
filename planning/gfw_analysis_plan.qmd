@@ -35,11 +35,11 @@ As of 2026-11-04. Decision IDs refer to [`planning/decisions.md`](decisions.md).
 | 1: exploratory analysis | `06_explore.qmd` | **Done**, gate passed 2026-10-19 | D-016 to D-018 |
 | 2: global spatial autocorrelation | `07_spatial_global.qmd` | **Done** (2026-10-20) | D-027 to D-031 |
 | 3: Local Moran's I vs Gi\* | `08_spatial_local.qmd` | **Done** (2026-10-20), except criterion 6, deferred to Phase 4; the primary method stays provisional | D-036 to D-041 |
-| 4: BAG models | `10_bag.qmd` | **In progress** on interim models (Phase 5's recommended form), refitted once Phase 5 settles the base model. Headline estimates and comparisons pre-registered 2026-11-04 (@sec-bag-prereg), before any fit on the frozen vessel classification of either version | D-047 to D-052, D-091 |
-| 5: frequentist models | `11_models_frequentist.qmd` | Not started | @sec-models |
-| 6: INLA-SPDE | `12_models_inla.qmd` | Not started | @sec-models |
-| 7: sensitivity | `13_sensitivity.qmd` | Not started | @sec-sensitivity |
-| 8: synthesis | `14_synthesis.qmd` | Not started | @sec-synthesis |
+| 4: BAG models | `09_bag.qmd` | **In progress** on interim models (Phase 5's recommended form), refitted once Phase 5 settles the base model. Headline estimates and comparisons pre-registered 2026-11-04 (@sec-bag-prereg), before any fit on the frozen vessel classification of either version | D-047 to D-052, D-091 |
+| 5: frequentist models | `10_models_frequentist.qmd` | Not started | @sec-models |
+| 6: INLA-SPDE | `11_models_inla.qmd` | Not started | @sec-models |
+| 7: sensitivity | `12_sensitivity.qmd` | Not started | @sec-sensitivity |
+| 8: synthesis | `13_synthesis.qmd` | Not started | @sec-synthesis |
 | Data: GFW pipeline v5 | `01`, then `01a_compare_pipelines.qmd` | **v5 adopted as primary, v4 as sensitivity (2026-10-30, D-070).** Done: versioned layout, v4 roster, the v5 pull (2026-10-28), the combined grid (D-069) with v4's 02 → 05a re-rendered on it (2026-10-30), the comparison report for GFW (`reports/pipeline_compare/`). **The v5 vessel and gear review is finished and frozen (2026-11-04, D-090):** both review sheets are empty; the crosswalk, the gear corrections and the v5 fishing roster (`references/fishing_roster_v5.csv`) are committed; the 129 list 5 rejects of vessels v4 types FISHING are accept/non_fishing (D-071). v5 Primary: 1,244 vessels, 92,961 VP h and 28,569 AFE h, none of it UNRESOLVED gear. 03 → 05 are re-rendered on v5 (with 02a, first time on v5) and on v4; `r/paths.R` now defaults to v5. Next: 03b on v5, 05a → 10 on v5, then the descriptive BAG on both versions (v5 plan step 9) | `planning/gfw_pipeline_v5_plan.qmd`; D-053 to D-057, D-062 to D-064, D-068 to D-070 |
 | Data: vessel home ports | `03b_port_visits.qmd` | **Done on v4 (2026-11-03):** the port-visit pull, the home-port and distance tables, the GARFO disagreement review (55 of 55 in-scope vessels, D-087) and the anchorage review (28 of 28, D-089). Next: the pull and both reviews on v5, once its vessel and gear review is finished; then the port tables are frozen with the crosswalk before 13 | @sec-ports; D-080 to D-089 |
 
@@ -911,7 +911,7 @@ review (D-083), Greenport / North Fork, City Island, Plymouth, Old Saybrook
 community × band × stage, per gear and dataset, with the share of hours
 with a known port, from GFW and from GARFO side by side. Phase 7 (13): the
 BAG per Stage 1 port group under the support rule, and port community as
-a cluster in the vessel bootstrap. Not 10, not any main model.
+a cluster in the vessel bootstrap. Not 09, not any main model.
 
 **Distance from home port (D-088).** The GFW home port is the origin; the
 GARFO ports sit beside it in the synthesis but are not used for distance,
@@ -923,13 +923,13 @@ the vessel's most-visited anchorage in that community. A year without a
 single port takes its origin by rule: a `multiple` year's top community if
 it has at least 3 visits and no tie, else the vessel's Stage 1 port; v4
 leaves 0.8% of Primary VP hours without one. It is a **descriptive
-outcome**, compared by gear × stage × Stage 1 port group in 14 and 13. It
+outcome**, compared by gear × stage × Stage 1 port group in 13 and 12. It
 is not a covariate: as one, distance to port is a static cell property,
 absorbed by the cell fixed effects and confounded with the spatial field
 (D-079 stands).
 
 **Freeze.** `port_communities.csv`, `port_anchorages.csv` and the three port
-tables are tagged with the frozen crosswalk, before 13 runs.
+tables are tagged with the frozen crosswalk, before 12 runs.
 
 **Known problems and their handling.**
 
@@ -957,17 +957,16 @@ place:
 | Step | File | Phase | Writes (gitignored) |
 |---|---|---|---|
 | 02a | `02a_infrastructure.qmd` | 0: Ørsted turbines and cables → time-varying covariates (split out of `05`, decision 2026-10-28, D-060) | `data/sf/infra/`, `data/processed/analysis/infra_cell_*.csv` |
-| 03b | `03b_port_visits.qmd` | Vessel home ports from GFW port-visit events, validated against GARFO (@sec-ports, D-080). Feeds 13 and 14 only | `data/raw/vessel_evidence/{v}/gfw_port_visits.csv`, `data/processed/vessel_review/{v}/vessel_port_*.csv` |
+| 03b | `03b_port_visits.qmd` | Vessel home ports from GFW port-visit events, validated against GARFO (@sec-ports, D-080). Feeds 12 and 13 only | `data/raw/vessel_evidence/{v}/gfw_port_visits.csv`, `data/processed/vessel_review/{v}/vessel_port_*.csv` |
 | 05 | `05_prepare_analysis.qmd` | 0: analysis tables, covariates, weights; joins 02a's covariates | `data/processed/analysis/` |
 | 06 | `06_explore.qmd` | 1: EDA | figures, tables |
 | 07 | `07_spatial_global.qmd` | 2: Global Moran's I, General G, correlograms | `spatial/global_*.csv` |
 | 08 | `08_spatial_local.qmd` | 3: Local Moran's I vs Gi\*, change classes | `spatial/local_*.gpkg` |
-| 09 | — | *Unused: the infrastructure step was folded into `05` (decision 2026-10-19, D-021), then split out as `02a` (D-060); the number is left unused so the later files keep theirs* | — |
-| 10 | `10_bag.qmd` | 4: BAG models | `models/bag_*.rds` |
-| 11 | `11_models_frequentist.qmd` | 5: Tweedie and hurdle GLMMs (`glmmTMB`, `sdmTMB`) | `models/freq_*.rds` |
-| 12 | `12_models_inla.qmd` | 6: INLA-SPDE | `models/inla_*.rds` |
-| 13 | `13_sensitivity.qmd` | 7: sensitivity grid | `sensitivity/*.csv` |
-| 14 | `14_synthesis.qmd` | 8: results and figures for the thesis | `reports/figures/` |
+| 09 | `09_bag.qmd` | 4: BAG models (was `10_bag.qmd` until D-100, which closed the gap 09 had been left as since D-021/D-060) | `models/bag_*.rds` |
+| 10 | `10_models_frequentist.qmd` | 5: Tweedie and hurdle GLMMs (`glmmTMB`, `sdmTMB`) | `models/freq_*.rds` |
+| 11 | `11_models_inla.qmd` | 6: INLA-SPDE | `models/inla_*.rds` |
+| 12 | `12_sensitivity.qmd` | 7: sensitivity grid | `sensitivity/*.csv` |
+| 13 | `13_synthesis.qmd` | 8: results and figures for the thesis | `reports/figures/` |
 
 Shared code: `r/analysis_helpers.R` (derived fields, weights, transforms,
 domain flags, the model cache), `r/infra_helpers.R` (foundation CSVs,
@@ -1500,7 +1499,7 @@ cube is dense enough: **mobile VP** (40% of domain cell-season-years active)
 and, as exploratory, mobile AFE (17%). Report the other gears as too sparse,
 not as "no trend".
 
-## Phase 4: Infrastructure data and BAG models (`02a_infrastructure.qmd`, `10_bag.qmd`) {#sec-bag}
+## Phase 4: Infrastructure data and BAG models (`02a_infrastructure.qmd`, `09_bag.qmd`) {#sec-bag}
 
 ### Ørsted turbine and cable data {#sec-infra}
 
@@ -1906,7 +1905,7 @@ one skipper, and its interval looks more precise than the data justify.
 **Rule (D-076).** Before any fit, every 0/1 fixed-effect column is counted:
 positive rows, distinct cells and distinct vessels behind it (vessels from
 the Primary records). A term is supported with at least **30 positive rows,
-10 cells and 5 vessels** (10's parameters, set before fitting). The rule is
+10 cells and 5 vessels** (09's parameters, set before fitting). The rule is
 applied in a fixed order, with no case-by-case choices:
 
 1. **BAG terms** (stage × band; construction and development × band): if
@@ -1936,7 +1935,7 @@ stay as specified before the freeze.
 cross-validation (`sdmTMB_cv`) decides whether the per-stage and AR1 year
 fields earn their place against a shared field alone. It runs after the
 analysis freeze and before the BAG effects are read, and reports predictive
-scores only. 10 runs it now on the interim models (its "Random-field check"
+scores only. 09 runs it now on the interim models (its "Random-field check"
 section, D-077); Phase 5 repeats it on the settled base model.
 
 - **Stage × season models.** Three structures with the same fixed effects
@@ -1964,7 +1963,7 @@ Stage 2 terms, timing, leads, foundation distance, delta-Gamma parts, the
 gear contrast and several sensitivity refits. They are read as a hierarchy
 of four questions, in order. Each question counts only if the one before it
 passed (D-078). The rules below are fixed before the freeze and applied by
-code (10's "Reading the results" section, `r/bag_helpers.R`), so no
+code (09's "Reading the results" section, `r/bag_helpers.R`), so no
 estimate can change how the others are read.
 
 **1. Can the headline be read? (the gates)**
@@ -2014,7 +2013,7 @@ headline is **robust** if no counted check shifts it.
 **Counted checks, fixed now.** The more checks are counted, the more often
 one flips by chance, until no headline can be robust. So only four count:
 without safety-zone cells, the fleet-size covariate, leave one vessel out
-(all in 10) and the **fixed cohort** (Phase 7, D-074; the main check that a
+(all in 09) and the **fixed cohort** (Phase 7, D-074; the main check that a
 result does not depend on new entrants or on how the safety vessels were
 classified). Three other runs have their own roles:
 
@@ -2025,7 +2024,7 @@ classified). Three other runs have their own roles:
 | The rest of the Phase 7 table (@sec-sensitivity) | Read together, for patterns across runs | About 15 runs: counted one by one, chance flips would decide robustness |
 
 Phase 7 calls the same helpers, appends its rows to `bag_reading_checks`
-and writes the final `bag_reading`. 10's table is the interim one.
+and writes the final `bag_reading`. 09's table is the interim one.
 
 **4. Why and when? (mechanism)** The Stage 2 terms (anticipation, D-075),
 the timing and leads models, foundation distance, the delta-Gamma parts
@@ -2039,7 +2038,7 @@ detected, robust / not robust*; *no change larger than X%, robust / not
 robust*; *inconclusive*; *withheld until the trend-adjusted fit*; or *not
 interpretable (descriptive only)*. A caution gate keeps the verdict and
 marks it provisional; a shifted exclusion bound adds
-*classification-sensitive*. 10 writes it to `bag_reading`, with every check row
+*classification-sensitive*. 09 writes it to `bag_reading`, with every check row
 in `bag_reading_checks` and one forest plot per gear (`bag_reading`).
 
 **Weighing the evidence.** Across about 60 estimates, about 3 will exclude 1
@@ -2064,7 +2063,7 @@ beside the changed one.
 **Frozen inputs.** The decisions, gear corrections and v5 crosswalk
 (commit 110dae1), the v5 fishing roster (d7e4c6c) and the v4 crosswalk
 (9b052bf), with the analysis tables 04 → 05 built from them on both versions
-(D-090). Interim fits exist from 10's renders of 2026-10-27 to 2026-10-31 on
+(D-090). Interim fits exist from 09's renders (then `10_bag.qmd`) of 2026-10-27 to 2026-10-31 on
 v4 tables that predate the freeze. Their estimates were not looked at, and
 they do not carry over: `fit_cached()` keys each fit on the data it reads,
 so every fit on the frozen tables is new.
@@ -2184,7 +2183,7 @@ comparison and the flags.
   regulation. The stage × season BAG is also fitted without the cells ever
   inside a zone; the timing model carries `sz_share(t)` directly.
 
-## Phase 5: Statistical models, comparison of approaches (`11_models_frequentist.qmd`, `12_models_inla.qmd`) {#sec-models}
+## Phase 5: Statistical models, comparison of approaches (`10_models_frequentist.qmd`, `11_models_inla.qmd`) {#sec-models}
 
 ### The three candidate approaches
 
@@ -2347,7 +2346,7 @@ A **tiered strategy**, chosen by data shape rather than by habit:
 
 ```{r}
 #| label: phase5-sdmtmb
-# Phase 5 (11_models_frequentist.qmd): primary frequentist BAG models in
+# Phase 5 (10_models_frequentist.qmd): primary frequentist BAG models in
 # sdmTMB, which fits GLMMs with an SPDE (Matérn) spatial field by Laplace
 # approximation in TMB. A sketch: formulas are final, tuning is set at Phase 5.
 #
@@ -2395,7 +2394,7 @@ mesh <- make_mesh(d, c("x_km", "y_km"), cutoff = 1)
 # geography); spatiotemporal = "iid" adds an independent field per stage
 # for stage-specific deviations that the fixed effects miss. Both seasons
 # of a stage share that stage's field.
-# Frozen in 10, and refitted here as frozen:
+# Frozen in 09, and refitted here as frozen:
 #  - the band scheme comes from the term-support rule (D-076): full bands,
 #    or near (inside + 0–2 km) / mid (2–8 km) where a BAG term lacks
 #    support (fixed AFE on v4). No terms are added (D-076);
@@ -2420,8 +2419,8 @@ m_dg <- update(m_tw, family = delta_gamma())
 # grows with the square of the mean) rather than Tweedie. Monthly data
 # replace stages with each cell's own exposure, from its nearest project's
 # Ørsted dates, so the three schedules give a staggered design. The terms
-# are 10's timing model as frozen (D-075, D-076), written out as 0/1
-# indicator columns built by 10's timing_data():
+# are 09's timing model as frozen (D-075, D-076), written out as 0/1
+# indicator columns built by 09's timing_data():
 #  - construction + cx_* (construction × band, the BAG terms of this
 #    model), and post_* (post-construction × band, SFW only, where
 #    supported);
@@ -2447,7 +2446,7 @@ m_dg <- update(m_tw, family = delta_gamma())
 # knots puts the cyclic smooth's ends at 0.5 and 12.5, so months 1 and 12
 # are one step apart, not the same point.
 # `vp_month_mobile` and `mesh_m` are built like `d` and `mesh` above, from
-# vp_month_gear.csv, through 10's timing_data().
+# vp_month_gear.csv, through 09's timing_data().
 m_vp <- sdmTMB(hours ~ construction + cx_inside + cx_0_2 + cx_2_4 + cx_4_8 + post_inside + post_0_2 +
                  development + dx_inside + dx_0_2 + dx_2_4 + dx_4_8 +
                  found_band + active + sz_share + dist_band +
@@ -2495,7 +2494,7 @@ m_fx <- sdmTMB(hours ~ construction + cx_near + cx_mid + development + dx_near +
 # and reward overfitting the spatial field. Blocks at least rho0 across make
 # held-out cells roughly independent of the training data.
 # spatial_block_folds() (r/bag_helpers.R, D-077) deals whole square blocks
-# at least rho0 wide to folds, so a cell's rows are held out together; 10's
+# at least rho0 wide to folds, so a cell's rows are held out together; 09's
 # "Random-field check" already uses it for the field structures. With
 # fold_ids given, k_folds must match the number of distinct folds, and the
 # offset must be given as a column name. `...` stands for the same formula
@@ -2507,7 +2506,7 @@ cv_tw <- sdmTMB_cv(..., offset = "log_expo", k_folds = 5,
 
 ```{r}
 #| label: phase6-inla
-# Phase 6 (12_models_inla.qmd): confirmatory Bayesian INLA-SPDE fit of the
+# Phase 6 (11_models_inla.qmd): confirmatory Bayesian INLA-SPDE fit of the
 # headline AFE stage x season model. Same data `d` (mobile domain, cell x
 # stage x season, from the sdmTMB chunk) and the same BAG and season terms,
 # so differences reflect the inferential framework, not the specification.
@@ -2590,7 +2589,7 @@ optional; the leave-one-vessel-out jackknife (Phase 7) is the minimum.
 - Tweedie and hurdle agree in sign on the marginal BAG effect, or the
   disagreement is reported as a finding.
 
-## Phase 7: Sensitivity (`13_sensitivity.qmd`) {#sec-sensitivity}
+## Phase 7: Sensitivity (`12_sensitivity.qmd`) {#sec-sensitivity}
 
 Run the headline Gi\* change classes, the stage × season BAG rate ratios and the
 timing-model turbine-distance curve on each variant. Report the results as a
@@ -2628,7 +2627,7 @@ grid: variant × outcome, with the estimate and CI.
 | Cell and stage × season fixed effects, Poisson pseudo-likelihood (`fixest::fepois`): the stage × band terms, with a fixed effect per cell and per stage × season, the exposure offset, and SEs clustered by spatial block (D-079) | Whether the BAG estimate depends on the random-field machinery (issue 1: a field can absorb part of the effect). A fixed effect per cell replaces the spatial field, so each cell is compared only with itself; the static covariates drop out with it. Poisson pseudo-likelihood is consistent for non-negative continuous hours with zeros (only the mean needs to be right), the econometric standard for difference-in-differences on effort. Standard errors clustered by the D-077 spatial blocks |
 | Port group: the stage × season BAG with vessels grouped by their **Stage 1** port community from GFW port visits, GARFO principal port as the check (D-079, D-080, @sec-ports) | Whether a change in which port communities fish the AOI drives a band effect. State rules differ (e.g. NY vs RI fluke seasons), so if the port mix differs by band, a port-driven shift in who fishes can look like a gradient change. Refit per port group with enough support (D-076 rule), and use port community as the cluster in the vessel bootstrap. Groups from Stage 1, because a later port may respond to the projects |
 
-## Phase 8: Synthesis (`14_synthesis.qmd`) {#sec-synthesis}
+## Phase 8: Synthesis (`13_synthesis.qmd`) {#sec-synthesis}
 
 - **Headline results:**
   - BAG rate ratios by gear × dataset, from `sdmTMB` with INLA alongside;
@@ -2722,7 +2721,7 @@ first power, per-route cable dates, the remaining SRW foundations) update
       `references/port_communities.csv`, write `03b_port_visits.qmd` and its
       `vessel_helpers.R` functions with tests, run the pull on v5, review
       the unmatched-anchorage and GARFO-disagreement sheets, and tag the
-      port tables with the frozen crosswalk before 13. Done on v4
+      port tables with the frozen crosswalk before 12. Done on v4
       (2026-11-03): the GARFO-disagreement review (D-087) and the
       anchorage review (D-089). Left: the pull on v5 once its vessel and
       gear review is finished, the v5 sheets, and the freeze.

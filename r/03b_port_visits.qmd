@@ -90,7 +90,7 @@ helpers are logged in D-081.
 
    A rule change is a new decision, not an edit here.
 5. **Freeze.** `port_communities.csv`, `port_anchorages.csv` and the three
-   port tables are tagged with the frozen crosswalk, before 13 runs.
+   port tables are tagged with the frozen crosswalk, before 12 runs.
 
 ## Libraries and shared code
 
@@ -624,7 +624,7 @@ port_dist |>
 ```
 
 A first look only, the hours-weighted mean distance by dataset, gear and
-stage; the comparisons belong to 13 and 14.
+stage; the comparisons belong to 12 and 13.
 
 ```{r}
 port_dist |>

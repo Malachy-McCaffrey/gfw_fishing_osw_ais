@@ -8,7 +8,7 @@ Geospatial analysis and statistical modeling workflows to quantify AIS vessel pr
 
 ## The R workflow
 
-Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order, so `quarto render r/` runs 02 → 02a → 03 → 03b → 04 → 05 → 05a → 06 → 07 → 08 → 10. Steps 00–04 prepare and classify the data; 05 onward are the analysis phases of [`planning/gfw_analysis_plan.qmd`](planning/gfw_analysis_plan.qmd), where each phase's method and gate are written down.
+Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order, so `quarto render r/` runs 02 → 02a → 03 → 03b → 04 → 05 → 05a → 06 → 07 → 08 → 09. Steps 00–04 prepare and classify the data; 05 onward are the analysis phases of [`planning/gfw_analysis_plan.qmd`](planning/gfw_analysis_plan.qmd), where each phase's method and gate are written down.
 
 | Step | File | What it does | Needs |
 |---|---|---|---|
@@ -24,10 +24,10 @@ Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order,
 | 06 | `06_explore.qmd` | **Phase 1.** Exploratory analysis: data structure, zeros, transforms, parallel-trends tests and the gate decisions for the models. | 05 |
 | 07 | `07_spatial_global.qmd` | **Phase 2.** Global Moran's I, General G and correlograms; writes the practical range (*ρ*₀) used for later weights and priors. | 05 |
 | 08 | `08_spatial_local.qmd` | **Phase 3.** Local Moran's I vs Getis-Ord Gi\*: change maps, comparison criteria and the power simulation. | 05, 07 |
-| 10 | `10_bag.qmd` | **Phase 4, in progress.** Before–after–gradient models on interim specifications; fits are cached in `data/processed/models/{pipeline}/`. | 05 |
-| 11–14 | not yet written | **Phases 5–8:** frequentist models, INLA-SPDE, sensitivity, synthesis. | |
+| 09 | `09_bag.qmd` | **Phase 4, in progress.** Before–after–gradient models on interim specifications; fits are cached in `data/processed/models/{pipeline}/`. | 05 |
+| 10–13 | not yet written | **Phases 5–8:** frequentist models, INLA-SPDE, sensitivity, synthesis. | |
 
-There is no 09. The GFW pipeline versions are compared in [`reports/pipeline_compare/gfw_v4_v5_comparison.qmd`](reports/pipeline_compare/gfw_v4_v5_comparison.qmd), a self-contained report for Global Fishing Watch staff (D-068), rendered on its own and not part of `quarto render r/`; the design is in [`planning/gfw_pipeline_v5_plan.qmd`](planning/gfw_pipeline_v5_plan.qmd).
+The GFW pipeline versions are compared in [`reports/pipeline_compare/gfw_v4_v5_comparison.qmd`](reports/pipeline_compare/gfw_v4_v5_comparison.qmd), a self-contained report for Global Fishing Watch staff (D-068), rendered on its own and not part of `quarto render r/`; the design is in [`planning/gfw_pipeline_v5_plan.qmd`](planning/gfw_pipeline_v5_plan.qmd).
 
 Shared code, sourced by the qmds: `paths.R` (every path; each can be overridden with a Quarto parameter), `gfw_helpers.R` (development stages, analysis window, `read_gfw()`, gear classes), `vessel_helpers.R` (crosswalk build and validation, `classify()`, the fishing roster), `review_helpers.R` (03's screen, GARFO matching, and GFW identity and PSIX evidence), `port_helpers.R` (03b's port-visit rules and checks), `analysis_helpers.R` (seasons, transforms, lease distances, lattice neighbours, `fit_cached()`, provenance sidecars), `infra_helpers.R` (reading Ørsted foundation files and building exposure covariates), `spatial_helpers.R` (global and local statistics), `bag_helpers.R` (BAG models) and `compare_helpers.R` (the v4 vs v5 comparison report).
 
@@ -60,7 +60,7 @@ The pull runs to 2026-09-30, but the window ends on 2026-08-31, the last day Ør
 ### Layout
 
 ```
-r/                          workflow qmds in run order (00–10, with 02a, 03b and 05a), shared *_helpers.R, paths.R
+r/                          workflow qmds in run order (00–09, with 02a, 03b and 05a), shared *_helpers.R, paths.R
   tests/testthat/           tests for the shared code; schema checks on references/
 references/                 tracked: hand-made decision files, Ørsted dates, GARFO codes,
                             generated *_{pipeline}.csv crosswalk, permit groups and roster,
@@ -74,7 +74,7 @@ reports/                    gitignored: figures and tables from 06 onward, by pi
 archive/                    frozen Python implementation and its written output
 ```
 
-Data flows one way: the pull (01) → grid (02) → infrastructure covariates (02a) → vessel review (03, writes `references/`) → home ports (03b, descriptive: read by the synthesis and sensitivity only) → classification (04) → analysis tables (05) → rasters for other GIS work (05a, an output only) → the analysis phases (06–10) → `reports/`. Everything made from a pull is filed under its GFW pipeline version: `v5`, the primary analysis, and `v4`, kept as a sensitivity (D-070).
+Data flows one way: the pull (01) → grid (02) → infrastructure covariates (02a) → vessel review (03, writes `references/`) → home ports (03b, descriptive: read by the synthesis and sensitivity only) → classification (04) → analysis tables (05) → rasters for other GIS work (05a, an output only) → the analysis phases (06–09) → `reports/`. Everything made from a pull is filed under its GFW pipeline version: `v5`, the primary analysis, and `v4`, kept as a sensitivity (D-070).
 
 `planning/post_filter_review.qmd`, `planning/work-plan-appendices.md` and `planning/gridcell_decision.R` are earlier working notes, kept for the record.
 
@@ -113,7 +113,7 @@ From the repository root:
 
 2. **Get the raw pull.** Either copy the 2026-10-06 extracts into `data/raw/gfw/v4/`, or make a new pull, naming its folder and GFW dataset version: `quarto render r/01_pull_gfw.qmd -P pipeline:v5 -P dataset_version:v5.0`.
 
-3. **Render the workflow.** `quarto render r/` runs 02 to 10 in order. Without the GARFO files and caches, skip 03; 04 uses the crosswalk committed in `references/`:
+3. **Render the workflow.** `quarto render r/` runs 02 to 09 in order. Without the GARFO files and caches, skip 03; 04 uses the crosswalk committed in `references/`:
 
    ```sh
    quarto render r/02_build_grid.qmd
@@ -121,7 +121,7 @@ From the repository root:
    quarto render r/04_classify_aggregate.qmd
    ```
 
-   then render 05 onward one at a time in the same way. 08's permutation tests take about 3 h on a first run and 10's model fits can take minutes each; both are cached, so later renders are fast.
+   then render 05 onward one at a time in the same way. 08's permutation tests take about 3 h on a first run and 09's model fits can take minutes each; both are cached, so later renders are fast.
 
    Every path is repo-relative and each qmd finds the repo root itself, so the qmds also run chunk by chunk in an IDE.
 

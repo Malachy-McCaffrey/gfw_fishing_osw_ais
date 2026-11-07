@@ -28,6 +28,19 @@ Links of the form *plan: …* point to sections of
 Phase 4 was AKDE. From D-059 on, Phases 5–9 are renumbered 4–8: BAG is now
 Phase 4, frequentist models 5, INLA-SPDE 6, sensitivity 7 and synthesis 8.
 
+**Notebook numbers.** Rows before D-100 call the BAG notebook "10"
+(`10_bag.qmd`) and the planned notebooks 11–14. From D-100 on, BAG is 09
+(`09_bag.qmd`) and the planned notebooks are 10 (frequentist), 11 (INLA), 12
+(sensitivity) and 13 (synthesis).
+
+---
+
+### 2026-11-06, notebook numbering and 09's structure
+
+| ID | Topic | Decision | Consequence | Status |
+|---|---|---|---|---|
+| D-100 | Notebook numbering | **`10_bag.qmd` is renumbered `09_bag.qmd`, and the planned notebooks 11–14 become 10–13** (`10_models_frequentist`, `11_models_inla`, `12_sensitivity`, `13_synthesis`), closing the gap at 09. The gap was left when the infrastructure step was folded into `05` (D-021) and later split out as `02a` (D-060), and kept when AKDE was dropped (D-059) so file names would not change; with AKDE gone and no notebook yet written past BAG, the run order is now contiguous. Updated: the plan's Status and file tables and every notebook reference in it, the README, the v5 plan, `r/_quarto.yml`, the comments in `bag_helpers.R`, `analysis_helpers.R`, `paths.R`, `port_helpers.R` and `03b`; 09 writes `manifest_09.csv` | A rename only: no model, cache key, path or output folder changes (`reports/bag/` and `data/processed/models/` are not numbered). Earlier rows, commit messages and the 2026-10-21 report keep "10" (see "Notebook numbers" above). `r/10_bag_files/` and `r/10_bag.rmarkdown` are leftovers of 10's last renders (gitignored) | |
+
 ---
 
 ### 2026-11-04, v5 vessel and gear review closed

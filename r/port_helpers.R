@@ -334,7 +334,7 @@ distance_origin <- function(units, port_year, port_stage1, visits,
 # dataset); the records are the AOI pull, so this is the distance from home
 # port to the effort inside the AOI. Returns the `by` columns with MMSI and
 # year, hours, the origin columns (community, source), hours_with_origin and
-# mean_km (NA without an origin). A descriptive outcome for 13 and 14, never
+# mean_km (NA without an origin). A descriptive outcome for 12 and 13, never
 # a model covariate (D-088).
 port_distance <- function(effort, origins, by = c("stage", "dataset"),
                           crs = port_rules$crs) {

@@ -130,7 +130,7 @@ source("r/analysis_helpers.R")
 source("r/bag_helpers.R")
 
 qparams <- if (isTRUE(getOption("knitr.in.progress"))) params else {
-  hdr <- knitr::knit_params(readLines(file.path(root, "r/10_bag.qmd"), warn = FALSE))
+  hdr <- knitr::knit_params(readLines(file.path(root, "r/09_bag.qmd"), warn = FALSE))
   lapply(hdr, function(p) p$value)
 }
 paths <- gfw_paths_with(qparams)
@@ -2299,7 +2299,7 @@ p
 
 ```{r}
 manifest <- tibble(file = outputs, sha256 = map_chr(outputs, file_sha256))
-f_manifest <- file.path(paths$bag, "manifest_10.csv")
+f_manifest <- file.path(paths$bag, "manifest_09.csv")
 write_csv(manifest, f_manifest)
 write_provenance(f_manifest, input_files, extra = list(
   outputs = nrow(manifest), interim_spec = "sdmTMB; spatial on; iid stage fields (stage x season); ar1 year fields (timing)",

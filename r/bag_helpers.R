@@ -1,10 +1,10 @@
-# Helpers for the BAG models (Phase 4, 10_bag.qmd). Source after the
+# Helpers for the BAG models (Phase 4, 09_bag.qmd). Source after the
 # tidyverse, r/paths.R, r/gfw_helpers.R and r/analysis_helpers.R:
 #   source("r/analysis_helpers.R"); source("r/bag_helpers.R")
 #
 # Pure functions of their arguments (the simulation and bootstrap ones take
 # an explicit seed), unit-tested in r/tests/testthat/test-bag_helpers.R.
-# The model fits themselves live in 10_bag.qmd, cached with fit_cached().
+# The model fits themselves live in 09_bag.qmd, cached with fit_cached().
 
 # Factor levels used by every BAG model --------------------------------------
 # The 8–15 km ring is the BAG reference (plan, "BAG design"), and Stage 1 the
@@ -390,7 +390,7 @@ term_support <- function(formula, d, vessels = NULL, keys = NULL) {
   })
 }
 
-# Whether each term meets the minimum support set in 10's parameters
+# Whether each term meets the minimum support set in 09's parameters
 # (D-076): at least `min_positive` positive rows, from at least `min_cells`
 # cells and `min_vessels` vessels. A vessel count of NA (no vessel table)
 # skips that criterion.
@@ -426,7 +426,7 @@ spatial_block_folds <- function(x_km, y_km, size_km, k = 5, seed = 42) {
 }
 
 # Reading the results (D-078) ----------------------------------------------------
-# The plan's reading rules (@sec-bag-reading) as functions, so 10's verdict
+# The plan's reading rules (@sec-bag-reading) as functions, so 09's verdict
 # table applies them mechanically and the rules cannot drift after the
 # estimates are seen. Estimates are on the log scale (log rate ratio), and
 # `mde` is the gear's minimum detectable effect as a proportional decrease

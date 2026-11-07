@@ -95,10 +95,10 @@ make_gfw_paths <- function(pipeline = gfw_pipeline_default) {
     analysis      = v("data/processed/analysis"),
     bathy         = "data/sf/bathy/crm_vol1_2023_aoi.tif", # NCEI CRM Vol. 1 AOI subset, fetched by 05
     rasters       = v("data/processed/rasters"),  # 05a: Primary effort and covariates as GeoTIFF + NetCDF (D-067)
-    models        = v("data/processed/models"),   # fitted models, cached by fit_cached() (10 onward)
+    models        = v("data/processed/models"),   # fitted models, cached by fit_cached() (09 onward)
     explore       = v("reports/explore"),         # 06 figures/ and tables/ (gitignored)
     spatial       = v("reports/spatial"),         # 07 onward: figures/ and tables/ (gitignored)
-    bag           = v("reports/bag"),             # 10: figures/, tables/, refit cache/ (gitignored)
+    bag           = v("reports/bag"),             # 09: figures/, tables/, refit cache/ (gitignored)
     compare       = "reports/pipeline_compare",   # v4 vs v5 comparison (gitignored)
     basemap       = "references/basemap/aoi_ocean_utm19n.tif", # map background, EPSG:32619
 

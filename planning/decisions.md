@@ -35,6 +35,14 @@ Phase 4, frequentist models 5, INLA-SPDE 6, sensitivity 7 and synthesis 8.
 
 ---
 
+### 2026-11-06, worker output
+
+| ID | Topic | Decision | Consequence | Status |
+|---|---|---|---|---|
+| D-102 | Parallel workers' output goes to log files | **Every callr worker in `r/bag_specs.R` (`run_specs()` fits and `run_refit_jobs()` refits) writes its stdout and stderr to its own file in `reports/bag/{pipeline}/worker_logs/`, named after its fit or refit set, instead of to callr's default pipes. A worker counts as failed when callr's result record holds an error, not only on a non-zero exit status: a worker whose R code errors exits with status 0 (checked 2026-11-06), so until now a failed fit would have been logged as done and surfaced later as a missing cache file. The error reported is callr's record plus the last lines of the worker's log. The warm-start template build (`do_fit = FALSE`, D-097) gets `silent = TRUE`.** Why: neither runner reads the pipes while it waits, so a worker that printed more than a pipe holds blocked on its next write. On 2026-11-06 the first two warm starts ever run (v5 `vp_MOBILE timing leads` and `timing fleet`) printed sdmTMB's TMB trace from the template build, which lacked `silent = TRUE`, and sat at one CPU minute for two hours while their memory was paged out; holding both heavy slots, they stalled the rest of the render | Computational only: no model, key or result changes. Cache keys hash only the model inputs, not the fit function, so every cached fit stays valid. Fit progress is still in `fit_progress.log`; a fit's own output is now in its worker log | |
+
+---
+
 ### 2026-11-06, notebook numbering and 09's structure
 
 | ID | Topic | Decision | Consequence | Status |

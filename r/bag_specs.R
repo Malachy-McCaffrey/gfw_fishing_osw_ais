@@ -126,9 +126,13 @@ make_spec <- function(id, d, formula, family, spatiotemporal = "off", time = NUL
     # layout and map, take the parent's estimates into it (warm_start_of(),
     # bag_helpers.R), then fit. multiphase off: sdmTMB applies `start` after
     # its first, non-spatial phase, so that phase would be discarded anyway
+    # silent = TRUE (D-102): with do_fit = FALSE sdmTMB still builds the TMB
+    # object, and without it that build traces to the console; in a worker
+    # whose output went to an unread pipe that trace stalled both v5 warm
+    # starts on 2026-11-06
     template <- sdmTMB::sdmTMB(formula, data = d, mesh = mesh, family = fam, offset = d$log_expo,
                                spatial = "on", spatiotemporal = spatiotemporal, time = time, knots = knots,
-                               do_fit = FALSE)
+                               do_fit = FALSE, silent = TRUE)
     start <- warm_start_of(parent_file, template)
     sdmTMB::sdmTMB(formula, data = d, mesh = mesh, family = fam, offset = d$log_expo,
                    spatial = "on", spatiotemporal = spatiotemporal, time = time, knots = knots,
@@ -552,6 +556,32 @@ power_fingerprint <- function() digest::digest(list(
   params = qparams[c("power_nsim", "power_effects", "power_nsim_bracket", "power_fade_effect",
                      "timing_power_effects", "radius_effects", "radius_km")]), algo = "sha256")
 
+# Worker output (D-102). callr::r_bg() sends a worker's stdout and stderr to
+# pipes by default, and neither runner reads them while it waits: once a
+# worker printed more than a pipe holds, its next write blocked forever (two
+# v5 warm starts sat at zero CPU for two hours on 2026-11-06). Each worker
+# instead writes both streams to its own file in worker_logs/ of the report
+# folder, named after its fit or refit set and overwritten by the next
+# attempt, so output can never block and every fit leaves a log to read.
+worker_log <- function(name) {
+  d <- file.path(paths$bag, "worker_logs")
+  dir.create(d, recursive = TRUE, showWarnings = FALSE)
+  file.path(d, paste0(gsub("[^A-Za-z0-9_.-]+", "_", name), ".log"))
+}
+# A finished worker's error, or NULL when it succeeded. A worker whose R
+# code errors still exits with status 0 (callr records the error in its
+# result file instead; checked 2026-11-06), so the exit status alone never
+# caught a failed fit: the result is checked too. The message is callr's
+# record of the error (independent of the output streams) and the last
+# lines of the worker's log
+worker_error <- function(p, log_file) {
+  err <- tryCatch({ p$get_result(); NULL }, error = conditionMessage)
+  if (is.null(err) && p$get_exit_status() == 0) return(NULL)
+  if (is.null(err)) err <- paste("exit status", p$get_exit_status())
+  tail_lines <- if (file.exists(log_file)) tail(readLines(log_file, warn = FALSE), 20) else character()
+  paste0(err, "\n--- last lines of ", log_file, " ---\n", paste(tail_lines, collapse = "\n"))
+}
+
 # Fits every spec not yet cached, `workers` at a time, each in its own R
 # process (callr). Scheduling (D-097):
 #   - at most `heavy_workers` fits over `heavy_rows` rows run at once; the
@@ -597,7 +627,9 @@ run_specs <- function(specs, workers, heavy_workers = qparams$heavy_workers,
       # .Rprofile, so renv is not activated in it (renv's activation takes
       # one shared lock, and a worker that never released it stalled every
       # later worker on 2026-11-06); libpath gives it this session's
-      # library, the renv project library, instead
+      # library, the renv project library, instead. Output goes to the
+      # fit's own log file, never to a pipe (D-102)
+      log_file <- worker_log(s$id)
       p <- callr::r_bg(function(root, spec, dir) {
         setwd(root)
         suppressPackageStartupMessages(library(tidyverse))
@@ -608,8 +640,9 @@ run_specs <- function(specs, workers, heavy_workers = qparams$heavy_workers,
         fit_cached(spec$key, spec$fun, dir = dir, label = spec$id)
         TRUE
       }, args = list(root = root, spec = s, dir = paths$models), supervise = TRUE,
-      user_profile = FALSE, libpath = .libPaths())
-      running[[s$id]] <- list(p = p, heavy = is_heavy(s), peak = NA_real_, start = Sys.time())
+      user_profile = FALSE, libpath = .libPaths(), stdout = log_file, stderr = "2>&1")
+      running[[s$id]] <- list(p = p, heavy = is_heavy(s), peak = NA_real_, start = Sys.time(),
+                              log = log_file)
       progress("start:", s$id, "| rows", rows_of(s), if (is_heavy(s)) "| heavy" else "",
                if (!is.null(s$after)) "| warm" else "")
     }
@@ -625,9 +658,10 @@ run_specs <- function(specs, workers, heavy_workers = qparams$heavy_workers,
         if (!is.na(rss)) running[[nm]]$peak <- max(r$peak, rss, na.rm = TRUE)
       } else {
         mins <- round(as.numeric(difftime(Sys.time(), r$start, units = "mins")), 1)
-        if (r$p$get_exit_status() != 0) {
-          progress("FAILED:", nm, "after", mins, "min")
-          stop("fit failed: ", nm, "\n", r$p$read_all_error())
+        err <- worker_error(r$p, r$log)
+        if (!is.null(err)) {
+          progress("FAILED:", nm, "after", mins, "min | log", r$log)
+          stop("fit failed: ", nm, "\n", err)
         }
         progress("done:", nm, "|", mins, "min | peak", round(r$peak / 1e9, 2), "GB")
         peaks <- add_row(peaks, model = nm, peak_gb = round(r$peak / 1e9, 2))
@@ -694,7 +728,10 @@ run_refit_jobs <- function(spec_id, d, family, jobs, term, terms, wald_terms = N
          "(leave-one-vessel-out) or r/09b_bag_power.qmd (power) for this pipeline first", call. = FALSE)
   if (nrow(todo) > 0) {
     chunks <- split(todo, rep_len(seq_len(min(workers, nrow(todo))), nrow(todo)))
-    procs <- map(chunks, function(ch) {
+    # one log per worker, named by the refit set and the worker's number;
+    # output goes there, never to a pipe (D-102)
+    logs <- map_chr(seq_along(chunks), \(i) worker_log(paste0(basename(out_dir), "_w", i)))
+    procs <- map2(chunks, logs, function(ch, log_file) {
       jf <- tempfile(fileext = ".rds"); saveRDS(ch, jf)
       callr::r_bg(function(root, spec_file, jobs_file) {
         setwd(root)
@@ -747,11 +784,13 @@ run_refit_jobs <- function(spec_id, d, family, jobs, term, terms, wald_terms = N
       # user_profile = FALSE and this session's library: no renv
       # activation, so no shared lock to wait on (D-099)
       }, args = list(root = root, spec_file = spec_file, jobs_file = jf), supervise = TRUE,
-      user_profile = FALSE, libpath = .libPaths())
+      user_profile = FALSE, libpath = .libPaths(), stdout = log_file, stderr = "2>&1")
     })
     walk(procs, \(p) p$wait())
-    fails <- keep(procs, \(p) p$get_exit_status() != 0)
-    if (length(fails) > 0) stop(length(fails), " refit workers failed: ", fails[[1]]$read_all_error())
+    errs <- map2(procs, logs, worker_error)
+    failed <- which(!map_lgl(errs, is.null))
+    if (length(failed) > 0)
+      stop(length(failed), " refit workers failed: ", errs[[failed[1]]])
   }
   # results carry the caller's original tag
   map_dfr(seq_len(nrow(jobs)), \(j) readRDS(file.path(out_dir, paste0(jobs$tag[j], ".rds"))) |>

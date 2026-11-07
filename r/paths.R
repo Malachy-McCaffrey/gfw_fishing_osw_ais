@@ -98,7 +98,7 @@ make_gfw_paths <- function(pipeline = gfw_pipeline_default) {
     models        = v("data/processed/models"),   # fitted models, cached by fit_cached() (09a onward)
     explore       = v("reports/explore"),         # 06 figures/ and tables/ (gitignored)
     spatial       = v("reports/spatial"),         # 07 onward: figures/ and tables/ (gitignored)
-    bag           = v("reports/bag"),             # 09a/09b/09: figures/, tables/, refit cache/, fit_progress.log, power_results.rds (gitignored)
+    bag           = v("reports/bag"),             # 09a/09b/09: figures/, tables/, refit cache/, fit_progress.log, worker_logs/ (D-102), power_results.rds (gitignored)
     compare       = "reports/pipeline_compare",   # v4 vs v5 comparison (gitignored)
     basemap       = "references/basemap/aoi_ocean_utm19n.tif", # map background, EPSG:32619
 

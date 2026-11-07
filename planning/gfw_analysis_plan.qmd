@@ -963,7 +963,7 @@ place:
 | 07 | `07_spatial_global.qmd` | 2: Global Moran's I, General G, correlograms | `spatial/global_*.csv` |
 | 08 | `08_spatial_local.qmd` | 3: Local Moran's I vs Gi\*, change classes | `spatial/local_*.gpkg` |
 | 09a | `09a_bag_fit.qmd` | 4: fits every BAG model, the random-field check and the leave-one-vessel-out refits (D-101); specifications in `r/bag_specs.R`, parameters in `r/bag_params.yml` | `models/{pipeline}/*.rds`, `reports/bag/{pipeline}/cache/` |
-| 09b | `09b_bag_power.qmd` | 4: Step 3 simulation power, after Phase 5 (D-096, D-101) | `reports/bag/{pipeline}/power_results.rds` |
+| 09b | `09b_bag_power.qmd` | 4: Step 3 simulation power, after the selection step (D-096, D-101, D-105) | `reports/bag/{pipeline}/power_results.rds` |
 | 09 | `09_bag.qmd` | 4: the BAG report, read from 09a's and 09b's caches (was `10_bag.qmd` until D-100, which closed the gap 09 had been left as since D-021/D-060; split in three by D-101) | `reports/bag/{pipeline}/` |
 | 10 | `10_models_frequentist.qmd` | 5: Tweedie and hurdle GLMMs (`glmmTMB`, `sdmTMB`) | `models/freq_*.rds` |
 | 11 | `11_models_inla.qmd` | 6: INLA-SPDE | `models/inla_*.rds` |
@@ -1398,10 +1398,10 @@ All criteria are fixed before the results are seen.
    - permutation seeds;
    - weights: queen vs second-order queen vs distance band (from Phase 2).
 5. **Detection power on a known signal.** Plant synthetic signals in null
-   surfaces simulated from the Phase 5 base model, which keeps the observed
-   zero structure and autocorrelation. *Until Phase 5 exists (decision
+   surfaces simulated from the selected base model (D-104), which keeps the observed
+   zero structure and autocorrelation. *Until the selected base model exists (decision
    2026-10-20, D-038):* interim nulls, a Gaussian random field at each gear's *ρ*₀
-   rank-mapped onto the observed Stage 1 values; re-run with Phase 5
+   rank-mapped onto the observed Stage 1 values; re-run with the selected base model's
    simulations when they exist. The planted signals:
    - a 2-km "avoidance halo" (–50% inside the leases);
    - a "spillover ring" (+50% at 2–4 km).
@@ -1614,7 +1614,7 @@ $$
   Stage 3 × inside rate ratio against Stage 1 (Stage 3 × near where the bands
   are pooled); the Stage 2 terms are reported as anticipation
   (@sec-bag-prereg, D-078, D-091).
-- *ω*<sub>c</sub> is a spatial random effect (Phase 5 decides its form).
+- *ω*<sub>c</sub> is a spatial random effect (its form is chosen by Phase 4's selection step, D-104).
 
 **Timing model: cell × month × gear** (VP and mobile AFE; fixed AFE at cell ×
 season-year, with *s*<sub>cc</sub>(moy) replaced by the season term
@@ -1670,7 +1670,7 @@ $$
   the zone period: a recovery means the construction-era loss was
   exclusion, a persistent gap means lasting avoidance.
 - *ε*<sub>c,t</sub> is temporal correlation within a cell (AR1 on month or
-  year; Phase 5).
+  year; chosen by the selection step, D-104).
 - For the season-year model the offset becomes
   log(months<sub>t</sub> · area<sub>c</sub>), because the first and last
   season-years are partial (3 and 5 months).
@@ -1818,7 +1818,7 @@ The Phase 7 sensitivity runs use the same tables.
   result hold?), not as an estimate of the radius (D-065).
 
 No new dependency: `simulate()` for `glmmTMB` and `sdmTMB` fits does the
-simulation, and the refits use the Phase 5 code.
+simulation, and the refits use the model code in `r/bag_specs.R` (D-101, D-104).
 
 ### Pre-trend equivalence test {#sec-bag-pretrend}
 
@@ -1831,7 +1831,7 @@ that would matter**.
 **Model.** The pre-construction data at the timing model's time step (cell ×
 month for VP and mobile AFE, cell × season-year for fixed AFE), with the
 season or cyclic month term, offset, covariates and spatial structure from
-Phase 5, plus a band-specific linear trend:
+the selection step (D-104), plus a band-specific linear trend:
 
 $$
 \log \mu_{c,t} = \ldots + \theta_{b(c)} \cdot \text{year}_t
@@ -1939,7 +1939,7 @@ cross-validation (`sdmTMB_cv`) decides whether the per-stage and AR1 year
 fields earn their place against a shared field alone. It runs after the
 analysis freeze and before the BAG effects are read, and reports predictive
 scores only. 09 runs it now on the interim models (its "Random-field check"
-section, D-077); Phase 5 repeats it on the settled base model.
+section, D-077); the selection step applies its rule before any BAG estimate is read, and it is not repeated (D-104).
 
 - **Stage × season models.** Three structures with the same fixed effects
   and family: a shared field only, the shared field plus iid per-stage
@@ -1956,7 +1956,7 @@ section, D-077); Phase 5 repeats it on the settled base model.
   a higher total score, scores higher in at least four of the five folds,
   and has no failed fold (a non-positive-definite Hessian). For the timing
   models, the AR1 field is dropped only if that lowers AIC by more than 2.
-  A replacement is made in Phase 5's refit, logged as a new decision. The
+  A replacement is made by the selection step and 09a's refit, before any BAG estimate is read (D-104). The
   BAG terms and the headline stay as frozen.
 
 ### Reading the results {#sec-bag-reading}
@@ -1978,7 +1978,7 @@ estimate can change how the others are read.
 | Power | MDE above 50%, or never reached | **fail**: descriptive only, with the MDE |
 | Pre-trend (TOST) | non-parallel | **hold**: the headline comes from the model with the band × year term (Phase 7) |
 | Pre-trend (TOST) | inconclusive | **caution**: with- and without-term models co-primary |
-| Random fields (D-077) | another structure meets the CV rule | **caution** until Phase 5's refit |
+| Random fields (D-077) | another structure meets the CV rule | **caution** until Phase 5's refit. Cannot arise since D-104: the structure the rule selects is the one fitted before the verdict is read |
 | Residuals (DHARMa) | — | read by eye, not automated (at this sample size the tests reject for trivial misfit) |
 
 A failed gate is "can't say", never "no effect".
@@ -2332,18 +2332,18 @@ A **tiered strategy**, chosen by data shape rather than by habit:
    a spatiotemporal field by stage (stage × season tables, with a season
    fixed effect) or a yearly AR1 field (monthly and season-year tables).
    Families:
-   - **VP: NB2.** Delta-truncated-NB2 if zero inflation is flagged.
-   - **AFE: delta-Gamma.** Tweedie is fitted as the direct comparison.
+   - **VP: NB2.** Delta-truncated-NB2 if zero inflation is flagged. Superseded for the BAG models by the pre-registered NB2; zero inflation is a reported check in the gate (D-105).
+   - **AFE: delta-Gamma and Tweedie** as candidates; Tweedie is the default that delta-Gamma must beat (D-105).
 
    `sdmTMB` brings the SPDE machinery of INLA into a fast, frequentist,
    DHARMa-compatible framework. Its developers built it for fisheries survey
    and effort data of exactly this shape.
-2. **Tweedie vs hurdle.** Decide per gear × dataset × time step by:
+2. **Tweedie vs hurdle.** Decide per gear × dataset by the following, applied by Phase 4's selection step with D-105's DHARMa adequacy screen (the timing models take their gear's stage × season family, D-104):
    - spatial-block cross-validation (`sdmTMB_cv`, block size ≥ *ρ*₀), using
      the out-of-fold log predictive density;
    - DHARMa diagnostics (reported beside the choice, not part of it, D-104);
    - whether the hurdle's two parts give BAG effects with **opposite signs**.
-     If so, the hurdle is required on substance, whatever the CV score.
+     If so, the hurdle is required on substance, whatever the CV score. Read as: both parts' 95% CIs exclude zero (D-104).
 3. **`glmmTMB`** without a spatial field (cell random effect only) as the
    simple, transparent baseline, to show what the spatial field changes.
 4. **INLA-SPDE as the confirmatory Bayesian model** for the headline BAG
@@ -2360,14 +2360,14 @@ A **tiered strategy**, chosen by data shape rather than by habit:
 #| label: phase5-sdmtmb
 # Phase 5 (10_models_frequentist.qmd): primary frequentist BAG models in
 # sdmTMB, which fits GLMMs with an SPDE (Matérn) spatial field by Laplace
-# approximation in TMB. A sketch: formulas are final, tuning is set at Phase 5.
+# approximation in TMB. A sketch: formulas are final, the family and fields are chosen by Phase 4's selection step (D-104).
 #
 # Inputs:  analysis tables from Phase 0 (data/processed/analysis/
 #          afe_stage_season_gear.csv, vp_month_gear.csv,
 #          afe_season_year_gear.csv) joined to cells.gpkg covariates;
 #          `rho0`, the practical range from the Phase 2 correlogram.
 # Outputs: fitted models cached with fit_cached() (r/analysis_helpers.R) and
-#          CV scores for the Tweedie vs hurdle decision.
+#          the gate's sensitivity refits (the base-model choice is Phase 4's, D-104).
 # Time steps follow the "Time steps" section: a shared cell x stage x season
 # BAG model for every modelled gear, plus a timing model that is monthly
 # for VP and mobile AFE and season-year for fixed AFE.
@@ -2406,7 +2406,7 @@ mesh <- make_mesh(d, c("x_km", "y_km"), cutoff = 1)
 # geography); spatiotemporal = "iid" adds an independent field per stage
 # for stage-specific deviations that the fixed effects miss. Both seasons
 # of a stage share that stage's field.
-# Frozen in 09, and refitted here as frozen:
+# Frozen in 09 and selected before the BAG terms are read (D-104); refitted here only for the gate's sensitivity checks:
 #  - the band scheme comes from the term-support rule (D-076): full bands,
 #    or near (inside + 0–2 km) / mid (2–8 km) where a BAG term lacks
 #    support (fixed AFE on v4). No terms are added (D-076);

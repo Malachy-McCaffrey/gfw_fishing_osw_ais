@@ -1,0 +1,416 @@
+---
+title: "MM GFW BAG Simulation Power (Phase 4, Step 3)"
+author: "Malachy McCaffrey"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    fig-width: 10
+    fig-height: 6
+params:
+  # GFW pipeline version to run against (r/paths.R); blank = the default
+  pipeline: ""
+  # Path overrides (see r/paths.R); leave blank to use the project paths.
+  analysis: ""
+  processed_gfw: ""
+  models: ""
+  bag: ""
+  # The model-defining parameters, the power settings among them, are in
+  # r/bag_params.yml, shared with 09a and 09 (D-101)
+  bag_params: ""
+  # Run settings: how fast it runs, never what it computes
+  fit_workers: 8           # parallel power-base fits
+  heavy_workers: 2         # D-097, as in 09a
+  heavy_rows: 100000
+  workers: 14              # parallel refits (callr)
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# run from the repo root (the folder holding renv.lock) so the relative paths
+# in r/paths.R resolve whether the qmd is rendered or run chunk by chunk
+root <- getwd()
+while (!file.exists(file.path(root, "renv.lock")) && dirname(root) != root) root <- dirname(root)
+knitr::opts_knit$set(root.dir = root)
+```
+
+## Objective
+
+Step 3 of Phase 4, split out of the report (D-101): the minimum detectable
+BAG effect (MDE) per dataset × gear, the gradient test's power, each timing
+model's power on its season-year proxy, and VP mobile's radius recovery.
+
+**Run only after Phase 5 settles the base model (D-096).** Power simulates
+from the base model, so until then the report runs without it: every MDE is
+unknown (NA), estimates are read without an equivalence margin, the
+pre-trend test uses the plan's placeholder margin, and no gear is marked
+descriptive-only for want of an MDE. Days of refits on a cold cache.
+
+Render `09a_bag_fit.qmd` first (the stage × season base models are main
+fits), then this, then `09_bag.qmd`. The results are saved with a
+fingerprint of the base models and power settings they came from; the
+report uses them only while that fingerprint still matches.
+
+```{r}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(sf)
+  library(sdmTMB)
+})
+
+source("r/paths.R")
+source("r/gfw_helpers.R")
+source("r/analysis_helpers.R")
+source("r/bag_helpers.R")
+
+doc_params <- if (isTRUE(getOption("knitr.in.progress"))) params else {
+  hdr <- knitr::knit_params(readLines(file.path(root, "r/09b_bag_power.qmd"), warn = FALSE))
+  lapply(hdr, function(p) p$value)
+}
+# every table, spec and runner; sets qparams and paths (D-101)
+source("r/bag_specs.R", local = knitr::knit_global())
+
+fig_dir <- file.path(paths$bag, "figures")
+tab_dir <- file.path(paths$bag, "tables")
+for (d in c(fig_dir, tab_dir)) dir.create(d, recursive = TRUE, showWarnings = FALSE)
+outputs <- character()
+save_tab <- function(df, name) {
+  f <- file.path(tab_dir, paste0(name, ".csv"))
+  write_csv(df, f, na = "")
+  outputs <<- c(outputs, f)
+  invisible(f)
+}
+save_fig <- function(p, name, width = 10, height = 6) {
+  f <- file.path(fig_dir, paste0(name, ".png"))
+  ggsave(f, p, width = width, height = height, dpi = 150, bg = "white")
+  outputs <<- c(outputs, f)
+  invisible(p)
+}
+kable_round <- function(df, digits = 3) {
+  df |> mutate(across(where(is.double), \(x) round(x, digits))) |> knitr::kable()
+}
+theme_set(theme_minimal(base_size = 11))
+ds_label <- c(vp = "VP", afe = "AFE")
+gear_cols <- c(MOBILE = "#2a78d6", FIXED = "#eb6834", POLE_AND_LINE = "#1baf7a")
+```
+
+## Base models
+
+The stage × season base models are main fits (09a). The timing models'
+season-year proxy bases and VP mobile's radius-recovery base are fitted
+here, with the same runner and limits as 09a's fits (D-097, D-099).
+
+```{r}
+# the stage × season bases must already be cached by 09a
+missing_bases <- discard(ss_sets$spec_base, \(s) file.exists(fit_cache_path(s$key, paths$models)))
+if (length(missing_bases) > 0)
+  stop("render r/09a_bag_fit.qmd first: missing ", paste(map_chr(missing_bases, "id"), collapse = ", "))
+t_base <- system.time(base_peaks <- run_specs(power_specs, qparams$fit_workers))[["elapsed"]]
+round(t_base / 60, 1)
+base_peaks |> knitr::kable()
+```
+
+## Method
+
+For each dataset × gear: fit the **base model** (the stage × season model
+without the BAG terms), simulate `r qparams$power_nsim` new datasets from it
+with **new spatial random fields** each time (`simulate(re_form = ~0)`), so
+spatial uncertainty is included (conservative). Inject a known BAG effect
+in Stage 3, in the shape the pre-registration fixes for each gear (plan,
+@sec-bag-power; D-091), by binomial thinning for VP counts and scaling for
+AFE (`power_effect_factor()`, `r/bag_helpers.R`). Effects are planted by
+each cell's own band, whatever band scheme the refit uses:
+
+- **Matching scenario**, which defines the MDE, at *e* ∈
+  {`r paste(100 * unlist(qparams$power_effects), collapse = ", ")`}%: the
+  mean times (1 − *e*) in the `inside` band alone for a gear fitted with
+  the four bands, so the MDE is that of its Stage 3 × inside headline; in
+  `inside` and `0–2` km for a gear whose bands are pooled (D-076), the
+  cells of its Stage 3 × near headline.
+- **Fading gradient**, for the gradient test's power only, at
+  *e* = `r 100 * qparams$power_fade_effect`%: (1 − *e*) inside,
+  (1 − *e*/2) at 0–2 km and (1 − *e*/4) at 2–4 km, a displacement that
+  weakens with distance. Its *e* = 0 run is the matching scenario's, since
+  nothing is planted.
+
+The full BAG model is refitted to each. Two things are scored: the
+headline rate ratio (power: 95% CI excludes 1; bias; coverage), and the
+gradient test, the Wald test of all Stage 3 × band terms at α = 0.05
+(power, and at *e* = 0 its false-positive rate). The same simulated datasets
+are reused across effect sizes and scenarios, so the curves differ only by
+the effect.
+
+**Second pass (D-094).** After the `r qparams$power_nsim`-simulation pass,
+the smallest effect with power ≥ 0.8 in the matching scenario, and the size
+below it when that is above 0, get more simulations, up to
+`r qparams$power_nsim_bracket`, from a second draw (`seed = 43`). The MDE is
+the smallest tested effect with power ≥ 0.8, scored on all of a size's
+simulations. A gear that reaches 0.8 nowhere gets no second pass.
+
+**Timing models (D-094).** A monthly timing refit takes hours, so each
+timing model's power is simulated on a **season-year proxy**: the timing
+model rebuilt at season-year by the support rule (D-076), its base model
+without the construction × band terms, and (1 − *e*) planted in each cell's
+construction-phase seasons in the headline's bands (inside, or inside and
+0–2 km when pooled), at *e* ∈
+{`r paste(100 * unlist(qparams$timing_power_effects), collapse = ", ")`}%.
+The construction × inside (or near) term is scored. Fixed AFE's timing
+model is at season-year already, so its result is its actual power.
+
+**Radius recovery (D-065, D-094).** For VP mobile at season-year only:
+*λ* planted as (1 − *e*)<sup>*a*</sup> on the 5 km active-construction share
+*a* (true *λ* = log(1 − *e*)), at *e* ∈
+{`r paste(100 * unlist(qparams$radius_effects), collapse = ", ")`}%, and each
+simulation refitted with the share at
+`r paste(unlist(qparams$radius_km), collapse = ", ")` km. Scored: *λ*'s power
+at 5 km; recovery (5 km has the lowest AIC); at *e* = 0, how often another
+radius beats 5 km by more than 2 AIC units; and *λ*'s bias at 5 km and at
+the radius with the lowest AIC (the winner's curse). A radius may be chosen
+from the data only if recovery ≥ 0.8 at an *e* where *λ*'s power ≥ 0.8.
+
+The refits run as `r qparams$workers` separate R processes (`callr`), each
+writing one small result file per refit to `reports/bag/{pipeline}/cache/`, so an
+interrupted render resumes where it stopped.
+
+### Stage × season models
+
+```{r power}
+# the scenario that defines a gear's MDE (D-091): the planted effect covers
+# exactly the cells of its headline term
+matching_scenario <- \(bands) if (bands == "full") "inside" else "near"
+
+power_runs <- ss_sets |>
+  mutate(res = pmap(list(id, dataset, gear, bands, data, family, spec_base, headline, terms),
+                    function(id, ds, g, b, d, fam, sb, hl, tm) {
+    base <- get_fit(sb)
+    sims <- simulate(base, nsim = qparams$power_nsim, re_form = ~0, seed = 42)
+    # each row's own full band: a pooled model's data hold near / mid, but
+    # the effect is planted by the four bands. ss_data() only recodes the
+    # band column when it pools, so its full-band table has the same rows in
+    # the same order; checked, since a misaligned vector would plant the
+    # effect in the wrong cells
+    full <- ss_data(ds, g, "full")
+    stopifnot("full-band rows do not line up with the model data" =
+                identical(full$cell_id, d$cell_id) && identical(full$stage, d$stage) &&
+                identical(full$season, d$season))
+    band_full <- full$dist_band
+    type <- if (fam == "nbinom2") "count" else "continuous"
+    # refit a set of jobs and keep the headline rows, labelled by job
+    refit <- \(jobs) run_refit_jobs(id, d, fam, jobs, hl, tm, wald_terms = grid_terms_of(b, stages = 3)) |>
+      filter(term == hl) |>
+      left_join(select(jobs, tag, scenario, effect, sim), by = "tag")
+    # the planted response of simulation `i`, from column `col` of `s`; the
+    # thinning seed is the simulation number, so it never repeats across passes
+    plant <- \(s, col, sc, e, i) inject_effect(s[, col], power_effect_factor(d$stage, band_full, sc, e), type, seed = i)
+    # pass 1: the matching scenario at every effect size, then the fading
+    # gradient at its one effect size; matching tags keep the format of the
+    # earlier single-scenario runs
+    jobs <- bind_rows(
+      expand_grid(effect = unlist(qparams$power_effects), sim = seq_len(qparams$power_nsim)) |>
+        mutate(scenario = matching_scenario(b), tag = sprintf("power_e%02d_s%03d", round(100 * effect), sim)),
+      expand_grid(effect = qparams$power_fade_effect, sim = seq_len(qparams$power_nsim)) |>
+        mutate(scenario = "fading", tag = sprintf("power_fade_e%02d_s%03d", round(100 * effect), sim))) |>
+      mutate(y = pmap(list(scenario, effect, sim), \(sc, e, i) plant(sims, i, sc, e, i)))
+    res <- refit(jobs)
+    # pass 2 (D-094): more simulations, to power_nsim_bracket, at the
+    # smallest size with power >= 0.8 in the matching scenario and the size
+    # below it; none when no size reaches 0.8. A second draw (seed 43), so
+    # pass 1's simulations and cached refits are untouched; simulations are
+    # numbered on from pass 1 (101, 102, ...) and tagged the same way
+    p1 <- res |> filter(scenario != "fading") |>
+      group_by(effect) |>
+      summarise(power = power_from_refits(estimate, std.error, first(effect))$power, .groups = "drop")
+    br <- bracket_effects(p1$effect, p1$power)
+    n_extra <- qparams$power_nsim_bracket - qparams$power_nsim
+    if (length(br) > 0 && n_extra > 0) {
+      sims2 <- simulate(base, nsim = n_extra, re_form = ~0, seed = 43)
+      jobs2 <- expand_grid(effect = br, k = seq_len(n_extra)) |>
+        mutate(sim = qparams$power_nsim + k, scenario = matching_scenario(b),
+               tag = sprintf("power_e%02d_s%03d", round(100 * effect), sim),
+               y = pmap(list(k, effect, sim), \(col, e, i) plant(sims2, col, matching_scenario(b), e, i))) |>
+        select(-k)
+      res <- bind_rows(res, refit(jobs2))
+    }
+    res
+  })) |>
+  select(id, dataset, gear, bands, res) |> unnest(res)
+save_tab(power_runs, "bag_power_runs")
+
+# the headline term's power, bias and coverage, per scenario and effect
+power <- power_runs |>
+  group_by(id, dataset, gear, bands, scenario, effect) |>
+  summarise(power_from_refits(estimate, std.error, first(effect)) |> select(-effect), .groups = "drop")
+save_tab(power, "bag_power")
+# the MDE from the matching scenario only (D-091); the fading gradient has a
+# single effect size and is not the headline's shape. Sizes that got the
+# second pass are scored on all their simulations (D-094), so the MDE uses
+# the 500-simulation estimate where one exists; `replicates_at_mde` shows
+# which estimate set it
+mde <- power |> filter(scenario != "fading") |>
+  group_by(id, dataset, gear, bands, scenario) |>
+  summarise(mde = mde_of(effect, power), fpr = power[effect == 0],
+            replicates_at_mde = if (is.na(mde)) NA_integer_ else replicates[effect == mde],
+            bracket = paste(100 * effect[replicates + failed > qparams$power_nsim], collapse = "/"),
+            .groups = "drop") |>
+  rename(mde_scenario = scenario) |>
+  mutate(descriptive_only = is.na(mde) | mde > 0.5)
+save_tab(mde, "bag_mde")
+power |> kable_round(3)
+mde |> kable_round(2)
+
+# the gradient test's power (D-091): per scenario and effect, the share of
+# converged refits whose Wald test rejects; at e = 0, its false-positive rate
+gradient_power <- power_runs |>
+  group_by(id, dataset, gear, bands, scenario, effect) |>
+  summarise(wald_power(wald_p), .groups = "drop")
+save_tab(gradient_power, "bag_gradient_power")
+gradient_power |> kable_round(3)
+
+p <- ggplot(filter(power, scenario != "fading"), aes(100 * effect, power, colour = gear)) +
+  geom_hline(yintercept = c(0.05, 0.8), linetype = c(3, 2), colour = "grey50") +
+  geom_line() + geom_point() +
+  scale_colour_manual(values = gear_cols) +
+  facet_wrap(~ dataset, labeller = labeller(dataset = ds_label)) +
+  labs(x = "injected effect: % reduction in the headline's cells in Stage 3", y = "power",
+       colour = NULL, title = "BAG power curves, headline term (interim base model)",
+       subtitle = "matching scenario: inside alone (four bands) or inside + 0–2 km (pooled bands)")
+save_fig(p, "bag_power_curves", height = 4.5)
+p
+
+# the gradient test: its curve in the matching scenario, and the fading
+# gradient's single point (triangle) at its effect size
+p <- ggplot(gradient_power, aes(100 * effect, power, colour = gear)) +
+  geom_hline(yintercept = c(0.05, 0.8), linetype = c(3, 2), colour = "grey50") +
+  geom_line(data = filter(gradient_power, scenario != "fading")) +
+  geom_point(aes(shape = scenario == "fading"), size = 2) +
+  scale_shape_manual(values = c(`FALSE` = 16, `TRUE` = 17), labels = c("matching", "fading gradient"), name = NULL) +
+  scale_colour_manual(values = gear_cols) +
+  facet_wrap(~ dataset, labeller = labeller(dataset = ds_label)) +
+  labs(x = "injected effect (%)", y = "rejection rate (α = 0.05)", colour = NULL,
+       title = "Gradient test power: Wald test of all Stage 3 × band terms (D-091)",
+       subtitle = "at 0%: the false-positive rate; triangles: the fading gradient (e inside, e/2 at 0–2, e/4 at 2–4 km)")
+save_fig(p, "bag_gradient_power", height = 4.5)
+p
+```
+
+### Timing-model power at season-year (D-094)
+
+```{r timing-power}
+# Each timing model's power on its season-year proxy (fixed AFE: its own
+# season-year model). Same steps as the stage × season runs: simulate from
+# the base model with new fields, plant the effect, refit the full model
+timing_power_runs <- tpower_sets |>
+  filter(!map_lgl(spec_base, is.null)) |>
+  mutate(res = pmap(list(id, dataset, gear, bands, plan, family, spec_base, headline),
+                    function(id, ds, g, b, pl, fam, sb, hl) {
+    base <- get_fit(sb)
+    sims <- simulate(base, nsim = qparams$power_nsim, re_form = ~0, seed = 42)
+    d <- pl$data
+    # each row's own full band, as for the stage × season runs: timing_data()
+    # recodes only the band column when it pools, so the rows line up
+    full <- timing_data(ds, g, "season_year", "full", pl$cuts)
+    stopifnot("full-band rows do not line up with the timing data" =
+                identical(full$cell_id, d$cell_id) && identical(full$step_end, d$step_end))
+    band_full <- full$dist_band
+    type <- if (fam == "nbinom2") "count" else "continuous"
+    sc <- matching_scenario(b)
+    jobs <- expand_grid(effect = unlist(qparams$timing_power_effects), sim = seq_len(qparams$power_nsim)) |>
+      mutate(scenario = sc, tag = sprintf("tpower_e%02d_s%03d", round(100 * effect), sim),
+             y = pmap(list(effect, sim), \(e, i)
+               inject_effect(sims[, i], timing_effect_factor(d$construction, band_full, sc, e), type, seed = i)))
+    # the full season-year timing model, AR1 field over years as in Step 6
+    run_refit_jobs(paste0(id, "_timing_sy"), d, fam, jobs, hl, hl,
+                   formula = timing_formula("season_year", pl$terms), spatiotemporal = "ar1", time = "time_year") |>
+      filter(term == hl) |>
+      left_join(select(jobs, tag, scenario, effect, sim), by = "tag")
+  })) |>
+  select(id, dataset, gear, step, proxy, bands, res) |> unnest(res)
+save_tab(timing_power_runs, "bag_timing_power_runs")
+
+timing_power <- timing_power_runs |>
+  group_by(id, dataset, gear, step, proxy, bands, scenario, effect) |>
+  summarise(power_from_refits(estimate, std.error, first(effect)) |> select(-effect), .groups = "drop")
+save_tab(timing_power, "bag_timing_power")
+# the MDE of the construction × inside (or near) term; a monthly model's is
+# its season-year proxy's, and labelled so
+timing_mde <- timing_power |>
+  group_by(id, dataset, gear, step, proxy, bands, scenario) |>
+  summarise(mde = mde_of(effect, power), fpr = power[effect == 0], .groups = "drop") |>
+  mutate(mde_basis = if_else(proxy, "season-year proxy", "own season-year model")) |>
+  rename(mde_scenario = scenario)
+save_tab(timing_mde, "bag_timing_mde")
+timing_power |> kable_round(3)
+timing_mde |> kable_round(2)
+```
+
+### Radius recovery: VP mobile at season-year (D-065, D-094)
+
+```{r radius-recovery}
+# One set of simulations, planted at 5 km, refitted at every radius: the
+# same response vectors at each radius, so the AIC comparison is within a
+# simulation. Runs only when the season-year support rule kept λ
+radius_runs <- if (radius_ok) {
+  d5 <- radius_plan$data
+  base <- get_fit(radius_spec_base)
+  sims <- simulate(base, nsim = qparams$power_nsim, re_form = ~0, seed = 42)
+  # λ planted as (1 − e)^share on the 5 km share, the model's own log-linear
+  # form, so the true λ is log(1 − e) and the bias is measured against it
+  jobs <- expand_grid(effect = unlist(qparams$radius_effects), sim = seq_len(qparams$power_nsim)) |>
+    mutate(tag = sprintf("radius_e%02d_s%03d", round(100 * effect), sim),
+           y = pmap(list(effect, sim), \(e, i) inject_effect(sims[, i], (1 - e)^d5$active, "count", seed = i)))
+  map_dfr(unlist(qparams$radius_km), \(r)
+    run_refit_jobs(sprintf("vp_MOBILE_radius_%gkm", r), radius_data(d5, r), "nbinom2", jobs, "active", "active",
+                   formula = timing_formula("season_year", radius_plan$terms),
+                   spatiotemporal = "ar1", time = "time_year") |>
+      filter(term == "active") |>
+      left_join(select(jobs, tag, effect, sim), by = "tag") |>
+      mutate(radius = r))
+} else {
+  message("radius recovery skipped: the VP mobile season-year model has no λ term (support rule, D-076)")
+  NULL
+}
+
+if (!is.null(radius_runs)) {
+  save_tab(radius_runs, "bag_radius_runs")
+  radius_recovery <- map_dfr(split(radius_runs, radius_runs$effect), \(t) radius_summary(t, t$effect[1]))
+  save_tab(radius_recovery, "bag_radius_recovery")
+  # the D-065 rule: a radius may be chosen from the data only if recovery
+  # >= 0.8 at a planted effect for which λ's power is also >= 0.8
+  radius_choice_allowed <- any(radius_recovery$effect > 0 & radius_recovery$recovery >= 0.8 &
+                                 radius_recovery$power >= 0.8)
+  radius_recovery |> kable_round(3)
+} else radius_choice_allowed <- FALSE
+radius_choice_allowed
+```
+
+## Results for the report
+
+```{r}
+# what 09_bag.qmd reads from Step 3 (the tables later steps use), with the
+# fingerprint of the base models and power settings behind them (D-101)
+saveRDS(list(fingerprint = power_fingerprint(), written = format(Sys.time(), tz = "UTC", usetz = TRUE),
+             mde = mde, gradient_power = gradient_power, timing_mde = timing_mde,
+             radius_choice_allowed = radius_choice_allowed),
+        power_results_path)
+outputs <- c(outputs, power_results_path)
+```
+
+## Manifest and provenance
+
+```{r}
+manifest <- tibble(file = outputs, sha256 = map_chr(outputs, file_sha256))
+f_manifest <- file.path(paths$bag, "manifest_09b.csv")
+write_csv(manifest, f_manifest)
+write_provenance(f_manifest, c(input_files, bag_params_file), extra = list(
+  outputs = nrow(manifest), power_nsim = qparams$power_nsim, power_nsim_bracket = qparams$power_nsim_bracket,
+  fingerprint = power_fingerprint(), mesh_cutoff_km = qparams$mesh_cutoff_km,
+  sdmTMB = as.character(packageVersion("sdmTMB"))))
+nrow(manifest)
+```
+
+## Session info
+
+```{r}
+sessionInfo()
+```

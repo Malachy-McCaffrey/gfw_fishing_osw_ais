@@ -35,7 +35,7 @@ As of 2026-11-04. Decision IDs refer to [`planning/decisions.md`](decisions.md).
 | 1: exploratory analysis | `06_explore.qmd` | **Done**, gate passed 2026-10-19 | D-016 to D-018 |
 | 2: global spatial autocorrelation | `07_spatial_global.qmd` | **Done** (2026-10-20) | D-027 to D-031 |
 | 3: Local Moran's I vs Gi\* | `08_spatial_local.qmd` | **Done** (2026-10-20), except criterion 6, deferred to Phase 4; the primary method stays provisional | D-036 to D-041 |
-| 4: BAG models | `09_bag.qmd` | **In progress** on interim models (Phase 5's recommended form), refitted once Phase 5 settles the base model. Headline estimates and comparisons pre-registered 2026-11-04 (@sec-bag-prereg), before any fit on the frozen vessel classification of either version | D-047 to D-052, D-091 |
+| 4: BAG models | `09a_bag_fit.qmd`, `09b_bag_power.qmd`, `09_bag.qmd` (D-101) | **In progress** on interim models (Phase 5's recommended form), refitted once Phase 5 settles the base model. Headline estimates and comparisons pre-registered 2026-11-04 (@sec-bag-prereg), before any fit on the frozen vessel classification of either version | D-047 to D-052, D-091, D-096 to D-101 |
 | 5: frequentist models | `10_models_frequentist.qmd` | Not started | @sec-models |
 | 6: INLA-SPDE | `11_models_inla.qmd` | Not started | @sec-models |
 | 7: sensitivity | `12_sensitivity.qmd` | Not started | @sec-sensitivity |
@@ -962,7 +962,9 @@ place:
 | 06 | `06_explore.qmd` | 1: EDA | figures, tables |
 | 07 | `07_spatial_global.qmd` | 2: Global Moran's I, General G, correlograms | `spatial/global_*.csv` |
 | 08 | `08_spatial_local.qmd` | 3: Local Moran's I vs Gi\*, change classes | `spatial/local_*.gpkg` |
-| 09 | `09_bag.qmd` | 4: BAG models (was `10_bag.qmd` until D-100, which closed the gap 09 had been left as since D-021/D-060) | `models/bag_*.rds` |
+| 09a | `09a_bag_fit.qmd` | 4: fits every BAG model, the random-field check and the leave-one-vessel-out refits (D-101); specifications in `r/bag_specs.R`, parameters in `r/bag_params.yml` | `models/{pipeline}/*.rds`, `reports/bag/{pipeline}/cache/` |
+| 09b | `09b_bag_power.qmd` | 4: Step 3 simulation power, after Phase 5 (D-096, D-101) | `reports/bag/{pipeline}/power_results.rds` |
+| 09 | `09_bag.qmd` | 4: the BAG report, read from 09a's and 09b's caches (was `10_bag.qmd` until D-100, which closed the gap 09 had been left as since D-021/D-060; split in three by D-101) | `reports/bag/{pipeline}/` |
 | 10 | `10_models_frequentist.qmd` | 5: Tweedie and hurdle GLMMs (`glmmTMB`, `sdmTMB`) | `models/freq_*.rds` |
 | 11 | `11_models_inla.qmd` | 6: INLA-SPDE | `models/inla_*.rds` |
 | 12 | `12_sensitivity.qmd` | 7: sensitivity grid | `sensitivity/*.csv` |
@@ -1499,7 +1501,7 @@ cube is dense enough: **mobile VP** (40% of domain cell-season-years active)
 and, as exploratory, mobile AFE (17%). Report the other gears as too sparse,
 not as "no trend".
 
-## Phase 4: Infrastructure data and BAG models (`02a_infrastructure.qmd`, `09_bag.qmd`) {#sec-bag}
+## Phase 4: Infrastructure data and BAG models (`02a_infrastructure.qmd`, `09a_bag_fit.qmd`, `09b_bag_power.qmd`, `09_bag.qmd`) {#sec-bag}
 
 ### Ørsted turbine and cable data {#sec-infra}
 

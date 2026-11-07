@@ -1,0 +1,208 @@
+---
+title: "MM GFW BAG Model Fits (Phase 4)"
+author: "Malachy McCaffrey"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+params:
+  # GFW pipeline version to fit against (r/paths.R); blank = the default
+  pipeline: ""
+  # Path overrides (see r/paths.R); leave blank to use the project paths.
+  analysis: ""
+  processed_gfw: ""
+  models: ""
+  bag: ""
+  # The model-defining parameters are in r/bag_params.yml, shared with 09b
+  # and 09 (D-101); blank = that file, or a path to another set
+  bag_params: ""
+  # Run settings: they change how fast the fits run, never what is fitted
+  fit_workers: 8           # parallel main-model fits (fewer: the monthly models are large)
+  # Of the fit_workers, at most heavy_workers fits over heavy_rows rows (the
+  # monthly timing and pre-trend models) run at once (D-097): they set the
+  # run's peak memory (a v5 render with eight fits at once ran out of
+  # memory, 2026-11-05)
+  heavy_workers: 2
+  heavy_rows: 100000
+  workers: 14              # parallel leave-one-vessel-out refits (callr)
+  # A quick test run (D-101): a regular expression on spec ids; only the
+  # matching main and field-check fits run, and leave-one-vessel-out is
+  # skipped. Blank = everything
+  fit_only: ""
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# run from the repo root (the folder holding renv.lock) so the relative paths
+# in r/paths.R resolve whether the qmd is rendered or run chunk by chunk
+root <- getwd()
+while (!file.exists(file.path(root, "renv.lock")) && dirname(root) != root) root <- dirname(root)
+knitr::opts_knit$set(root.dir = root)
+```
+
+## Objective
+
+The fitting half of Phase 4 (D-101). This notebook fits every BAG model
+that `09_bag.qmd` reads, and nothing else:
+
+- the **main fits**: stage × season, timing and pre-trend models, their
+  variants, the gear contrast and the fleet-size refits;
+- the **random-field check** fits (D-077), when `field_check` is true;
+- the **leave-one-vessel-out** refits (step 8).
+
+Every model is defined once, in `r/bag_specs.R`, with its parameters in
+`r/bag_params.yml`; 09b (power) and 09 (the report) source the same files,
+so all three compute the same cache keys. Fits are cached in
+`data/processed/models/{pipeline}/` and refits in
+`reports/bag/{pipeline}/cache/`, so an interrupted run resumes where it
+stopped. Each fit's start, end, time and memory are appended to
+`reports/bag/{pipeline}/fit_progress.log` as it runs (D-099).
+
+Render this before `09_bag.qmd`; the report stops on any fit that is
+missing. Run it from a terminal, not inside an editor session, since a
+cold run takes hours:
+`quarto render r/09a_bag_fit.qmd -P pipeline:v5`.
+
+## Specifications
+
+```{r}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(sf)
+  library(sdmTMB)
+})
+
+source("r/paths.R")
+source("r/gfw_helpers.R")
+source("r/analysis_helpers.R")
+source("r/bag_helpers.R")
+
+doc_params <- if (isTRUE(getOption("knitr.in.progress"))) params else {
+  hdr <- knitr::knit_params(readLines(file.path(root, "r/09a_bag_fit.qmd"), warn = FALSE))
+  lapply(hdr, function(p) p$value)
+}
+# every table, spec and runner; sets qparams and paths (D-101). Evaluated
+# where this notebook's own code runs, as when it was part of 10_bag.qmd
+source("r/bag_specs.R", local = knitr::knit_global())
+
+tab_dir <- file.path(paths$bag, "tables")
+dir.create(tab_dir, recursive = TRUE, showWarnings = FALSE)
+outputs <- character()
+save_tab <- function(df, name) {
+  f <- file.path(tab_dir, paste0(name, ".csv"))
+  write_csv(df, f, na = "")
+  outputs <<- c(outputs, f)
+  invisible(f)
+}
+
+# a test run: only the specs whose id matches fit_only
+test_run <- nzchar(qparams$fit_only)
+if (test_run) {
+  all_specs <- keep(all_specs, \(s) grepl(qparams$fit_only, s$id))
+  field_specs <- keep(field_specs, \(s) grepl(qparams$fit_only, s$id))
+  message("test run (fit_only = '", qparams$fit_only, "'): ", length(all_specs), " main and ",
+          length(field_specs), " field-check specs; leave-one-vessel-out skipped")
+}
+tibble(set = c("main fits", "random-field check", "power bases (09b)"),
+       specs = c(length(all_specs), if (isTRUE(qparams$field_check)) length(field_specs) else 0L,
+                 length(power_specs))) |>
+  knitr::kable()
+```
+
+## Main fits (parallel)
+
+Every main specification not yet cached is fitted here, up to
+`r qparams$fit_workers` at a time, each in its own R process. Of those, at
+most `r qparams$heavy_workers` are large fits (over
+`r format(qparams$heavy_rows, big.mark = ",")` rows: the monthly timing
+and pre-trend models), which set the run's peak memory (D-097). The timing
+models' leads, fleet and no-field variants wait for the main timing fit and
+start from its estimates (D-097). A fit that fails stops the render with its
+error.
+
+```{r}
+t_fit <- system.time(fit_peaks <- run_specs(all_specs, qparams$fit_workers))[["elapsed"]]
+round(t_fit / 60, 1)
+
+# per fit: time, convergence, optimiser iterations (to see what the warm
+# starts save), whether it was warm-started, and its peak memory when it
+# was fitted in this render (NA when it came from the cache)
+fit_log <- map_dfr(all_specs, function(s) {
+  f <- as.character(fit_cache_path(s$key, paths$models))
+  m <- jsonlite::read_json(paste0(f, ".json"))
+  fit <- readRDS(f)
+  # mesh_vertices: a check on the cutoff (D-098); at 2 km a full-grid
+  # model has several hundred, not one per cell
+  tibble(model = s$id, rows = nrow(s$key$data), fit_minutes = round(m$fit_seconds / 60, 1),
+         converged = fit_ok(fit), iterations = fit$model$iterations %||% NA_integer_,
+         warm_start = !is.null(s$after), mesh_vertices = fit$spde$mesh$n)
+})
+# a test run may select none, and an empty table has no column to join on
+if (nrow(fit_log) > 0) fit_log <- left_join(fit_log, fit_peaks, by = "model")
+if (!test_run) save_tab(fit_log, "bag_fit_log")
+fit_log |> knitr::kable()
+```
+
+## Random-field check fits (D-077)
+
+The spatial-block cross-validation of the stage × season models' fields
+(three structures each, five folds per job) and the timing models without
+their AR1 year field. Fitted only when `field_check` is true
+(`r isTRUE(qparams$field_check)` here); the report reads them on the same
+condition.
+
+```{r field-check, eval = isTRUE(get0("qparams")$field_check)}
+t_field <- system.time(field_peaks <- run_specs(field_specs, qparams$fit_workers))[["elapsed"]]
+round(t_field / 60, 1)
+# fit times of the new jobs (the CV jobs are 5 fits each), whether each was
+# warm-started (D-097), and peak memory when fitted in this render
+field_log <- map_dfr(field_specs, function(s) {
+  m <- jsonlite::read_json(paste0(as.character(fit_cache_path(s$key, paths$models)), ".json"))
+  tibble(model = s$id, rows = nrow(s$key$data), fit_minutes = round(m$fit_seconds / 60, 1),
+         warm_start = !is.null(s$after))
+})
+# a test run may select none, and an empty table has no column to join on
+if (nrow(field_log) > 0) field_log <- left_join(field_log, field_peaks, by = "model")
+if (!test_run) save_tab(field_log, "bag_field_fit_log")
+field_log |> knitr::kable()
+```
+
+## Leave-one-vessel-out refits (step 8)
+
+The headline stage × season model refitted without each of the top
+`r qparams$lovo_top_k` vessels per dataset × gear, and without BUCKEYE
+(368175660), as `r qparams$workers` separate R processes. Each refit's result
+is a small file in `reports/bag/{pipeline}/cache/`; the report reads them
+and attaches the vessels' names. Skipped in a test run.
+
+```{r}
+if (!test_run) {
+  lovo <- lovo_refits()
+  lovo |> group_by(id) |>
+    summarise(refits = n(), converged = sum(!is.na(estimate)), .groups = "drop") |>
+    knitr::kable()
+}
+```
+
+## Manifest and provenance
+
+```{r}
+if (!test_run) {
+  manifest <- tibble(file = outputs, sha256 = map_chr(outputs, file_sha256))
+  f_manifest <- file.path(paths$bag, "manifest_09a.csv")
+  write_csv(manifest, f_manifest)
+  write_provenance(f_manifest, c(input_files, bag_params_file), extra = list(
+    outputs = nrow(manifest), main_fits = length(all_specs),
+    field_fits = if (isTRUE(qparams$field_check)) length(field_specs) else 0L,
+    interim_spec = "sdmTMB; spatial on; iid stage fields (stage x season); ar1 year fields (timing)",
+    mesh_cutoff_km = qparams$mesh_cutoff_km, sdmTMB = as.character(packageVersion("sdmTMB"))))
+  nrow(manifest)
+}
+```
+
+## Session info
+
+```{r}
+sessionInfo()
+```

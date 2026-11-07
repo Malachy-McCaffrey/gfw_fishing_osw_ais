@@ -192,6 +192,19 @@ test_that("fit_cached() fits once, reuses the cache, and refits when the key cha
   expect_error(fit_cached(list(1), fit, dir = dir), "named list")
 })
 
+test_that("fit_cache_read() reads a cached fit and never fits (D-101)", {
+  dir <- file.path(tempdir(), "fit_cache_read_test")
+  unlink(dir, recursive = TRUE)
+  key <- list(data = data.frame(y = 1:3), family = "nbinom2")
+  # not cached: stops, naming the model and where to fit it, and writes nothing
+  expect_error(fit_cache_read(key, dir, label = "vp_MOBILE", hint = "Render 09a first", packages = "stats"),
+               "not fitted: vp_MOBILE. Render 09a first")
+  expect_false(dir.exists(dir) && length(list.files(dir)) > 0)
+  # cached by fit_cached(): read back unchanged
+  fit_cached(key, \() list(value = 7), dir = dir, packages = "stats")
+  expect_equal(fit_cache_read(key, dir, packages = "stats")$value, 7)
+})
+
 test_that("fit_cached() leaves no cache file when the fit fails, and no temporary files (D-099)", {
   dir <- file.path(tempdir(), "fit_cache_atomic_test")
   unlink(dir, recursive = TRUE)

@@ -1,10 +1,10 @@
-# Helpers for the BAG models (Phase 4, 09_bag.qmd). Source after the
+# Helpers for the BAG models (Phase 4: 09a_bag_fit.qmd, 09b_bag_power.qmd, 09_bag.qmd). Source after the
 # tidyverse, r/paths.R, r/gfw_helpers.R and r/analysis_helpers.R:
 #   source("r/analysis_helpers.R"); source("r/bag_helpers.R")
 #
 # Pure functions of their arguments (the simulation and bootstrap ones take
 # an explicit seed), unit-tested in r/tests/testthat/test-bag_helpers.R.
-# The model fits themselves live in 09_bag.qmd, cached with fit_cached().
+# The models are specified in r/bag_specs.R and fitted by 09a and 09b, cached with fit_cached() (D-101).
 
 # Factor levels used by every BAG model --------------------------------------
 # The 8–15 km ring is the BAG reference (plan, "BAG design"), and Stage 1 the

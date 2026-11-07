@@ -8,7 +8,7 @@ Geospatial analysis and statistical modeling workflows to quantify AIS vessel pr
 
 ## The R workflow
 
-Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order, so `quarto render r/` runs 02 → 02a → 03 → 03b → 04 → 05 → 05a → 06 → 07 → 08 → 09. Steps 00–04 prepare and classify the data; 05 onward are the analysis phases of [`planning/gfw_analysis_plan.qmd`](planning/gfw_analysis_plan.qmd), where each phase's method and gate are written down.
+Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order, so `quarto render r/` runs 02 → 02a → 03 → 03b → 04 → 05 → 05a → 06 → 07 → 08 → 09a → 09 (09b, Step 3 power, runs on its own after Phase 5). Steps 00–04 prepare and classify the data; 05 onward are the analysis phases of [`planning/gfw_analysis_plan.qmd`](planning/gfw_analysis_plan.qmd), where each phase's method and gate are written down.
 
 | Step | File | What it does | Needs |
 |---|---|---|---|
@@ -24,12 +24,14 @@ Files in `r/` are numbered in run order. `r/_quarto.yml` lists the render order,
 | 06 | `06_explore.qmd` | **Phase 1.** Exploratory analysis: data structure, zeros, transforms, parallel-trends tests and the gate decisions for the models. | 05 |
 | 07 | `07_spatial_global.qmd` | **Phase 2.** Global Moran's I, General G and correlograms; writes the practical range (*ρ*₀) used for later weights and priors. | 05 |
 | 08 | `08_spatial_local.qmd` | **Phase 3.** Local Moran's I vs Getis-Ord Gi\*: change maps, comparison criteria and the power simulation. | 05, 07 |
-| 09 | `09_bag.qmd` | **Phase 4, in progress.** Before–after–gradient models on interim specifications; fits are cached in `data/processed/models/{pipeline}/`. | 05 |
+| 09a | `09a_bag_fit.qmd` | **Phase 4, in progress.** Fits every before–after–gradient model (interim specifications), the random-field check and the leave-one-vessel-out refits; fits are cached in `data/processed/models/{pipeline}/`. Hours on a cold cache: render it from a terminal. | 05, 07 |
+| 09b | `09b_bag_power.qmd` | **Phase 4, Step 3, deferred to after Phase 5 (D-096).** Simulation power, timing-model power and radius recovery; days of refits. Not in the default render. | 09a |
+| 09 | `09_bag.qmd` | **Phase 4, in progress.** The BAG report: every table, test and verdict, read from 09a's (and 09b's) caches; it fits nothing (D-101). | 09a |
 | 10–13 | not yet written | **Phases 5–8:** frequentist models, INLA-SPDE, sensitivity, synthesis. | |
 
 The GFW pipeline versions are compared in [`reports/pipeline_compare/gfw_v4_v5_comparison.qmd`](reports/pipeline_compare/gfw_v4_v5_comparison.qmd), a self-contained report for Global Fishing Watch staff (D-068), rendered on its own and not part of `quarto render r/`; the design is in [`planning/gfw_pipeline_v5_plan.qmd`](planning/gfw_pipeline_v5_plan.qmd).
 
-Shared code, sourced by the qmds: `paths.R` (every path; each can be overridden with a Quarto parameter), `gfw_helpers.R` (development stages, analysis window, `read_gfw()`, gear classes), `vessel_helpers.R` (crosswalk build and validation, `classify()`, the fishing roster), `review_helpers.R` (03's screen, GARFO matching, and GFW identity and PSIX evidence), `port_helpers.R` (03b's port-visit rules and checks), `analysis_helpers.R` (seasons, transforms, lease distances, lattice neighbours, `fit_cached()`, provenance sidecars), `infra_helpers.R` (reading Ørsted foundation files and building exposure covariates), `spatial_helpers.R` (global and local statistics), `bag_helpers.R` (BAG models) and `compare_helpers.R` (the v4 vs v5 comparison report).
+Shared code, sourced by the qmds: `paths.R` (every path; each can be overridden with a Quarto parameter), `gfw_helpers.R` (development stages, analysis window, `read_gfw()`, gear classes), `vessel_helpers.R` (crosswalk build and validation, `classify()`, the fishing roster), `review_helpers.R` (03's screen, GARFO matching, and GFW identity and PSIX evidence), `port_helpers.R` (03b's port-visit rules and checks), `analysis_helpers.R` (seasons, transforms, lease distances, lattice neighbours, `fit_cached()`, `fit_cache_read()`, provenance sidecars), `infra_helpers.R` (reading Ørsted foundation files and building exposure covariates), `spatial_helpers.R` (global and local statistics), `bag_helpers.R` (BAG models), `bag_specs.R` and `bag_params.yml` (every BAG model specification and its parameters, shared by 09a, 09b and 09; D-101) and `compare_helpers.R` (the v4 vs v5 comparison report).
 
 **Analysis window:** 2016-01-01 to 2026-08-31, in three development stages (`dev_stages` in `r/gfw_helpers.R`):
 
@@ -121,7 +123,7 @@ From the repository root:
    quarto render r/04_classify_aggregate.qmd
    ```
 
-   then render 05 onward one at a time in the same way. 08's permutation tests take about 3 h on a first run and 09's model fits can take minutes each; both are cached, so later renders are fast.
+   then render 05 onward one at a time in the same way. 08's permutation tests take about 3 h on a first run and 09a's model fits take hours on a cold cache; both are cached, so later renders are fast.
 
    Every path is repo-relative and each qmd finds the repo root itself, so the qmds also run chunk by chunk in an IDE.
 

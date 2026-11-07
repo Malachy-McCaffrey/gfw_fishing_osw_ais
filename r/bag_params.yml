@@ -1,0 +1,52 @@
+# Model-defining parameters of the BAG notebooks (Phase 4; D-101): read by
+# r/bag_specs.R for 09a_bag_fit.qmd, 09b_bag_power.qmd and 09_bag.qmd, so
+# all three build the same models and compute the same cache keys. Moved
+# unchanged from 10_bag.qmd's header. Each notebook keeps only its own run
+# settings (pipeline, paths, workers). For another set (e.g. a Phase 5 mesh
+# check) copy this file and render all three with -P bag_params:<copy>.
+#
+# Numbers that must be fractions are written with a decimal point, so YAML
+# reads them as numbers, not integers (D-098: fmesher ignored an integer
+# mesh cutoff).
+
+# Interim model specification (decision 2026-10-20, D-047, option a): Phase 5's
+# recommended form, refitted when Phase 5 settles the base model.
+mesh_cutoff_km: 2.0        # SPDE mesh: no two vertices closer than this
+
+# Power analysis (plan, "Simulation power analysis"), run by 09b
+power_nsim: 100
+# matching-scenario effect sizes; 10 and 40% added by D-094
+power_effects: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+# simulations at the two sizes that bracket the MDE, after the first pass
+# (D-094): power_nsim from the first draw plus the rest from a second
+power_nsim_bracket: 500
+# the fading-gradient scenario's effect size, for the gradient test's power
+# only; its e = 0 run is the matching scenario's (D-091)
+power_fade_effect: 0.3
+# timing-model power at the season-year proxy, and VP mobile's radius
+# recovery at season-year (D-094; D-065 for the radii)
+timing_power_effects: [0.0, 0.3, 0.5]
+radius_effects: [0.0, 0.3, 0.5]
+radius_km: [2.0, 5.0, 10.0]
+
+# Leave-one-vessel-out: top vessels per dataset × gear, plus named hulls
+lovo_top_k: 10
+lovo_extra: ["368175660"]   # BUCKEYE: kept at the pre-Phase 4 screen, checked here
+
+# Steps 1 and 2: bootstrap draws and the event-time window (months)
+n_boot: 999
+event_window: 24
+
+# Minimum support per fixed-effect indicator (D-076), fixed before any fit:
+# a term needs this many positive rows, from this many cells and vessels.
+# A BAG term below it makes the model pool its bands (or lead bins); an
+# optional term below it is dropped. Logged in bag_support_rules.
+support_min_positive: 30
+support_min_cells: 10
+support_min_vessels: 5
+
+# Random-field check (D-077): spatial-block cross-validation of the stage ×
+# season models' fields, and AIC for the timing models' AR1 year field.
+# 09a fits it and the report reads it when true; false skips both.
+field_check: true
+cv_folds: 5

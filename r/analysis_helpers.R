@@ -271,7 +271,7 @@ fit_cached <- function(key_inputs, fit_fun, dir = gfw_paths$models, label = NULL
   # place, sidecar first (D-099). A rename within one folder is all or
   # nothing, so a process killed mid-write leaves only a stray .tmp file:
   # never a partial <hash>.rds that a later run (or a warm-started variant
-  # waiting for its parent, 09) would take for a finished fit, and never a
+  # waiting for its parent, 09a) would take for a finished fit, and never a
   # .rds without its sidecar
   tmp <- paste0(f, ".", Sys.getpid(), ".tmp")
   on.exit(unlink(paste0(tmp, c("", ".json"))), add = TRUE)
@@ -285,6 +285,18 @@ fit_cached <- function(key_inputs, fit_fun, dir = gfw_paths$models, label = NULL
   stopifnot("could not move the fit's sidecar into place" = file.rename(paste0(tmp, ".json"), paste0(f, ".json")),
             "could not move the fit into place" = file.rename(tmp, f))
   fit
+}
+
+# The cached fit for `key_inputs`, read only (D-101): never fits. A fit that
+# is not cached stops with `label` and `hint` (where to fit it), so a
+# notebook that only reads models cannot start a long fit by accident.
+fit_cache_read <- function(key_inputs, dir = gfw_paths$models, label = NULL, hint = NULL,
+                           packages = fit_cache_packages) {
+  f <- as.character(fit_cache_path(key_inputs, dir, packages))
+  if (!file.exists(f))
+    stop("not fitted: ", if (is.null(label)) basename(f) else label,
+         if (!is.null(hint)) paste0(". ", hint), call. = FALSE)
+  readRDS(f)
 }
 
 # Provenance sidecar --------------------------------------------------------

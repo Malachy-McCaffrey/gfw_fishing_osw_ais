@@ -14,6 +14,12 @@
 #
 # No freeze: the qmds read data and references/ CSVs that Quarto does not
 # track, so a frozen document would not re-run when a decision file changes.
+#
+# Phase 4 is three notebooks (D-101): 09a fits, 09 reports. 09b_bag_power.qmd
+# (Step 3 simulation power, days of refits) is left out: it runs only after
+# Phase 5 settles the base model (D-096), on its own:
+#   quarto render r/09b_bag_power.qmd -P pipeline:v5
+# 09a's fits take hours on a cold cache; render it from a terminal.
 
 project:
   type: default
@@ -28,4 +34,5 @@ project:
     - 06_explore.qmd
     - 07_spatial_global.qmd
     - 08_spatial_local.qmd
+    - 09a_bag_fit.qmd
     - 09_bag.qmd
